@@ -1,0 +1,22 @@
+# Engineering Board with Docker Compose. From the unzipped board folder:
+#
+#   docker compose -f linux/docker-compose.yml up -d --build
+#
+# The board is then at http://<this machine's name>:8080. The data lives in ./data
+# next to the app folder, so it is easy to back up and survives rebuilds.
+services:
+  board:
+    build:
+      context: ..
+      dockerfile: linux/Dockerfile
+    image: engineering-board
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      EB_TIMEZONE: Asia/Kolkata
+      # EB_BACKUP_DIR: /backups       # and add a volume below for a separate backup disk
+      # EB_BACKUP_KEEP_DAYS: "30"
+    volumes:
+      - ../data:/data
+      # - /mnt/nas/board-backups:/backups

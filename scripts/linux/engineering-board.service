@@ -1,0 +1,33 @@
+# Engineering Board as a systemd service (Linux).
+#
+#   1. Unzip the board to /opt/engineering-board (so /opt/engineering-board/app/server.mjs exists).
+#   2. sudo useradd --system --home /opt/engineering-board board
+#      sudo chown -R board:board /opt/engineering-board
+#   3. sudo cp linux/engineering-board.service /etc/systemd/system/
+#      sudo systemctl daemon-reload
+#      sudo systemctl enable --now engineering-board
+#   4. Check it:  systemctl status engineering-board   and   journalctl -u engineering-board -f
+#
+# Settings come from /opt/engineering-board/config.json, as on Windows.
+
+[Unit]
+Description=Engineering Board (internal workboard)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=board
+WorkingDirectory=/opt/engineering-board
+ExecStart=/usr/bin/env node /opt/engineering-board/app/server.mjs
+Restart=on-failure
+RestartSec=5
+# Ctrl+C equivalent: the board closes the database cleanly on SIGTERM
+KillSignal=SIGTERM
+TimeoutStopSec=20
+NoNewPrivileges=true
+ProtectSystem=full
+ReadWritePaths=/opt/engineering-board
+
+[Install]
+WantedBy=multi-user.target

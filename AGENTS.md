@@ -22,4 +22,6 @@ Instructions for any AI coding agent working in this repo (Claude, ChatGPT/Codex
 - Runtime data lives in `data/` (`board.db`, `backups/`) and is never committed.
 
 ## Before you open a PR
-`npm run typecheck`, `npm test` and `npm run build` must all pass. Run `npm run e2e` too when you change anything in `web/`.
+`npm run typecheck`, `npm test`, `npm run build` and `npm run check:build` must all pass. Run `npm run e2e` too when you change anything in `web/`.
+
+A new database migration also needs an entry in `UNDO` in `server/test/migrations.test.ts`; the test fails until it has one, so every release is checked for upgrading a board in use.

@@ -1,9 +1,11 @@
 // Builds the deployable app into dist/app:
 //   dist/app/server.mjs        the whole server (one file, no node_modules)
 //   dist/app/web/…             the web app (index.html + assets)
+//   dist/app/web/guides/…      the guides from docs/, as web pages
 // Usage: node scripts/build.mjs [--watch] [--web-only|--server-only]
 import { build, context } from 'esbuild';
 import { cpSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs';
+import { writeGuides } from './lib/guides.mjs';
 
 const watch = process.argv.includes('--watch');
 const only = process.argv.find((a) => a === '--web-only' || a === '--server-only');
@@ -43,6 +45,7 @@ function writeStatic() {
   if (existsSync('web/public')) cpSync('web/public', 'dist/app/web', { recursive: true });
   const stamp = watch ? Date.now().toString(36) : version;
   writeFileSync('dist/app/web/index.html', readFileSync('web/index.html', 'utf8').replaceAll('__VERSION__', stamp));
+  writeGuides('dist/app/web/guides', version); // served at /guides/user-guide.html
 }
 
 if (!watch && only !== '--server-only') rmSync('dist/app/web', { recursive: true, force: true });

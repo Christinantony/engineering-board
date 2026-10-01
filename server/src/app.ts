@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import { STATUSES, PRIORITIES, ESTIMATE_BUCKETS, STATUS_LABEL, type User } from '@board/shared';
 import { v } from '@board/shared';
-import { openDb, migrate, run, all } from './db/connection.ts';
+import { openDb, migrate, pendingMigrations, run, all } from './db/connection.ts';
 import { createReadStream } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { seedBase, seedDemo, clearDemo, hasDemoData } from './db/seed.ts';
@@ -23,6 +23,7 @@ import {
   adminCookie,
   changePin,
   ensureAuthSettings,
+  resetPin,
   pinIsDefault,
   readAdmin,
   readSession,
@@ -66,7 +67,7 @@ import {
 import { archiveOld, commitImport, deleteTag, exportCsv, exportJson, importTemplate, listTags, previewImport, renameTag } from './domain/transfer.ts';
 import { rmSync } from 'node:fs';
 
-export const APP_VERSION = '0.7.0';
+export const APP_VERSION = '1.0.0';
 
 export interface AppOptions {
   dbPath: string;
@@ -76,6 +77,8 @@ export interface AppOptions {
   /** Planning reference shown on the workload page (not a capacity limit). */
   workday?: { hoursPerDay: number; workingDays: number[] };
   log?: boolean;
+  /** Reset the admin PIN to the default on start (the RESET-ADMIN-PIN file on the host PC). */
+  resetAdminPin?: boolean;
   /** Where backups go (default: a "backups" folder next to the database). */
   backupDir?: string;
   backupKeepDays?: number;
@@ -86,6 +89,8 @@ export interface AppOptions {
 export interface App {
   ctx: BackupCtx;
   server: Server;
+  /** Every API route (method and pattern). */
+  routes: { method: string; path: string }[];
   listen(port: number, host?: string): Promise<number>;
   close(): Promise<void>;
 }
@@ -105,14 +110,28 @@ export function createApp(opts: AppOptions): App {
     keepDays: opts.backupKeepDays ?? 30,
   };
   // NOTE: always use ctx.db (never a captured copy): a restore swaps in a new connection.
-  migrate(ctx.db);
-  ensureAuthSettings(ctx);
-  seedBase(ctx);
+  // A new version of the board upgrading existing data backs it up first, so the
+  // previous version can be put back with its data exactly as it was.
+  try {
+    const pending = pendingMigrations(ctx.db);
+    if (pending.length && pending[0] > 1) {
+      const b = backupNow(ctx, 'pre-upgrade');
+      console.log(`Database upgrade ${pending.join(', ')}: a backup of the data from before is in ${join(ctx.backupDir, b.name)}`);
+    }
+    migrate(ctx.db);
+    ensureAuthSettings(ctx);
+    if (opts.resetAdminPin) resetPin(ctx);
+    seedBase(ctx);
+  } catch (e) {
+    ctx.db.close(); // don't hold the file open (and locked on Windows) after a failed start
+    throw e;
+  }
   // forget idempotency keys older than 7 days
   run(ctx.db, 'DELETE FROM idempotency WHERE created_at < ?', new Date(ctx.now().getTime() - 7 * 86_400_000).toISOString());
 
   // daily backup: a minute after start, then checked every hour
   const timers: ReturnType<typeof setTimeout>[] = [];
+  let closing: Promise<void> | undefined;
   const maintenance = () => {
     try {
       const b = runDailyBackupIfDue(ctx);
@@ -412,6 +431,7 @@ export function createApp(opts: AppOptions): App {
   return {
     ctx,
     server,
+    routes: router.list(),
     listen(port, host = '0.0.0.0') {
       return new Promise((resolveListen, reject) => {
         server.once('error', reject);
@@ -422,15 +442,20 @@ export function createApp(opts: AppOptions): App {
       });
     },
     close() {
-      return new Promise((resolveClose) => {
+      // safe to call more than once (Ctrl+C twice, or a test closing a board that is already closed)
+      closing ??= new Promise((resolveClose) => {
         for (const res of sseConnections) res.end();
         for (const t of timers) clearTimeout(t);
-        server.close(() => {
-          ctx.db.close();
+        const done = () => {
+          if (ctx.db.isOpen) ctx.db.close();
           resolveClose();
-        });
-        server.closeAllConnections?.();
+        };
+        if (server.listening) {
+          server.close(done);
+          server.closeAllConnections?.();
+        } else done();
       });
+      return closing;
     },
   };
 }

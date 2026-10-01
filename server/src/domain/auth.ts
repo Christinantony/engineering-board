@@ -43,6 +43,12 @@ export function changePin(ctx: Ctx, newPin: string) {
   setSetting(ctx, 'admin_pin_is_default', '0');
 }
 
+/** Put the admin PIN back to the default (someone with access to the host PC asked for it). */
+export function resetPin(ctx: Ctx) {
+  setSetting(ctx, 'admin_pin', hashPin(DEFAULT_PIN));
+  setSetting(ctx, 'admin_pin_is_default', '1');
+}
+
 export const pinIsDefault = (ctx: Ctx) => getSetting(ctx, 'admin_pin_is_default') === '1';
 
 function sign(ctx: Ctx, value: string): string {

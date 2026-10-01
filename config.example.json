@@ -1,0 +1,27 @@
+{
+  "_comment": "Copy this file to config.json (next to start.bat) and change what you need. Restart the board afterwards. Lines starting with _ are notes and are ignored. Every value below is the default.",
+
+  "_port": "The address is http://<this PC's name>:port. Use a port IT has opened in the firewall.",
+  "port": 8080,
+
+  "_host": "0.0.0.0 lets the team reach the board. 127.0.0.1 allows this PC only.",
+  "host": "0.0.0.0",
+
+  "_dataDir": "Where board.db lives. A folder path; relative paths start from this folder. Use forward slashes, e.g. D:/EngineeringBoard/data",
+  "dataDir": "data",
+
+  "_backupDir": "Where backups go. If you remove this line, they go in a backups folder inside dataDir. Pointing this at a network share or OneDrive folder protects against a dead PC, e.g. //fileserver/engineering/board-backups",
+  "backupDir": "data/backups",
+
+  "_backupKeepDays": "Backups older than this are deleted. The newest 7 are always kept.",
+  "backupKeepDays": 30,
+
+  "_timezone": "Decides when a job becomes overdue and what 'today' means.",
+  "timezone": "Asia/Kolkata",
+
+  "_hoursPerDay": "The reference line on the Workload page. Not a limit.",
+  "hoursPerDay": 8,
+
+  "_workingDays": "0 is Sunday, 1 Monday ... 6 Saturday.",
+  "workingDays": [1, 2, 3, 4, 5, 6]
+}

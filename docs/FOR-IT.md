@@ -1,0 +1,52 @@
+# For IT: firewall rule for the Engineering Board
+
+The Engineering Board is an internal web app for the mechanical design team. It runs as an ordinary user process on one workstation (the *host*) and is used from colleagues' browsers on the office LAN. **One inbound firewall rule on the host** is all it needs from IT.
+
+| | |
+|---|---|
+| **Program** | `node.exe` (official Node.js 22 LTS build, a single file, no installer) running `app\server.mjs` from the user's board folder |
+| **Runs as** | the signed-in user; no service, no admin rights, no registry changes |
+| **Listens on** | TCP **8080** (configurable), all interfaces |
+| **Outbound traffic** | none; it needs no internet access |
+| **Data** | one SQLite file in the board folder (`data\board.db`) plus daily backup copies |
+| **Starts** | by the user, or at sign-in from the user's own Startup folder |
+
+## The rule
+
+Either run **`for-IT\allow-board-port.bat`** from the board folder **as administrator** (it reads the port from `config.json`, adds the rule, and lists any conflicting Block rules), or add it yourself:
+
+```bat
+netsh advfirewall firewall add rule name="Engineering Board" dir=in action=allow protocol=TCP localport=8080 profile=domain,private
+```
+
+PowerShell equivalent:
+
+```powershell
+New-NetFirewallRule -DisplayName "Engineering Board" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8080 -Profile Domain,Private
+```
+
+To limit it to the office subnet, add `remoteip=192.168.1.0/24` (netsh) or `-RemoteAddress 192.168.1.0/24` (PowerShell), with your subnet.
+
+## Check for Block rules on node.exe
+
+The first time the board starts, Windows shows "Allow node.exe to communicate on these networks". A user without admin rights can only click Cancel, and Windows may then create an **inbound Block rule for node.exe**. Block rules take precedence over Allow rules, so remove it:
+
+```powershell
+Get-NetFirewallApplicationFilter | Where-Object Program -like '*\node.exe' |
+  Get-NetFirewallRule | Where-Object { $_.Direction -eq 'Inbound' -and $_.Action -eq 'Block' } |
+  Remove-NetFirewallRule
+```
+
+Or in **Windows Defender Firewall with Advanced Security → Inbound Rules**, delete the "node.exe" or "Node.js JavaScript Runtime" rules with a red Block icon.
+
+## Nice to have
+
+- A **reserved IP address** (DHCP reservation) or a **DNS name** for the host PC, so the address colleagues bookmark never changes.
+- Make sure the host's connection uses the **Domain** or **Private** network profile, not Public.
+- Allowlisting `node.exe` in the board folder if AppLocker or antivirus policies block unknown executables.
+
+## To remove it
+
+```bat
+netsh advfirewall firewall delete rule name="Engineering Board"
+```

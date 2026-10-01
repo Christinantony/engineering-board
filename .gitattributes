@@ -1,0 +1,7 @@
+# Windows scripts must have CRLF line endings or cmd.exe misreads them.
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+# Linux scripts must have LF.
+*.sh   text eol=lf
+*.service text eol=lf
+Dockerfile text eol=lf

@@ -46,6 +46,10 @@ export class Router {
   add(method: string, pattern: string, handler: (req: Request) => unknown | Promise<unknown>) {
     this.routes.push({ method, parts: pattern.split('/').filter(Boolean), handler });
   }
+  /** Every registered route, e.g. for tests that sweep the whole API. */
+  list(): { method: string; path: string }[] {
+    return this.routes.map((r) => ({ method: r.method, path: '/' + r.parts.join('/') }));
+  }
   match(method: string, path: string): { route: Route; params: Record<string, string> } | 'method' | null {
     const segs = path.split('/').filter(Boolean);
     let methodMismatch = false;
@@ -100,18 +104,29 @@ const MAX_UPLOAD = 1024 * 1024 * 1024; // database files
 
 function readBody(req: IncomingMessage, limit = MAX_BODY): Promise<Buffer> {
   return new Promise((resolveBody, reject) => {
+    const tooLarge = () => new HttpError(413, 'too_large', `That file is too large (limit ${Math.round(limit / 1048576)} MB).`);
+    // Past the limit, keep reading and throw the rest away, so the browser gets the
+    // "too large" answer instead of a dropped connection. Only cut the connection if
+    // the sender goes on far beyond the limit.
+    const hardStop = limit * 2;
     let size = 0;
+    let over = false;
     const chunks: Buffer[] = [];
     req.on('data', (c: Buffer) => {
       size += c.length;
-      if (size > limit) {
-        reject(new HttpError(413, 'too_large', `That file is too large (limit ${Math.round(limit / 1048576)} MB).`));
+      if (size > hardStop) {
+        reject(tooLarge());
         req.destroy();
+        return;
+      }
+      if (size > limit) {
+        over = true;
+        chunks.length = 0;
         return;
       }
       chunks.push(c);
     });
-    req.on('end', () => resolveBody(Buffer.concat(chunks)));
+    req.on('end', () => (over ? reject(tooLarge()) : resolveBody(Buffer.concat(chunks))));
     req.on('error', reject);
   });
 }
