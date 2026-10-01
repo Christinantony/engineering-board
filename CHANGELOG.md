@@ -48,3 +48,21 @@
 - **Follow-ups / open issues:**
   - Phase 9: the deployment package and the guides.
   - The lockfile is still missing (see `HANDOFF.md`).
+
+### 2026-10-02 00:50 IST | Claude | branch: claude/phase9-deployment
+- **What:** Phase 9: the deployment package and guides. Version 1.0.0.
+  - `npm run package` builds `dist/EngineeringBoard-<version>.zip`. It contains `app\`, `start.bat`, `autostart-on/off.bat` (a Startup-folder shortcut, no admin), `config.example.json`, `README-FIRST.txt`, `guides\`, `for-IT\` (a firewall-rule script for IT, plus instructions), and `linux\` (`start.sh`, a systemd unit, a Dockerfile, docker-compose).
+  - Guides in `docs/`: INSTALL (install, first run, LAN address and finding the IP, start at sign-in, update, move, Linux, Docker, uninstall), USER-GUIDE, ADMIN-GUIDE (team, import/export, backup/restore, archive, settings), TROUBLESHOOTING, FOR-IT. The build turns them into web pages served at `/guides/` and linked from the `?` dialog and the name menu.
+  - `config.json` is now forgiving and explains mistakes: it accepts a BOM and `_comment` keys, explains single-backslash Windows paths and comma mistakes, lists every bad value at once, and warns about misspelt settings.
+  - The startup banner shows the settings file, the guide address, and a correct "For your team" line for a `127.0.0.1` host or a container.
+  - A forgotten admin PIN is reset by a `RESET-ADMIN-PIN` file next to `start.bat`.
+  - `start.bat` survives folder paths containing `)` or `&`.
+  - `check:build` now also checks the zip: its layout, that it ships no data, settings or node.exe, line endings, links between guides, running from the unzipped folder with `start.sh`, config errors, and the PIN reset.
+  - Docker Compose was tested from the unzipped package: build, healthcheck, data on the host, update by replacing `app`, clean stop.
+- **Why:** Phase 9 of the plan: deployment configuration, plus installation, first-run, backup, update and troubleshooting instructions, and the user and admin guides.
+- **Files:** `scripts/package.mjs`, `scripts/lib/{markdown,zip,guides}.mjs`, `scripts/build.mjs`, `scripts/windows/*`, `scripts/linux/*`, `config.example.json`, `.gitattributes`, `docs/{INSTALL,USER-GUIDE,ADMIN-GUIDE,TROUBLESHOOTING,FOR-IT}.md`, `docs/API.md`, `server/src/{config,index,app}.ts`, `server/src/domain/auth.ts`, `server/test/config.test.ts`, `web/src/App.tsx`, `web/src/components/Overlays.tsx`, `e2e/build.check.mjs`, `e2e/board.e2e.mjs`, `package.json`, `README.md`, `DECISIONS.md`, `HANDOFF.md`
+- **Decisions affected:** new decisions 18 to 22 (the deployment section). No existing decision changed.
+- **Follow-ups / open issues:**
+  - This branch is based on `claude/phase8-testing` (PR #3); merge #3 first.
+  - The `.bat` scripts were reviewed but can only be run on Windows; they need testing on the host PC.
+  - The lockfile is still missing (see `HANDOFF.md`).

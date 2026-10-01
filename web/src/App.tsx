@@ -236,6 +236,9 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
               <button className="btn btn-quiet" onClick={() => navigate('/admin')}>
                 Admin
               </button>
+              <a className="btn btn-quiet" href="/guides/user-guide.html" target="_blank" rel="noopener">
+                User guide
+              </a>
               <button className="btn btn-quiet" onClick={() => void signOut()}>
                 Switch user
               </button>

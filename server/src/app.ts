@@ -23,6 +23,7 @@ import {
   adminCookie,
   changePin,
   ensureAuthSettings,
+  resetPin,
   pinIsDefault,
   readAdmin,
   readSession,
@@ -66,7 +67,7 @@ import {
 import { archiveOld, commitImport, deleteTag, exportCsv, exportJson, importTemplate, listTags, previewImport, renameTag } from './domain/transfer.ts';
 import { rmSync } from 'node:fs';
 
-export const APP_VERSION = '0.8.0';
+export const APP_VERSION = '1.0.0';
 
 export interface AppOptions {
   dbPath: string;
@@ -76,6 +77,8 @@ export interface AppOptions {
   /** Planning reference shown on the workload page (not a capacity limit). */
   workday?: { hoursPerDay: number; workingDays: number[] };
   log?: boolean;
+  /** Reset the admin PIN to the default on start (the RESET-ADMIN-PIN file on the host PC). */
+  resetAdminPin?: boolean;
   /** Where backups go (default: a "backups" folder next to the database). */
   backupDir?: string;
   backupKeepDays?: number;
@@ -117,6 +120,7 @@ export function createApp(opts: AppOptions): App {
     }
     migrate(ctx.db);
     ensureAuthSettings(ctx);
+    if (opts.resetAdminPin) resetPin(ctx);
     seedBase(ctx);
   } catch (e) {
     ctx.db.close(); // don't hold the file open (and locked on Windows) after a failed start

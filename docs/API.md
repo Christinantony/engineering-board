@@ -1,4 +1,4 @@
-# API reference (v0.8)
+# API reference (v1.0)
 
 All endpoints are under `/api` and use JSON. Mutating requests must send `Content-Type: application/json`, which together with `SameSite=Strict` cookies blocks cross-site form posts.
 

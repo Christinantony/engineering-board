@@ -186,6 +186,9 @@ function HelpDialog({ done }: { done: (v: any) => void }) {
         ))}
       </div>
       <div className="dialog-buttons">
+        <a className="btn btn-quiet" href="/guides/user-guide.html" target="_blank" rel="noopener">
+          Open the user guide
+        </a>
         <button className="btn btn-primary" autoFocus onClick={() => done(true)}>
           Got it
         </button>

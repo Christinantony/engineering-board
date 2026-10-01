@@ -37,8 +37,19 @@ One process serves the web app, the REST API and a live-update stream. There are
 | 16 | **The live-update handshake carries the server version.** | Open browsers are told to reload after an upgrade, instead of running old code against a new API. |
 | 17 | **Losing the connection shows a red banner after 6 seconds.** The page reconnects by itself and re-fetches everything it missed. | People never keep working while unaware that nothing is saving. |
 
+## Deployment (Phase 9)
+
+| # | Decision | Why |
+|---|---|---|
+| 18 | **The release is one zip** (`npm run package` → `EngineeringBoard-<version>.zip`) with a fixed layout: `app\` (replaced on update), launchers, `config.example.json`, `guides\`, `for-IT\`, `linux\`. It never contains `data\`, `config.json` or `node.exe`. | Updating is "replace the `app` folder", and unzipping a release over an install can never overwrite data or settings. |
+| 19 | **`node.exe` is not bundled.** The installer downloads the official Node 22 LTS build. | It keeps the zip small and the executable verifiably official (antivirus and AppLocker trust it), and updating Node stays independent of updating the board. |
+| 20 | **Starting at sign-in uses a shortcut in the user's own Startup folder**, not a Windows service or scheduled task. | It needs no admin rights (the host user isn't an admin), and the window stays visible for its messages. Linux uses systemd; Docker is offered for Linux servers only. |
+| 21 | **The guides are Markdown in `docs/`, built into web pages** that the board serves at `/guides/` and the zip includes. | One source. Every colleague can open the user guide from the board without having the zip. |
+| 22 | **A new version backs up the database before migrating it** and refuses data written by a newer version. A forgotten admin PIN is reset by a `RESET-ADMIN-PIN` file next to `start.bat`. | Updates and rollbacks can't lose data. Resetting the PIN needs access to the host PC, which is the right authority for this team. |
+
 ## Known limits
 
 - The host PC must be on for others to reach the board.
-- **The Windows Firewall needs an inbound rule for the port.** Adding one needs admin rights, so ask IT once. Phase 9 ships the exact rule.
+- **The Windows Firewall needs an inbound rule for the port.** Adding one needs admin rights, so ask IT once: `for-IT\allow-board-port.bat` or [`docs/FOR-IT.md`](docs/FOR-IT.md).
+- The host PC must not sleep, and the board stops while its user is signed out (decision 20).
 - The single process scales comfortably to this team's size: thousands of tickets and a handful of users.

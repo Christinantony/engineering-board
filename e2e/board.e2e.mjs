@@ -434,6 +434,11 @@ test('right-click menu moves a card and the ? key shows shortcuts', async () => 
   await c.locator('body').click({ position: { x: 5, y: 600 } });
   await c.keyboard.press('?');
   await c.waitForSelector('.help kbd');
+  // the full user guide is one click away, served by the board itself
+  const [guide] = await Promise.all([c.context().waitForEvent('page'), c.click('.help a:has-text("Open the user guide")')]);
+  await guide.waitForLoadState();
+  assert.equal(await guide.textContent('h1'), 'User guide');
+  await guide.close();
   await c.keyboard.press('Escape');
   await c.waitForSelector('.help', { state: 'detached' });
 });

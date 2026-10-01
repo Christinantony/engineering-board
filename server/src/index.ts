@@ -2,7 +2,7 @@
 
 import { networkInterfaces, hostname } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { existsSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createApp, APP_VERSION } from './app.ts';
 import { loadConfig } from './config.ts';
@@ -18,13 +18,21 @@ const appRoot = process.env.EB_APP_ROOT
 async function main() {
   const cfg = loadConfig(appRoot);
   const webRoot = [join(appRoot, 'app', 'web'), join(appRoot, 'dist', 'app', 'web')].find((p) => existsSync(p));
+  // Forgotten admin PIN: an empty file called RESET-ADMIN-PIN next to start.bat puts it back to
+  // 1234 on the next start. Only someone who can reach the host PC's folder can do this.
+  // (Windows hides extensions, so Notepad's RESET-ADMIN-PIN.txt counts too.)
+  const resetFiles = ['RESET-ADMIN-PIN', 'RESET-ADMIN-PIN.txt'].map((n) => join(appRoot, n)).filter((p) => existsSync(p));
   const app = createApp({ dbPath: join(cfg.dataDir, 'board.db'), tz: cfg.timezone, webRoot,
+    resetAdminPin: resetFiles.length > 0,
     workday: { hoursPerDay: cfg.hoursPerDay, workingDays: cfg.workingDays },
     log: process.env.EB_LOG === '1',
     backupDir: cfg.backupDir,
     backupKeepDays: cfg.backupKeepDays,
     autoBackup: true,
   });
+
+  for (const f of resetFiles) rmSync(f, { force: true });
+  if (resetFiles.length) console.log('\n  The admin PIN has been reset to 1234. Change it now in Admin, Admin PIN.');
 
   let port: number;
   try {
@@ -42,16 +50,25 @@ async function main() {
     .flat()
     .filter((n) => n && n.family === 'IPv4' && !n.internal)
     .map((n) => n!.address);
+  const localOnly = /^(127\.|localhost$|::1$)/.test(cfg.host);
+  // in a container, its own name and addresses mean nothing to colleagues
+  const inContainer = existsSync('/.dockerenv') || existsSync('/run/.containerenv');
+  const team = localOnly
+    ? `  For your team:     (nobody else: "host" in config.json is ${cfg.host}, which allows this PC only)`
+    : inContainer
+      ? `  For your team:     http://<this machine's name or IP>:<published port> (running in a container)`
+      : [`  For your team:     http://${hostname()}:${port}`, ...ips.map((ip) => `                     http://${ip}:${port}`)].join('\n');
   console.log(`
   Engineering Board v${APP_VERSION}
   ─────────────────────────────────────────────
   On this PC:        http://localhost:${port}
-  For your team:     http://${hostname()}:${port}
-${ips.map((ip) => `                     http://${ip}:${port}`).join('\n')}
+${team}
+  User guide:        http://localhost:${port}/guides/user-guide.html
   Data folder:       ${cfg.dataDir}
   Backups:           ${cfg.backupDir}
+  Settings:          ${cfg.file ?? 'defaults (no config.json; see config.example.json)'}
   Time zone:         ${cfg.timezone}
-  ${webRoot ? '' : '(web app not built yet — API only)\n  '}Keep this window open. Press Ctrl+C to stop.
+${cfg.warnings.map((w) => `  ! ${w}\n`).join('')}  ${webRoot ? '' : '(web app not built yet: API only)\n  '}Keep this window open. Press Ctrl+C to stop.
 `);
 
   const shutdown = async (sig: string) => {
