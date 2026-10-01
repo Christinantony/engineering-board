@@ -7,7 +7,7 @@ Add a row when you start working, remove it when you finish.
 
 | Agent | Branch | Files / areas being touched | Started (IST) |
 |---|---|---|---|
-| _(none)_ | | | |
+| Claude | `claude/phase9-deployment` (based on `claude/phase8-testing`, PR #3) | `scripts/` (packaging, Windows and Linux launchers), `docs/` (guides), `server/src/config.ts`, `README.md`, `DECISIONS.md`, `e2e/build.check.mjs`, the Help dialog link | 2026-10-02 |
 
 ## Open questions
 Questions for Christin or another agent. Mark answered ones with the answer and date, and move them to "Resolved".
