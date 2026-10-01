@@ -13,5 +13,13 @@ Instructions for any AI coding agent working in this repo (Claude, ChatGPT/Codex
 7. Never commit secrets, the database, or anything under `data/`.
 8. If something is unclear, ask in `HANDOFF.md`. Do not guess.
 
-## Project layout (as of the first changelog entry)
-Application code lives under `app/` (entry point `app/server.mjs`). Domain logic is in `domain/` (auth, notifications and so on). The SQLite database lives in `data/board.db` and is never committed.
+## Project layout
+- `server/src/`: the server (TypeScript). `app.ts` holds the routes; `domain/` holds the business rules (tickets, search, notifications, backup, import/export, auth); `db/` holds the connection, migrations and seed data.
+- `web/src/`: the React app (views, components, `lib/` for the API client, live updates, actions).
+- `shared/src/`: constants, API types and validators used by both.
+- `server/test/`: backend tests (`npm test`). `e2e/`: browser tests (`npm run e2e`, needs Playwright).
+- `scripts/build.mjs` bundles everything into `dist/app/` (`server.mjs` plus `web/`). That folder plus `node.exe` and `start.bat` is what runs on the host PC.
+- Runtime data lives in `data/` (`board.db`, `backups/`) and is never committed.
+
+## Before you open a PR
+`npm run typecheck`, `npm test` and `npm run build` must all pass. Run `npm run e2e` too when you change anything in `web/`.
