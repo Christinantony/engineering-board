@@ -4,7 +4,8 @@ import { all, get, run, tx } from '../db/connection.ts';
 import { bool, conflict, int, notFound, nowIso, type Ctx } from '../lib/core.ts';
 import { reindexWhere } from './search.ts';
 
-const PALETTE = ['#2563eb', '#9333ea', '#059669', '#d97706', '#db2777', '#0891b2', '#65a30d', '#dc2626'];
+// colours with readable white initials (WCAG AA)
+const PALETTE = ['#2563eb', '#9333ea', '#047857', '#b45309', '#be185d', '#0e7490', '#4d7c0f', '#dc2626'];
 
 interface UserRow {
   id: number;

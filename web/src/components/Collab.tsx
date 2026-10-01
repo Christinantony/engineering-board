@@ -8,6 +8,7 @@ import { when } from '../lib/format.ts';
 import { navigate } from '../lib/router.ts';
 import { invalidate, useLiveState, useNewVersionAvailable, useQuery } from '../lib/store.ts';
 import { toast } from '../lib/toasts.ts';
+import { setUnreadCount } from '../lib/title.ts';
 import { Badge } from './bits.tsx';
 
 
@@ -79,7 +80,7 @@ export function Bell() {
   // unread count in the browser tab title, so it shows when the board is in the background
   useEffect(() => {
     const n = q.data?.unread ?? 0;
-    document.title = n > 0 ? `(${n}) Engineering Board` : 'Engineering Board';
+    setUnreadCount(n);
   }, [q.data?.unread]);
 
   useEffect(() => {

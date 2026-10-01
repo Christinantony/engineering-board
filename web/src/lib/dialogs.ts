@@ -7,7 +7,8 @@ export type DialogSpec =
   | { type: 'reason'; ticket: Ticket; status: 'waiting' | 'blocked'; initial: string }
   | { type: 'assign'; ticket: Ticket; title: string }
   | { type: 'confirm'; title: string; body: string; confirm: string; danger?: boolean }
-  | { type: 'conflict'; field: string; jobNumber: string; mine: string; theirs: string; canCombine: boolean };
+  | { type: 'conflict'; field: string; jobNumber: string; mine: string; theirs: string; canCombine: boolean }
+  | { type: 'help' };
 
 export type DialogAnswer<S extends DialogSpec> = S extends { type: 'reason' }
   ? { reason: string; status: 'waiting' | 'blocked' }

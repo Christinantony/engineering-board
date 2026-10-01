@@ -9,8 +9,8 @@ import { addDays, localDate } from '../lib/time.ts';
 export const INITIAL_USERS = [
   { name: 'Christin', initials: 'CH', color: '#2563eb', role: 'engineer', is_admin: 1 },
   { name: 'Paul', initials: 'PA', color: '#9333ea', role: 'engineer', is_admin: 0 },
-  { name: 'Allen', initials: 'AL', color: '#059669', role: 'engineer', is_admin: 0 },
-  { name: 'Jeffin', initials: 'JE', color: '#d97706', role: 'manager', is_admin: 0 },
+  { name: 'Allen', initials: 'AL', color: '#047857', role: 'engineer', is_admin: 0 },
+  { name: 'Jeffin', initials: 'JE', color: '#b45309', role: 'manager', is_admin: 0 },
 ] as const;
 
 /** First-run data: team members and default job types. Safe to call on every start. */

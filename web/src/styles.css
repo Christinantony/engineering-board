@@ -8,7 +8,7 @@
   --grid: rgba(31, 42, 55, 0.055);
   --ink: #1f2a37;
   --ink-2: #445162;
-  --muted: #6b7684;
+  --muted: #5b6573;
   --line: #d3d9e0;
   --line-strong: #b9c1cb;
   --card: #ffffff;
@@ -19,6 +19,9 @@
   --c-claimed: #4f46e5;
   --c-progress: #d97706;
   --c-waiting: #dc4a26;
+  /* darker variants for text on light backgrounds (WCAG AA) */
+  --c-progress-ink: #a15c07;
+  --c-waiting-ink: #b93815;
   --c-review: #7c3aed;
   --c-done: #15803d;
 
@@ -298,7 +301,6 @@ a {
   flex: none;
   border-radius: 50%;
   background: var(--who);
-  color: #fff;
   font-family: var(--font-tech);
   font-weight: 700;
   letter-spacing: 0.03em;
@@ -422,7 +424,13 @@ a {
   font-family: var(--font-tech);
   font-weight: 700;
   font-size: 15px;
-  color: var(--col);
+  color: var(--col-ink, var(--col));
+}
+.col-in_progress {
+  --col-ink: var(--c-progress-ink);
+}
+.col-waiting {
+  --col-ink: var(--c-waiting-ink);
 }
 .col-hours {
   margin-left: auto;
@@ -630,11 +638,11 @@ body.dragging-active * {
   background: var(--c-claimed);
 }
 .st-in_progress {
-  background: var(--c-progress);
+  background: #b45309;
 }
 .st-waiting,
 .st-blocked {
-  background: var(--c-waiting);
+  background: #c2410c;
 }
 .st-review {
   background: var(--c-review);
@@ -1449,7 +1457,13 @@ textarea.field-input {
 .vsection-count {
   font-family: var(--font-tech);
   font-weight: 700;
-  color: var(--tone);
+  color: var(--tone-ink, var(--tone));
+}
+.tone-progress {
+  --tone-ink: var(--c-progress-ink);
+}
+.tone-waiting {
+  --tone-ink: var(--c-waiting-ink);
 }
 .vsection-list {
   display: flex;
@@ -2470,5 +2484,196 @@ code {
   }
   .admin-list li {
     grid-template-columns: 1fr auto auto;
+  }
+}
+
+/* ======================= Phase 7: polish and accessibility ======================= */
+
+.skip-link {
+  position: absolute;
+  left: 8px;
+  top: -40px;
+  z-index: 200;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: #fff;
+  color: var(--ink);
+  font-weight: 700;
+}
+.skip-link:focus {
+  top: 8px;
+}
+.main:focus {
+  outline: none;
+}
+kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 1px 6px;
+  border: 1px solid var(--line-strong);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: #fff;
+  font: 600 12px/1.5 var(--font-ui);
+  text-align: center;
+  color: var(--ink);
+}
+.help-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid #3b4a5d;
+  background: transparent;
+  color: #c4cdd8;
+  font-weight: 700;
+  cursor: pointer;
+}
+.help-btn:hover {
+  color: #fff;
+  border-color: #c4cdd8;
+}
+.dialog:has(.help) {
+  width: min(860px, 100%);
+}
+.help-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 6px 28px;
+  max-height: 64vh;
+  overflow-y: auto;
+}
+.help h3 {
+  margin: 10px 0 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.help dl {
+  margin: 0;
+}
+.help dl > div {
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  gap: 10px;
+  padding: 4px 0;
+  border-bottom: 1px solid #edf0f3;
+  font-size: 13px;
+}
+.help dt {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  align-items: center;
+}
+.help dd {
+  margin: 0;
+}
+.card-menu {
+  position: fixed;
+  z-index: 70;
+  min-width: 210px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 14px 36px rgba(15, 23, 42, 0.25);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+.card-menu button {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.card-menu button:hover,
+.card-menu button:focus-visible {
+  background: #eef3fb;
+  outline: none;
+}
+.card-menu-head {
+  padding: 6px 10px 4px;
+  font-family: var(--font-tech);
+  font-weight: 700;
+  color: var(--ink-2);
+}
+.card-menu-label {
+  padding: 4px 10px 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.card-menu-sep {
+  height: 1px;
+  background: var(--line);
+  margin: 4px 0;
+}
+.card:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 1px;
+}
+.welcome {
+  margin: 8px 4px;
+  padding: 12px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+  background: #fff;
+  font-size: 13px;
+}
+.welcome p {
+  margin: 0 0 6px;
+}
+.spinner-wait {
+  min-height: 60px;
+}
+@media (max-width: 760px) {
+  .filterbar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 8px;
+  }
+  .filterbar .fcount {
+    display: none;
+  }
+  .help-btn {
+    display: none;
+  }
+  .help dl > div {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
+@media (forced-colors: active) {
+  .card,
+  .jobrow,
+  .col {
+    border: 1px solid CanvasText;
+  }
+  .badge,
+  .status-pill,
+  .prio,
+  .chip {
+    border: 1px solid CanvasText;
+  }
+}
+
+/* narrower screens (tablets, small laptops): views move to a second row so none are hidden */
+@media (max-width: 1180px) {
+  :root {
+    --topbar-h: 92px;
+  }
+  .topbar {
+    flex-wrap: wrap;
+    row-gap: 0;
+    padding-top: 6px;
+  }
+  .topbar .nav {
+    order: 10;
+    flex: 1 1 100%;
+    padding-bottom: 6px;
+  }
+  .me-name {
+    display: none;
   }
 }

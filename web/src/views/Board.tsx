@@ -10,6 +10,8 @@ import { hours } from '../lib/format.ts';
 import { useQuery } from '../lib/store.ts';
 import { ErrorBox, Spinner } from '../components/bits.tsx';
 import { TicketCard } from '../components/TicketCard.tsx';
+import { CardMenu, type MenuTarget } from '../components/CardMenu.tsx';
+import { claimTicket } from '../lib/actions.ts';
 
 interface Column {
   id: string;
@@ -207,13 +209,88 @@ export function Board({ filter }: { filter?: (t: Ticket) => boolean }) {
   latest.current = { onMove, onUp, onCancel, onKey };
   useEffect(() => cleanup, []); // remove listeners if the board unmounts mid-drag
 
+  // ---------- keyboard and menu: moving cards without a mouse ----------
+  const [menu, setMenu] = useState<MenuTarget | null>(null);
+  // After a keyboard move the card re-renders in its new column; keep focus on it.
+  const pendingFocus = useRef<{ id: number; until: number } | null>(null);
+  const refocus = (id: number) => {
+    pendingFocus.current = { id, until: Date.now() + 4000 };
+    restoreFocus();
+  };
+  function restoreFocus() {
+    const p = pendingFocus.current;
+    if (!p) return;
+    if (Date.now() > p.until) {
+      pendingFocus.current = null;
+      return;
+    }
+    const el = document.querySelector<HTMLElement>(`[data-card="${p.id}"]:not(.is-ghost)`);
+    const active = document.activeElement;
+    if (el && active !== el && (!active || active === document.body || active.closest('.board'))) el.focus();
+  }
+  useEffect(() => restoreFocus()); // after every render
+  const ticketOf = (el: Element | null) => {
+    const id = Number((el?.closest('[data-card]') as HTMLElement | null)?.dataset.card);
+    return id ? tickets.find((t) => t.id === id) : undefined;
+  };
+  const colIndexOf = (t: Ticket) => COLUMNS.findIndex((c) => c.statuses.includes(t.status));
+
+  function onBoardKeyDown(e: any) {
+    const t = ticketOf(e.target);
+    if (!t || e.target.closest('button, input, select, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
+    const ci = colIndexOf(t);
+    const col = COLUMNS[ci];
+    const list = byColumn.get(col.id) ?? [];
+    const idx = list.findIndex((x) => x.id === t.id);
+    const focusCard = (x: Ticket | undefined) => x && document.querySelector<HTMLElement>(`[data-card="${x.id}"]`)?.focus();
+    const key = e.key;
+    if ((key === 'ContextMenu' || (key === 'F10' && e.shiftKey)) && !drag) {
+      e.preventDefault();
+      const r = e.target.closest('[data-card]').getBoundingClientRect();
+      setMenu({ ticket: t, x: r.left + 24, y: r.top + 24 });
+    } else if (key === 'c' || key === 'C') {
+      if (t.assigned_to == null && me.role === 'engineer' && t.status !== 'done' && t.status !== 'cancelled') {
+        e.preventDefault();
+        e.stopPropagation();
+        void claimTicket(t).then(() => refocus(t.id));
+      }
+    } else if (e.shiftKey && (key === 'ArrowLeft' || key === 'ArrowRight')) {
+      e.preventDefault();
+      const next = COLUMNS[ci + (key === 'ArrowLeft' ? -1 : 1)];
+      if (next) void drop(t.id, next.id, 0).then(() => refocus(t.id));
+    } else if (e.shiftKey && (key === 'ArrowUp' || key === 'ArrowDown') && col.id !== 'done') {
+      e.preventDefault();
+      const to = idx + (key === 'ArrowUp' ? -1 : 1);
+      if (to >= 0 && to < list.length) void drop(t.id, col.id, to).then(() => refocus(t.id));
+    } else if (!e.shiftKey && (key === 'ArrowUp' || key === 'ArrowDown')) {
+      e.preventDefault();
+      focusCard(list[idx + (key === 'ArrowUp' ? -1 : 1)]);
+    } else if (!e.shiftKey && (key === 'ArrowLeft' || key === 'ArrowRight')) {
+      e.preventDefault();
+      for (let c = ci + (key === 'ArrowLeft' ? -1 : 1); c >= 0 && c < COLUMNS.length; c += key === 'ArrowLeft' ? -1 : 1) {
+        const other = byColumn.get(COLUMNS[c].id) ?? [];
+        if (other.length) {
+          focusCard(other[Math.min(idx, other.length - 1)]);
+          break;
+        }
+      }
+    }
+  }
+
+  function onBoardContextMenu(e: any) {
+    const t = ticketOf(e.target);
+    if (!t || drag) return;
+    e.preventDefault();
+    setMenu({ ticket: t, x: e.clientX, y: e.clientY });
+  }
+
   if (q.error && !q.data) return <ErrorBox message={q.error.message} retry={q.refresh} />;
   if (!q.data) return <Spinner label="Loading the board" />;
 
   const dragged = drag ? tickets.find((t) => t.id === drag.id) : undefined;
 
   return (
-    <div className="board" aria-label="Kanban board">
+    <div className="board" aria-label="Kanban board" onKeyDown={onBoardKeyDown} onContextMenu={onBoardContextMenu}>
       {COLUMNS.map((c) => {
         const list = byColumn.get(c.id)!;
         const minutes = list.reduce((s, t) => s + (t.estimate_minutes ?? 0), 0);
@@ -229,7 +306,21 @@ export function Board({ filter }: { filter?: (t: Ticket) => boolean }) {
               {minutes > 0 && c.id !== 'done' && <span className="col-hours">{hours(minutes)}</span>}
             </header>
             <div className="col-list">
-              {visible.length === 0 && !isTarget && <p className="col-empty">{c.empty}</p>}
+              {visible.length === 0 && !isTarget && c.id === 'inbox' && (q.data?.tickets.length ?? 0) === 0 ? (
+                <div className="welcome">
+                  <p>
+                    <strong>The board is empty.</strong>
+                  </p>
+                  <p>
+                    Press <kbd>N</kbd> to add the first job, or bring in your current list from Excel with Admin, Import.
+                  </p>
+                  <p className="muted">
+                    Press <kbd>?</kbd> any time for keyboard shortcuts.
+                  </p>
+                </div>
+              ) : (
+                visible.length === 0 && !isTarget && <p className="col-empty">{c.empty}</p>
+              )}
               {visible.map((t, i) => (
                 <div key={t.id} className="card-slot">
                   {isTarget && drag!.index === i && c.id !== 'done' && <div className="drop-line" style={{ height: drag!.height }} />}
@@ -247,6 +338,14 @@ export function Board({ filter }: { filter?: (t: Ticket) => boolean }) {
           </section>
         );
       })}
+      {menu && (
+        <CardMenu
+          target={menu}
+          columns={COLUMNS}
+          onClose={() => setMenu(null)}
+          onMove={(t, colId) => void drop(t.id, colId, 0).then(() => refocus(t.id))}
+        />
+      )}
       {drag &&
         dragged &&
         createPortal(

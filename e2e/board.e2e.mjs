@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
 import assert from 'node:assert/strict';
-import { test, before, after } from 'node:test';
+import { test, before, after, afterEach } from 'node:test';
 
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_PATH ?? 'playwright');
@@ -51,8 +51,15 @@ after(async () => {
   rmSync(dir, { recursive: true, force: true });
 });
 
+// every browser window opened by a test is closed after it, so tests don't slow each other down
+const open = [];
+afterEach(async () => {
+  while (open.length) await open.pop().close().catch(() => {});
+});
+
 async function login(name) {
   const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  open.push(ctx);
   const p = await ctx.newPage();
   p.errors = [];
   p.on('pageerror', (e) => p.errors.push(e.message));
@@ -371,4 +378,81 @@ test('export links download CSV and JSON', async () => {
   assert.match(bytes.subarray(3).toString('utf8'), /^job_number,title/);
   const json = await (await fetch(`${BASE}/api/export/tickets.json`, { headers: { cookie } })).json();
   assert.ok(json.tickets.length > 5);
+});
+
+// ---------------- Phase 7: keyboard, menus, accessibility ----------------
+
+test('keyboard only: move a card to the next column and back, and claim with C', async () => {
+  const c = await login('Christin');
+  const card = c.locator('.card', { hasText: 'Prototype jig for weld fixture' });
+  await card.focus();
+  await c.keyboard.press('Shift+ArrowRight');
+  await c.waitForFunction(() => document.querySelector('[data-col=in_progress]')?.textContent.includes('Prototype jig'));
+  // focus stays on the moved card, so it can keep going
+  await c.waitForFunction(() => !!document.activeElement?.closest('[data-card]')?.textContent?.includes('Prototype jig'));
+  await c.keyboard.press('Shift+ArrowLeft');
+  await c.waitForFunction(() => document.querySelector('[data-col=claimed]')?.textContent.includes('Prototype jig'));
+  // claim the first unclaimed inbox card with C
+  const inboxCard = c.locator('[data-col=inbox] .card:has(.btn-claim)').first();
+  const title = await inboxCard.locator('.card-title').innerText();
+  await inboxCard.focus();
+  await c.keyboard.press('c');
+  await c.waitForSelector('.toast:has-text("You claimed")');
+  await c.waitForFunction((t) => document.querySelector('[data-col=claimed]')?.textContent.includes(t), title);
+});
+
+test('right-click menu moves a card and the ? key shows shortcuts', async () => {
+  const c = await login('Paul');
+  const card = c.locator('.card', { hasText: 'Clean up overlapping ANSYS surfaces' });
+  await card.click({ button: 'right' });
+  await c.waitForSelector('.card-menu');
+  await c.click('.card-menu button:has-text("Review")');
+  await c.waitForFunction(() => document.querySelector('[data-col=review]')?.textContent.includes('Clean up overlapping'));
+  await c.locator('body').click({ position: { x: 5, y: 600 } });
+  await c.keyboard.press('?');
+  await c.waitForSelector('.help kbd');
+  await c.keyboard.press('Escape');
+  await c.waitForSelector('.help', { state: 'detached' });
+});
+
+test('dialogs keep keyboard focus inside and give it back when closed', async () => {
+  const c = await login('Christin');
+  await c.click('.new-job');
+  await c.waitForSelector('#qc-title');
+  await c.keyboard.press('Escape');
+  const card = c.locator('.card').first();
+  await card.focus();
+  await c.keyboard.press('Shift+F10'); // open the card menu from the keyboard
+  await c.waitForSelector('.card-menu');
+  await c.keyboard.press('Escape');
+  await c.waitForFunction(() => !!document.activeElement?.closest('[data-card]'), null, { timeout: 2000 });
+  await c.keyboard.press('?');
+  await c.waitForSelector('.help');
+  for (let i = 0; i < 6; i++) await c.keyboard.press('Tab');
+  assert.ok(await c.evaluate(() => !!document.activeElement?.closest('.dialog')), 'focus stays in the dialog');
+  await c.keyboard.press('Escape');
+});
+
+test('every control on every page has a name a screen reader can read out', async () => {
+  const c = await login('Christin');
+  const pages = ['/board', '/today', '/my-work', '/dashboard', '/workload', '/reports', '/search?q=pump', '/activity', '/board?job=1'];
+  const problems = [];
+  for (const path of pages) {
+    await c.goto(BASE + path);
+    await c.waitForTimeout(700);
+    const bad = await c.evaluate(() => {
+      const named = (el) => {
+        if (el.getAttribute('aria-label') || el.getAttribute('aria-labelledby') || el.getAttribute('title')) return true;
+        if ((el.textContent || '').trim()) return el.tagName !== 'INPUT' && el.tagName !== 'SELECT' && el.tagName !== 'TEXTAREA' ? true : !!el.labels?.length;
+        if (el.labels && el.labels.length) return true;
+        if (el.getAttribute('placeholder')) return true;
+        return false;
+      };
+      return [...document.querySelectorAll('button, a[href], input:not([type=hidden]), select, textarea, [role=button]')]
+        .filter((el) => el.offsetParent !== null && !named(el))
+        .map((el) => el.outerHTML.slice(0, 120));
+    });
+    for (const b of bad) problems.push(`${path}: ${b}`);
+  }
+  assert.deepEqual(problems, []);
 });

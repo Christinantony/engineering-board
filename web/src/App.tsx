@@ -14,6 +14,9 @@ import { SearchBox } from './components/SearchBox.tsx';
 import { Bell, ConnectionBanner, OnlineNow } from './components/Collab.tsx';
 import { ActivityFeed } from './views/ActivityFeed.tsx';
 import { Admin } from './views/admin/Admin.tsx';
+import { ErrorBoundary } from './components/ErrorBoundary.tsx';
+import { ask } from './lib/dialogs.ts';
+import { setPageTitle } from './lib/title.ts';
 import { BoardPage } from './views/BoardPage.tsx';
 import { Dashboard } from './views/Dashboard.tsx';
 import { MyWork } from './views/MyWork.tsx';
@@ -124,6 +127,11 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
       if (e.ctrlKey || e.metaKey || e.altKey) return;
       const el = e.target as HTMLElement;
       if (el.closest('input, textarea, select, [contenteditable="true"]') || document.querySelector('.dialog-backdrop')) return;
+      if (e.key === '?') {
+        e.preventDefault();
+        void ask({ type: 'help' });
+        return;
+      }
       const k = e.key.toLowerCase();
       if (k === 'n') {
         e.preventDefault();
@@ -171,6 +179,9 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
   return (
     <AppContext.Provider value={state}>
       <div className={`shell${jobId ? ' has-panel' : ''}`}>
+        <a className="skip-link" href="#main">
+          Skip to content
+        </a>
         <header className="topbar">
           <a
             className="brand"
@@ -206,6 +217,9 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
             <span className="live-dot" aria-hidden="true" />
             {live === 'live' ? 'Live' : live === 'connecting' ? 'Reconnecting…' : 'Offline'}
           </span>
+          <button className="help-btn" onClick={() => void ask({ type: 'help' })} aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)">
+            ?
+          </button>
           <Bell />
           <button className="btn btn-primary new-job" onClick={() => setCreating(true)} title="New job (N)">
             + New job
@@ -239,8 +253,10 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
           </div>
         )}
 
-        <main className="main">
-          <View path={path} />
+        <main className="main" id="main" tabIndex={-1}>
+          <ErrorBoundary resetKey={path}>
+            <View path={path} />
+          </ErrorBoundary>
         </main>
 
         {jobId && <TicketPanel id={jobId} onClose={() => setJob(null)} />}
@@ -252,7 +268,20 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
   );
 }
 
+const TITLES: Record<string, string> = {
+  '/board': 'Board',
+  '/today': 'Today',
+  '/my-work': 'My work',
+  '/dashboard': 'Dashboard',
+  '/workload': 'Workload',
+  '/reports': 'Reports',
+  '/search': 'Search',
+  '/activity': 'Team activity',
+  '/admin': 'Admin',
+};
+
 function View({ path }: { path: string }) {
+  useEffect(() => setPageTitle(TITLES[path] ?? ''), [path]);
   const V = VIEWS[path] ?? (path === '/' ? BoardPage : null);
   if (!V)
     return (

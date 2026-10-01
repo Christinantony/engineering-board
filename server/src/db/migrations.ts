@@ -163,4 +163,17 @@ CREATE TABLE imports (
 CREATE INDEX idx_imports_hash ON imports(hash);
 `,
   },
+  {
+    id: 4,
+    name: 'readable default colours',
+    sql: /* sql */ `
+-- Darken the original default badge colours so white initials meet WCAG AA.
+-- Only exact old defaults change; colours people picked themselves are untouched.
+UPDATE users SET color = '#047857' WHERE color = '#059669';
+UPDATE users SET color = '#b45309' WHERE color = '#d97706';
+UPDATE users SET color = '#be185d' WHERE color = '#db2777';
+UPDATE users SET color = '#0e7490' WHERE color = '#0891b2';
+UPDATE users SET color = '#4d7c0f' WHERE color = '#65a30d';
+`,
+  },
 ];

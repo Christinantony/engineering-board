@@ -2,7 +2,15 @@
 
 An internal workboard for the mechanical design team. It combines a Kanban board, lightweight job tickets and team workload, and runs on one PC on the office LAN.
 
-> **Status: Phase 6 of 9.** Everything a team needs day to day works: the board, every view, search, collaboration, and the Admin area.
+> **Status: Phase 7 of 9.** Everything a team needs day to day works: the board, every view, search, collaboration, and the Admin area.
+> Phase 7 polish added:
+> - A full keyboard path, including moving cards without a mouse.
+> - A right-click card menu.
+> - A `?` shortcut list.
+> - Colours that meet WCAG AA contrast.
+> - Focus handling in dialogs.
+> - Layouts for tablets and phones.
+> - Friendlier empty, loading and error states.
 >
 > The Admin area covers:
 > - Team, job types and tags.
@@ -39,7 +47,7 @@ npm run build          # → dist/app/server.mjs + dist/app/web/
 npm start              # server from source on http://localhost:8080 (serves dist/app/web)
 npm run dev:web        # rebuild the web app on change
 npm test               # 62 backend tests (node:test)
-npm run e2e            # 18 browser tests (needs Playwright + Chromium; run npm run build first)
+npm run e2e            # 22 browser tests (needs Playwright + Chromium; run npm run build first)
 npm run typecheck      # server and web
 npm run seed:demo      # add demo jobs  (…-- --clear to remove them)
 ```

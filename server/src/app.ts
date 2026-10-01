@@ -66,7 +66,7 @@ import {
 import { archiveOld, commitImport, deleteTag, exportCsv, exportJson, importTemplate, listTags, previewImport, renameTag } from './domain/transfer.ts';
 import { rmSync } from 'node:fs';
 
-export const APP_VERSION = '0.6.0';
+export const APP_VERSION = '0.7.0';
 
 export interface AppOptions {
   dbPath: string;
