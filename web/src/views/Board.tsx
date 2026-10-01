@@ -226,7 +226,9 @@ export function Board({ filter }: { filter?: (t: Ticket) => boolean }) {
     }
     const el = document.querySelector<HTMLElement>(`[data-card="${p.id}"]:not(.is-ghost)`);
     const active = document.activeElement;
-    if (el && active !== el && (!active || active === document.body || active.closest('.board'))) el.focus();
+    // only when focus fell to the page itself (the old element was removed); never steal it from something else
+    if (el && active !== el && (!active || active === document.body)) el.focus();
+    if (active && active !== document.body && active !== el) pendingFocus.current = null;
   }
   useEffect(() => restoreFocus()); // after every render
   const ticketOf = (el: Element | null) => {
