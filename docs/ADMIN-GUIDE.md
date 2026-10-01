@@ -56,6 +56,10 @@ Backups older than 30 days are deleted, but the newest 7 are always kept, so a l
 
 **From a file:** **Restore from a file…** and choose a `.db` backup, for example one kept on a network share. The file is checked first: a damaged file, something that isn't a board backup, or a backup from a newer version of the board is refused with a message, and nothing changes.
 
+Uploads are limited to **64 MiB** by default. Set `restoreUploadMaxMB` in `config.json` (1–1024 MiB), or `EB_RESTORE_UPLOAD_MAX_MB`, then restart to change the limit. Larger backups already in the server's backup list can still be restored without a browser upload.
+
+The board prepares and upgrades a separate candidate before replacing live data. If activation fails, it reopens the original database. The pre-restore safety backup remains available. A disk failure that prevents recovery is reported in the server window with the retained recovery-file location.
+
 **When the board won't start at all:** close it, move `data\board.db` (and any `board.db-wal` and `board.db-shm`) somewhere aside, copy the backup you want to `data\board.db`, and start the board.
 
 ## Archive
@@ -81,6 +85,7 @@ Settings live in `config.json` in the board folder (next to `start.bat`). It doe
 | `dataDir` | `"data"` | Folder for `board.db`. Relative paths start from the board folder. |
 | `backupDir` | `dataDir` + `/backups` | Where backups go. A network share works: `"//fileserver/engineering/board-backups"`. |
 | `backupKeepDays` | `30` | Backups older than this are deleted (the newest 7 are always kept). |
+| `restoreUploadMaxMB` | `64` | Maximum browser backup upload, in MiB (1–1024). Also configurable with `EB_RESTORE_UPLOAD_MAX_MB`. |
 | `timezone` | `"Asia/Kolkata"` | Decides "today" and when jobs become overdue. |
 | `hoursPerDay` | `8` | The reference line on the Workload page. |
 | `workingDays` | `[1,2,3,4,5,6]` | Monday to Saturday. `0` is Sunday. Used by the workload horizons. |

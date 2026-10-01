@@ -34,7 +34,7 @@ describe('config.json', () => {
     const c = withConfig(example).load();
     const d = withConfig(null).load();
     assert.deepEqual(c.warnings, [], 'no unknown settings in the example');
-    for (const k of ['port', 'host', 'timezone', 'backupKeepDays', 'hoursPerDay', 'workingDays'] as const) assert.deepEqual(c[k], d[k], k);
+    for (const k of ['port', 'host', 'timezone', 'backupKeepDays', 'restoreUploadMaxMB', 'hoursPerDay', 'workingDays'] as const) assert.deepEqual(c[k], d[k], k);
   });
 
   it('accepts a file saved by Notepad with a byte-order mark, and "_comment" keys', () => {
@@ -54,9 +54,9 @@ describe('config.json', () => {
   });
 
   it('lists every wrong value at once, in words', () => {
-    const { load } = withConfig(JSON.stringify({ port: 80000, backupKeepDays: 0, hoursPerDay: 30, workingDays: [1, 9], timezone: 'India' }));
+    const { load } = withConfig(JSON.stringify({ port: 80000, backupKeepDays: 0, restoreUploadMaxMB: 0, hoursPerDay: 30, workingDays: [1, 9], timezone: 'India' }));
     assert.throws(load, (e: Error) => {
-      for (const k of ['port', 'backupKeepDays', 'hoursPerDay', 'workingDays', 'timezone']) assert.match(e.message, new RegExp(`"${k}"`));
+      for (const k of ['port', 'backupKeepDays', 'restoreUploadMaxMB', 'hoursPerDay', 'workingDays', 'timezone']) assert.match(e.message, new RegExp(`"${k}"`));
       return true;
     });
   });
@@ -75,6 +75,14 @@ describe('config.json', () => {
     const env = withConfig('{ "port": 9000 }', { EB_PORT: '9100', EB_HOST: '127.0.0.1' });
     assert.equal(env.load().port, 9100);
     assert.equal(env.load().host, '127.0.0.1');
+  });
+
+  it('configures the restore upload limit and rejects invalid sizes', () => {
+    assert.equal(withConfig(null).load().restoreUploadMaxMB, 64);
+    assert.equal(withConfig('{ "restoreUploadMaxMB": 12 }').load().restoreUploadMaxMB, 12);
+    assert.equal(withConfig('{ "restoreUploadMaxMB": 12 }', { EB_RESTORE_UPLOAD_MAX_MB: '32' }).load().restoreUploadMaxMB, 32);
+    for (const n of [0, -1, 1.5, 1025, 'bad'])
+      assert.throws(withConfig(JSON.stringify({ restoreUploadMaxMB: n })).load, /restoreUploadMaxMB/);
   });
 
   it('accepts working days in any order and drops duplicates', () => {

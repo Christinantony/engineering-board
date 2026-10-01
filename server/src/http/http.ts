@@ -2,7 +2,8 @@
 // static files. Kept deliberately small — about what Fastify gave us, minus
 // the dependency.
 
-import { createReadStream, existsSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, statSync, mkdtempSync, rmSync } from 'node:fs';
+import { open } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { ValidationError } from '@board/shared';
@@ -18,8 +19,8 @@ export interface Request {
   cookies: Record<string, string>;
   body: unknown;
   rawBody: string;
-  /** Present for application/octet-stream uploads (database restore). */
-  binary?: Buffer;
+  /** A streamed database upload. Removed by the HTTP handler after use. */
+  upload?: { path: string; dir: string; bytes: number };
   headers: IncomingMessage['headers'];
 }
 
@@ -100,7 +101,7 @@ export function cookie(name: string, value: string, opts: { maxAge?: number; htt
 }
 
 const MAX_BODY = 20 * 1024 * 1024; // JSON and CSV
-const MAX_UPLOAD = 1024 * 1024 * 1024; // database files
+export const DEFAULT_RESTORE_UPLOAD_MAX_MB = 64;
 
 function readBody(req: IncomingMessage, limit = MAX_BODY): Promise<Buffer> {
   return new Promise((resolveBody, reject) => {
@@ -165,46 +166,82 @@ export function errorToReply(err: unknown): Reply {
   return new Reply(500, { error: 'internal', message: 'Something went wrong on the server. Nothing was saved. Please try again.' });
 }
 
-export async function buildRequest(raw: IncomingMessage, res: ServerResponse): Promise<Request> {
+/** Parse only headers/URL. Route and authorization checks happen before body reads. */
+export function buildRequestHead(raw: IncomingMessage, res: ServerResponse): Request {
   const url = new URL(raw.url ?? '/', 'http://localhost');
-  const method = (raw.method ?? 'GET').toUpperCase();
-  let rawBody = '';
-  let binary: Buffer | undefined;
-  let body: unknown = undefined;
-  if (method !== 'GET' && method !== 'HEAD') {
-    const ct = String(raw.headers['content-type'] ?? '');
-    if (ct.startsWith('application/octet-stream')) {
-      // only the database-restore upload takes large binary bodies
-      if (url.pathname !== '/api/admin/restore/upload') throw new HttpError(415, 'unsupported_media_type', 'Send JSON (Content-Type: application/json)');
-      binary = await readBody(raw, MAX_UPLOAD);
-    } else {
-      rawBody = (await readBody(raw)).toString('utf8');
-      if (rawBody.length) {
-        if (ct.includes('application/json')) body = JSON.parse(rawBody);
-        else if (!ct.startsWith('text/')) {
-          throw new HttpError(415, 'unsupported_media_type', 'Send JSON (Content-Type: application/json)');
-        }
-      }
-    }
-  }
   return {
-    raw,
-    res,
-    method,
-    path: url.pathname,
-    params: {},
-    query: url.searchParams,
-    cookies: parseCookies(raw.headers.cookie),
-    body,
-    rawBody,
-    binary,
-    headers: raw.headers,
+    raw, res, method: (raw.method ?? 'GET').toUpperCase(), path: url.pathname,
+    params: {}, query: url.searchParams, cookies: parseCookies(raw.headers.cookie),
+    body: undefined, rawBody: '', headers: raw.headers,
   };
 }
 
-// ---------------------------------------------------------------------------
-// Static files (built web app) with SPA fallback
-// ---------------------------------------------------------------------------
+export async function readRequestBody(req: Request): Promise<void> {
+  if (req.method === 'GET' || req.method === 'HEAD') return;
+  const ct = String(req.headers['content-type'] ?? '');
+  if (ct.startsWith('application/octet-stream'))
+    throw new HttpError(415, 'unsupported_media_type', 'Send JSON (Content-Type: application/json)');
+  req.rawBody = (await readBody(req.raw)).toString('utf8');
+  if (!req.rawBody.length) return;
+  if (ct.includes('application/json')) req.body = JSON.parse(req.rawBody);
+  else if (!ct.startsWith('text/'))
+    throw new HttpError(415, 'unsupported_media_type', 'Send JSON (Content-Type: application/json)');
+}
+
+/** Header checks also run before an Expect: 100-continue response or creating a file. */
+export function checkUploadHeaders(req: Request, maxBytes: number): void {
+  if (String(req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase() !== 'application/octet-stream')
+    throw new HttpError(415, 'unsupported_media_type', 'Send a backup file (Content-Type: application/octet-stream).');
+  const length = req.headers['content-length'];
+  if (length !== undefined) {
+    const n = Number(length);
+    if (!/^\d+$/.test(length) || !Number.isSafeInteger(n))
+      throw new HttpError(400, 'bad_request', 'Invalid upload size.');
+    if (n > maxBytes) throw uploadTooLarge(maxBytes);
+    if (n === 0) throw new HttpError(400, 'bad_request', 'Choose a backup file (.db) to upload.');
+  }
+}
+
+const uploadTooLarge = (maxBytes: number) => new HttpError(413, 'too_large',
+  `That file is too large (limit ${maxBytes / 1048576} MB).`);
+
+/** Stream with backpressure to a private, unique directory on the database disk. */
+export async function streamUpload(req: Request, dataDir: string, maxBytes: number): Promise<void> {
+  checkUploadHeaders(req, maxBytes);
+  const dir = mkdtempSync(join(dataDir, '.restore-upload-'));
+  const path = join(dir, 'candidate.db');
+  let file: Awaited<ReturnType<typeof open>> | undefined;
+  let bytes = 0;
+  let header = Buffer.alloc(0);
+  try {
+    file = await open(path, 'wx', 0o600);
+    // A limit rejection must leave the socket alive long enough to return a readable 413.
+    // The HTTP handler closes the connection after sending the error; no unbounded drain.
+    for await (const chunk of req.raw.iterator({ destroyOnReturn: false })) {
+      const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      bytes += data.length;
+      if (bytes > maxBytes) throw uploadTooLarge(maxBytes);
+      if (header.length < 16) header = Buffer.concat([header, data.subarray(0, 16 - header.length)]);
+      if (header.length === 16 && header.toString('latin1') !== 'SQLite format 3\u0000')
+        throw new HttpError(400, 'bad_request', "That file isn't a board backup. Choose a .db file made by the board's backup.");
+      let written = 0;
+      while (written < data.length) {
+        const part = await file.write(data, written, data.length - written);
+        if (!part.bytesWritten) throw new Error('The upload could not be written to disk.');
+        written += part.bytesWritten;
+      }
+    }
+    if (header.length < 16)
+      throw new HttpError(400, 'bad_request', bytes ? "That file isn't a board backup." : 'Choose a backup file (.db) to upload.');
+    await file.close();
+    file = undefined;
+    req.upload = { path, dir, bytes };
+  } catch (e) {
+    await file?.close().catch(() => {});
+    rmSync(dir, { recursive: true, force: true });
+    throw e;
+  }
+}
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',

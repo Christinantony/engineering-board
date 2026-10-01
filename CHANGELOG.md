@@ -66,3 +66,12 @@
   - This branch is based on `claude/phase8-testing` (PR #3); merge #3 first.
   - The `.bat` scripts were reviewed but can only be run on Windows; they need testing on the host PC.
   - The lockfile is still missing (see `HANDOFF.md`).
+
+### 2026-10-02 01:25 IST | ChatGPT | branch: chatgpt/restore-upload-list-reliability
+- **What:** Version 1.0.1: prepare and validate database restores before activation, roll back every activation failure, stream authorized backup uploads to disk with a configurable 64 MiB default, and load all Board/Workload pages with revision checks and visible retry errors.
+- **Why:** Invalid restore candidates could replace live data, uploads were buffered before admin authorization, and large job views silently omitted jobs.
+- **Files:** `server/src/{domain/backup,domain/tickets,db/connection,http/http,app,config,index}.ts`, `server/test/{restore-safety,upload-safety,list-completeness,config}.test.ts`, `web/src/lib/{store,ticketPages}.ts`, `web/src/views/{Board,BoardPage,Workload}.tsx`, `e2e/board.e2e.mjs`, `package.json`, `config.example.json`, `README.md`, `docs/{API,ADMIN-GUIDE,USER-GUIDE,INSTALL}.md`, `HANDOFF.md`, `CHANGELOG.md`.
+- **Decisions affected:** none. Zero runtime dependencies and the existing LAN auth, backup, deployment and workload rules remain intact.
+- **Validation:** On Node 22.16.0: typecheck, all 120 backend tests, build, all 14 package checks, and all 25 browser tests passed. Independent validation separately passed 41 targeted tests on Node 22.16.0, 7 migration tests, and real socket probes for early auth/size rejection and interruption cleanup; no remaining blockers. Browser tests used real Chromium via an optional executable-path environment override.
+- **Supporting fixes:** Close failed SQLite opens; avoid startup failure when listing LAN interfaces is unavailable; run backend tests via `node --import tsx` without the tsx CLI IPC server. Version bump prompts already-open browsers to reload after deployment.
+- **Follow-ups / open issues:** no outstanding issue in this scope. Existing real-Windows launcher/LAN testing, missing lockfile and CI remain separate follow-ups; no Windows launcher changes were made.

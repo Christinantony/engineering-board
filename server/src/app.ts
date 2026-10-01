@@ -11,7 +11,11 @@ import {
   HANDLED,
   Reply,
   Router,
-  buildRequest,
+  buildRequestHead,
+  readRequestBody,
+  checkUploadHeaders,
+  streamUpload,
+  DEFAULT_RESTORE_UPLOAD_MAX_MB,
   cookie,
   errorToReply,
   send,
@@ -61,13 +65,12 @@ import {
   pruneBackups,
   restoreFrom,
   runDailyBackupIfDue,
-  stageUpload,
   type BackupCtx,
 } from './domain/backup.ts';
 import { archiveOld, commitImport, deleteTag, exportCsv, exportJson, importTemplate, listTags, previewImport, renameTag } from './domain/transfer.ts';
 import { rmSync } from 'node:fs';
 
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = '1.0.1';
 
 export interface AppOptions {
   dbPath: string;
@@ -82,6 +85,8 @@ export interface AppOptions {
   /** Where backups go (default: a "backups" folder next to the database). */
   backupDir?: string;
   backupKeepDays?: number;
+  /** Maximum restore file upload, in MiB (default 64; 1..1024). */
+  restoreUploadMaxMB?: number;
   /** Take the daily backup automatically (off in tests). */
   autoBackup?: boolean;
 }
@@ -100,6 +105,10 @@ const ADMIN_COOKIE = 'eb_admin';
 const ONE_YEAR = 365 * 24 * 3600;
 
 export function createApp(opts: AppOptions): App {
+  const uploadMaxMB = opts.restoreUploadMaxMB ?? DEFAULT_RESTORE_UPLOAD_MAX_MB;
+  if (!Number.isInteger(uploadMaxMB) || uploadMaxMB < 1 || uploadMaxMB > 1024)
+    throw new Error('restoreUploadMaxMB must be a whole number from 1 to 1024.');
+  const uploadMaxBytes = uploadMaxMB * 1048576;
   const ctx: BackupCtx = {
     db: openDb(opts.dbPath),
     tz: opts.tz ?? 'Asia/Kolkata',
@@ -150,7 +159,7 @@ export function createApp(opts: AppOptions): App {
   const id = (req: Request) => v.int({ min: 1 })(req.params.id, 'id');
 
   // ---- auth wrappers ----
-  function currentUser(req: Request): User | null {
+  function currentUser(req: Pick<Request, 'cookies'>): User | null {
     const uid = readSession(ctx, req.cookies[SESSION_COOKIE]);
     if (!uid) return null;
     const u = getUser(ctx, uid);
@@ -163,11 +172,15 @@ export function createApp(opts: AppOptions): App {
       if (!user) throw new HttpError(401, 'unauthenticated', 'Please choose who you are first.');
       return h(req, user);
     });
+  function requireAdmin(req: Pick<Request, 'cookies'>): User {
+    const user = currentUser(req);
+    if (!user) throw new HttpError(401, 'unauthenticated', 'Please choose who you are first.');
+    if (!readAdmin(ctx, req.cookies[ADMIN_COOKIE], user.id))
+      throw new HttpError(403, 'admin_locked', 'Unlock the admin area with the PIN first.');
+    return user;
+  }
   const admin = (method: string, path: string, h: (req: Request, user: User) => unknown) =>
-    authed(method, path, (req, user) => {
-      if (!readAdmin(ctx, req.cookies[ADMIN_COOKIE], user.id)) throw new HttpError(403, 'admin_locked', 'Unlock the admin area with the PIN first.');
-      return h(req, user);
-    });
+    router.add(method, path, (req) => h(req, requireAdmin(req)));
 
   // ---- public ----
   pub('GET', '/api/health', () => ({ ok: true, version: APP_VERSION, time: ctx.now().toISOString() }));
@@ -364,15 +377,8 @@ export function createApp(opts: AppOptions): App {
     return restoreFrom(ctx, backupPath(ctx, name));
   });
   admin('POST', '/api/admin/restore/upload', (req) => {
-    if (!req.binary?.length) throw new HttpError(400, 'bad_request', 'Choose a backup file (.db) to upload.');
-    if (req.binary.subarray(0, 16).toString('latin1') !== 'SQLite format 3\u0000')
-      throw new HttpError(400, 'bad_request', "That file isn't a board backup. Choose a .db file made by the board's backup.");
-    const staged = stageUpload(ctx, req.binary);
-    try {
-      return restoreFrom(ctx, staged);
-    } finally {
-      rmSync(staged, { force: true });
-    }
+    if (!req.upload) throw new HttpError(400, 'bad_request', 'Choose a backup file (.db) to upload.');
+    return restoreFrom(ctx, req.upload.path);
   });
   admin('POST', '/api/admin/archive-old', (req, user) => {
     const { days } = v.object({ days: v.int({ min: 1, max: 3650 }) })(req.body);
@@ -384,9 +390,10 @@ export function createApp(opts: AppOptions): App {
 
   // ---- server ----
   const sseConnections = new Set<import('node:http').ServerResponse>();
-  const server = createServer(async (raw, res) => {
+  const handleRequest = async (raw: import('node:http').IncomingMessage, res: import('node:http').ServerResponse) => {
     const started = Date.now();
     let status = 500;
+    let req: Request | undefined;
     try {
       const url = raw.url ?? '/';
       if (!url.startsWith('/api/')) {
@@ -397,11 +404,20 @@ export function createApp(opts: AppOptions): App {
         status = 404;
         return send(res, 404, { error: 'not_found', message: 'Not found' });
       }
-      const req = await buildRequest(raw, res);
+      req = buildRequestHead(raw, res);
       const m = router.match(req.method, req.path);
       if (m === null) throw new HttpError(404, 'not_found', `No API route for ${req.method} ${req.path}`);
       if (m === 'method') throw new HttpError(405, 'method_not_allowed', `${req.method} is not allowed here`);
       req.params = m.params;
+      if (req.path === '/api/admin/restore/upload') {
+        requireAdmin(req); // before reading any bytes or sending 100 Continue
+        checkUploadHeaders(req, uploadMaxBytes);
+        if (raw.headers.expect?.toLowerCase() === '100-continue') res.writeContinue();
+        await streamUpload(req, dirname(ctx.dbPath), uploadMaxBytes);
+      } else {
+        if (raw.headers.expect?.toLowerCase() === '100-continue') res.writeContinue();
+        await readRequestBody(req);
+      }
       let result: unknown;
       try {
         result = await m.route.handler(req);
@@ -418,14 +434,22 @@ export function createApp(opts: AppOptions): App {
       status = reply.status;
       send(res, reply.status, reply.body, reply.headers);
     } catch (err) {
+      if (raw.aborted || res.destroyed) { status = 499; return; }
       const reply = errorToReply(err);
       status = reply.status;
+      // Header-only rejections and interrupted streams must not leave unread bodies
+      // on a reusable connection. Flush the error response, then close the socket.
+      if (!raw.complete) res.shouldKeepAlive = false;
       send(res, reply.status, reply.body, reply.headers);
     } finally {
+      if (req?.upload) rmSync(req.upload.dir, { recursive: true, force: true });
       if (opts.log && raw.url?.startsWith('/api/') && raw.url !== '/api/events')
         console.log(`${new Date().toISOString()} ${raw.method} ${raw.url} ${status} ${Date.now() - started}ms`);
     }
-  });
+  };
+  const server = createServer((raw, res) => { void handleRequest(raw, res); });
+  // Without this listener node:http sends 100 Continue before our authorization check.
+  server.on('checkContinue', (raw, res) => { void handleRequest(raw, res); });
   server.keepAliveTimeout = 65_000;
 
   return {

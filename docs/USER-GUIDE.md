@@ -110,3 +110,7 @@ It also reminds you of your own jobs that are overdue or due today. Opening the 
 | New job form | <kbd>Enter</kbd> / <kbd>Shift</kbd>+<kbd>Enter</kbd> | Create / create and claim |
 | Job panel | <kbd>Ctrl</kbd>+<kbd>Enter</kbd> | Save notes or description, or add a comment |
 | My work | <kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> | Reorder your jobs |
+
+## Large job lists
+
+The Board and an engineer's Workload job list load all matching pages. If loading fails, a message offers **Try again**. During a failed refresh, the last complete list remains visible and is marked as such; a partial page never replaces it.
