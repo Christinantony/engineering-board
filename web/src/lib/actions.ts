@@ -103,20 +103,65 @@ export async function releaseTicket(t: Ticket): Promise<Ticket | null> {
   }
 }
 
-/** Save field edits. On a version conflict the panel reloads and the user is told. */
-export async function updateTicket(t: Ticket, fields: Record<string, unknown>): Promise<Ticket | null> {
-  try {
-    const res = await patch<{ ticket: Ticket }>(`/api/tickets/${t.id}`, { version: t.version, ...fields });
-    refreshAfter(res.ticket);
-    return res.ticket;
-  } catch (err) {
-    if (err instanceof ApiError && err.status === 409 && err.body?.current) {
-      refreshAfter(err.body.current);
-      invalidate(`/api/tickets/${t.id}`);
+const FIELD_NAMES: Record<string, string> = {
+  title: 'Title',
+  description: 'Description',
+  notes: 'Notes',
+  requester: 'Requester',
+  reference: 'Reference',
+  file_location: 'File location',
+  tags: 'Tags',
+};
+const same = (a: unknown, b: unknown) => (Array.isArray(a) || Array.isArray(b) ? JSON.stringify(a ?? []) === JSON.stringify(b ?? []) : (a ?? '') === (b ?? ''));
+
+/**
+ * Save field edits without ever silently overwriting someone else's change.
+ * `base` holds each field's value when you started editing. If another person
+ * changed that field since, you choose: keep yours, keep theirs, or (for long
+ * text) keep both. Fields nobody else touched save straight through, even if
+ * other parts of the job changed meanwhile.
+ */
+export async function updateTicket(t: Ticket, fields: Record<string, unknown>, base?: Record<string, unknown>): Promise<Ticket | null> {
+  let latest = t;
+  let toSave = { ...fields };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (base) {
+      for (const f of Object.keys(toSave)) {
+        if (!(f in base)) continue;
+        const theirs = (latest as any)[f];
+        if (same(base[f], theirs) || same(toSave[f], theirs)) continue;
+        const choice = await ask({
+          type: 'conflict',
+          field: FIELD_NAMES[f] ?? f,
+          jobNumber: t.job_number,
+          mine: Array.isArray(toSave[f]) ? (toSave[f] as string[]).join(', ') : String(toSave[f] ?? ''),
+          theirs: Array.isArray(theirs) ? theirs.join(', ') : String(theirs ?? ''),
+          canCombine: f === 'notes' || f === 'description',
+        });
+        if (choice === 'theirs' || choice == null) delete toSave[f];
+        else if (choice === 'both') toSave[f] = `${theirs}\n\n${toSave[f]}`;
+      }
+      if (Object.keys(toSave).length === 0) return latest;
     }
-    toastError(err);
-    return null;
+    try {
+      const res = await patch<{ ticket: Ticket }>(`/api/tickets/${t.id}`, { version: latest.version, ...toSave });
+      refreshAfter(res.ticket);
+      return res.ticket;
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409 && err.body?.current) {
+        // someone saved in between: check field by field against their version, then retry
+        latest = err.body.current as Ticket;
+        refreshAfter(latest);
+        if (!base) base = Object.fromEntries(Object.keys(toSave).map((f) => [f, (t as any)[f]]));
+        continue;
+      }
+      toastError(err);
+      return null;
+    }
   }
+  toast(`${t.job_number} keeps changing under you. Please try again.`, { kind: 'error' });
+  invalidate(`/api/tickets/${t.id}`);
+  return null;
 }
 
 /** Create with an idempotency key so a retry or double-submit can't duplicate the job. */

@@ -4,6 +4,7 @@ import { claimTicket, updateTicket } from '../lib/actions.ts';
 import { ask } from '../lib/dialogs.ts';
 import { clock, dueLabel, est } from '../lib/format.ts';
 import { Badge, PriorityTag } from './bits.tsx';
+import { useRecentChange } from '../lib/store.ts';
 
 interface Props {
   t: Ticket;
@@ -20,6 +21,8 @@ export function TicketCard({ t, dragging, ghost, onPointerDown, onOpen }: Props)
   const open = !['done', 'cancelled'].includes(t.status);
   const unassigned = t.assigned_to == null && open;
   const waiting = t.status === 'waiting' || t.status === 'blocked';
+  const changedBy = useRecentChange(t.id);
+  const flash = changedBy !== undefined && !ghost;
 
   const assign = async (e: any) => {
     e.stopPropagation();
@@ -29,7 +32,8 @@ export function TicketCard({ t, dragging, ghost, onPointerDown, onOpen }: Props)
 
   return (
     <div
-      className={`card prio-edge-${t.priority}${dragging ? ' is-dragging' : ''}${ghost ? ' is-ghost' : ''}${t.overdue ? ' is-overdue' : ''}`}
+      className={`card prio-edge-${t.priority}${dragging ? ' is-dragging' : ''}${ghost ? ' is-ghost' : ''}${t.overdue ? ' is-overdue' : ''}${flash ? ' just-changed' : ''}`}
+      title={flash && changedBy != null ? `Just changed by ${user(changedBy)?.name ?? 'someone'}` : undefined}
       data-card={t.id}
       role="button"
       tabIndex={ghost ? -1 : 0}

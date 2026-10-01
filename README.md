@@ -2,10 +2,15 @@
 
 An internal workboard for the mechanical design team. It combines a Kanban board, lightweight job tickets and team workload, and runs on one PC on the office LAN.
 
-> **Status: Phase 4 of 9.** The board and every operational page work:
-> - Board, Today, My work, Dashboard, Workload and Reports.
-> - Filters, which are kept in the URL.
-> - Instant search, opened with F or /.
+> **Status: Phase 5 of 9.** The board, every operational page, filters and search work.
+>
+> Phase 5 adds the collaboration features:
+> - Notifications.
+> - Who's online.
+> - Who has a job open.
+> - Edits that never overwrite each other.
+> - A team activity feed.
+> - Offline and new-version banners.
 
 ## What it needs
 
@@ -27,8 +32,8 @@ There are **no npm packages and no native add-ons at runtime**. The whole server
 npm run build          # → dist/app/server.mjs + dist/app/web/
 npm start              # server from source on http://localhost:8080 (serves dist/app/web)
 npm run dev:web        # rebuild the web app on change
-npm test               # 43 backend tests (node:test)
-npm run e2e            # 10 browser tests (needs Playwright + Chromium; run npm run build first)
+npm test               # 49 backend tests (node:test)
+npm run e2e            # 14 browser tests (needs Playwright + Chromium; run npm run build first)
 npm run typecheck      # server and web
 npm run seed:demo      # add demo jobs  (…-- --clear to remove them)
 ```

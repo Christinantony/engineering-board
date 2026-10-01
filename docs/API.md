@@ -1,4 +1,4 @@
-# API reference (v0.4)
+# API reference (v0.5)
 
 All endpoints are under `/api` and use JSON. Mutating requests must send `Content-Type: application/json`, which together with `SameSite=Strict` cookies blocks cross-site form posts.
 
@@ -63,6 +63,18 @@ Errors look like this:
 | `/api/reports?from&to` | For local dates, inclusive. Returns `completed` and `created`, `open_now` and `overdue_now`, `lead_time_hours` and `work_time_hours` (median and average), `estimate_vs_actual`, `by_engineer`, `by_type` and `per_day`. |
 | `/api/job-types`, `/api/tags` | Reference data. |
 | `/api/events` | Server-Sent Events: `{type:'ticket', id, version, by}`, `users`, `job_types`, `reload` |
+
+## Collaboration
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/notifications` | Returns `{items[], unread, latest_activity_id, overdue_mine, due_today_mine}`. Items cover the last 14 days. Each item's kind is one of `urgent`, `assigned`, `review`, `waiting`, `comment`, `done` or `unassigned`. |
+| POST | `/api/notifications/seen` | `{up_to}` marks everything up to that activity id as seen. It never moves backwards. |
+| GET | `/api/presence` | Returns `{online: [{user_id, viewing: [ticket ids]}]}` |
+| POST | `/api/presence` | `{job_id \| null, tab}` is the heartbeat while a job panel is open, sent every 30 seconds. It expires after 90 seconds. |
+| GET | `/api/activity?limit&before&user` | The team feed, newest first. Page backwards with `before=<id>`. |
+
+`/api/events` also emits `{type:'presence'}`, and its `hello` event carries the server `version`.
 
 ## Admin (unlock with the PIN first)
 

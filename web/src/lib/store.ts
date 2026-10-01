@@ -98,7 +98,7 @@ export function setCached<T>(key: string, fn: (prev: T | undefined) => T) {
 }
 
 export const TICKET_KEYS = (k: string) =>
-  /^\/api\/(tickets|dashboard|today|my-work|workload|activity|tags)/.test(k);
+  /^\/api\/(tickets|dashboard|today|my-work|workload|activity|tags|notifications|reports)/.test(k);
 
 // ---------------------------------------------------------------------------
 // Live updates (Server-Sent Events) with a 30-second polling fallback
@@ -122,7 +122,51 @@ export function useLiveState(): LiveState {
   );
 }
 
+// ---- cards recently changed by someone else (for a brief highlight) ----
+const changed = new Map<number, { by: number | null; at: number }>();
+const changedListeners = new Set<() => void>();
+let changedVersion = 0;
+function markChanged(id: number, by: number | null) {
+  changed.set(id, { by, at: Date.now() });
+  changedVersion++;
+  changedListeners.forEach((l) => l());
+  setTimeout(() => {
+    const c = changed.get(id);
+    if (c && Date.now() - c.at >= 3900) {
+      changed.delete(id);
+      changedVersion++;
+      changedListeners.forEach((l) => l());
+    }
+  }, 4000);
+}
+/** Who changed this job in the last few seconds (someone other than you), if anyone. */
+export function useRecentChange(id: number): number | null | undefined {
+  useSyncExternalStore(
+    (cb) => {
+      changedListeners.add(cb);
+      return () => changedListeners.delete(cb);
+    },
+    () => changedVersion,
+  );
+  return changed.get(id)?.by;
+}
+
+// ---- server version: tell people to reload after an upgrade ----
+let serverVersion: string | null = null;
+let newVersion = false;
+const versionListeners = new Set<() => void>();
+export function useNewVersionAvailable(): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      versionListeners.add(cb);
+      return () => versionListeners.delete(cb);
+    },
+    () => newVersion,
+  );
+}
+
 let source: EventSource | null = null;
+let myId: number | null = null;
 let pollTimer: number | undefined;
 let pending = false;
 let wasOffline = false;
@@ -137,11 +181,23 @@ function scheduleRefresh() {
   }, 120);
 }
 
-export function startLive() {
+export function startLive(meId?: number, loadedVersion?: string) {
+  if (meId != null) myId = meId;
+  if (loadedVersion && !serverVersion) serverVersion = loadedVersion;
   if (source) return;
   source = new EventSource('/api/events');
-  source.addEventListener('hello', () => {
+  source.addEventListener('hello', (ev: MessageEvent) => {
     setLive('live');
+    try {
+      const v = JSON.parse(ev.data).version as string | undefined;
+      if (v && serverVersion && v !== serverVersion && !newVersion) {
+        newVersion = true;
+        versionListeners.forEach((l) => l());
+      }
+      if (v && !serverVersion) serverVersion = v;
+    } catch {
+      /* ignore */
+    }
     if (wasOffline) {
       wasOffline = false;
       invalidate(); // catch up on anything missed while disconnected
@@ -150,7 +206,10 @@ export function startLive() {
   source.onmessage = (ev) => {
     try {
       const e = JSON.parse(ev.data);
-      if (e.type === 'ticket') scheduleRefresh();
+      if (e.type === 'ticket') {
+        if (e.by !== myId && typeof e.id === 'number') markChanged(e.id, e.by ?? null);
+        scheduleRefresh();
+      } else if (e.type === 'presence') invalidate('/api/presence');
       else if (e.type === 'users') invalidate((k) => k.startsWith('/api/users') || k.startsWith('/api/admin/users') || TICKET_KEYS(k));
       else if (e.type === 'job_types') invalidate('/api/job-types');
       else if (e.type === 'reload') invalidate();

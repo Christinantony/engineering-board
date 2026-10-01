@@ -117,6 +117,26 @@ export function ticketActivity(ctx: Ctx, id: number): Activity[] {
   return all<Activity>(ctx.db, `${ACTIVITY_SELECT} WHERE a.ticket_id = ? ORDER BY a.id`, id);
 }
 
+/** A page of the team activity feed, newest first. */
+export function activityPage(ctx: Ctx, opts: { limit: number; before?: number; userId?: number }): Activity[] {
+  const where: string[] = [];
+  const params: Param[] = [];
+  if (opts.before) {
+    where.push('a.id < ?');
+    params.push(opts.before);
+  }
+  if (opts.userId) {
+    where.push('a.user_id = ?');
+    params.push(opts.userId);
+  }
+  return all<Activity>(
+    ctx.db,
+    `${ACTIVITY_SELECT} ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY a.id DESC LIMIT ?`,
+    ...params,
+    opts.limit,
+  );
+}
+
 export function recentActivity(ctx: Ctx, limit = 30, sinceId?: number): Activity[] {
   if (sinceId) return all<Activity>(ctx.db, `${ACTIVITY_SELECT} WHERE a.id > ? ORDER BY a.id DESC LIMIT ?`, sinceId, limit);
   return all<Activity>(ctx.db, `${ACTIVITY_SELECT} ORDER BY a.id DESC LIMIT ?`, limit);
@@ -263,7 +283,7 @@ export function createTicket(ctx: Ctx, actor: User, input: unknown, idempotencyK
     const id = Number(res.lastInsertRowid);
     run(ctx.db, 'UPDATE tickets SET board_rank = ? WHERE id = ?', rankFor(ctx, boardScope('inbox'), id), id);
     if (data.tags.length) setTags(ctx, id, data.tags);
-    log(ctx, id, actor.id, 'created', null, null, data.title);
+    log(ctx, id, actor.id, 'created', null, data.priority, data.title);
 
     const assignee = data.claim ? actor.id : data.assigned_to ?? null;
     if (assignee != null) applyAssignment(ctx, actor, getRow(ctx, id), assignee);

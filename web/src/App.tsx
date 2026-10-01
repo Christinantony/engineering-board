@@ -11,6 +11,8 @@ import { DialogHost, Toasts } from './components/Overlays.tsx';
 import { QuickCreate } from './components/QuickCreate.tsx';
 import { TicketPanel } from './components/TicketPanel.tsx';
 import { SearchBox } from './components/SearchBox.tsx';
+import { Bell, ConnectionBanner, OnlineNow } from './components/Collab.tsx';
+import { ActivityFeed } from './views/ActivityFeed.tsx';
 import { BoardPage } from './views/BoardPage.tsx';
 import { Dashboard } from './views/Dashboard.tsx';
 import { MyWork } from './views/MyWork.tsx';
@@ -36,6 +38,7 @@ const VIEWS: Record<string, () => any> = {
   '/workload': Workload,
   '/reports': Reports,
   '/search': Search,
+  '/activity': ActivityFeed,
 };
 
 export function App() {
@@ -103,7 +106,7 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
   const jobId = Number(params.get('job')) || null;
 
   useEffect(() => {
-    startLive();
+    startLive(me.id, meta.version);
     return stopLive;
   }, []);
   useEffect(() => {
@@ -196,10 +199,12 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
           </nav>
           <span className="spacer" />
           <SearchBox />
+          <OnlineNow />
           <span className={`live live-${live}`} title={live === 'live' ? 'Changes from your team appear automatically' : 'Trying to reconnect to the server'}>
             <span className="live-dot" aria-hidden="true" />
             {live === 'live' ? 'Live' : live === 'connecting' ? 'Reconnecting…' : 'Offline'}
           </span>
+          <Bell />
           <button className="btn btn-primary new-job" onClick={() => setCreating(true)} title="New job (N)">
             + New job
           </button>
@@ -216,6 +221,7 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
           </details>
         </header>
 
+        <ConnectionBanner />
         {meta.pin_is_default && state.me.is_admin && (
           <div className="banner">The admin PIN is still the default (1234). It can be changed from the admin area once that's built in Phase 6.</div>
         )}

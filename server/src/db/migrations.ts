@@ -137,4 +137,15 @@ CREATE TABLE idempotency (
 );
 `,
   },
+  {
+    id: 2,
+    name: 'per-user notification state',
+    sql: /* sql */ `
+CREATE TABLE user_state (
+  user_id          INTEGER PRIMARY KEY REFERENCES users(id),
+  seen_activity_id INTEGER NOT NULL DEFAULT 0,
+  updated_at       TEXT NOT NULL
+);
+`,
+  },
 ];

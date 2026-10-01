@@ -11,10 +11,12 @@ import { clock, dueLabel, when } from '../lib/format.ts';
 import { useQuery } from '../lib/store.ts';
 import { toast } from '../lib/toasts.ts';
 import { Badge, ErrorBox, PRIORITY_TEXT, Spinner } from './bits.tsx';
+import { AlsoViewing, useAnnounceViewing } from './Collab.tsx';
 
 export function TicketPanel({ id, onClose }: { id: number; onClose: () => void }) {
   const q = useQuery<{ ticket: Ticket; activity: Activity[] }>(`/api/tickets/${id}`);
   const panelRef = useRef<HTMLElement | null>(null);
+  useAnnounceViewing(id);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -59,7 +61,8 @@ function EditText({
   required,
 }: {
   value: string;
-  onSave: (v: string) => Promise<unknown>;
+  /** `base` is the value when you started editing — used to detect someone else's change. */
+  onSave: (v: string, base: string) => Promise<unknown>;
   multiline?: boolean;
   placeholder?: string;
   className?: string;
@@ -68,26 +71,32 @@ function EditText({
 }) {
   const [draft, setDraft] = useState(value);
   const [focused, setFocused] = useState(false);
+  const base = useRef(value);
   useEffect(() => {
     if (!focused) setDraft(value);
   }, [value, focused]);
+  const changedUnderneath = focused && value !== base.current;
   const commit = async () => {
     setFocused(false);
     const v = multiline ? draft.replace(/\s+$/, '') : draft.trim();
-    if (v === value) return;
+    if (v === base.current && v === value) return;
+    if (v === base.current) return; // you changed nothing; keep their newer value
     if (required && !v) {
       toast(`${label} can't be empty`, { kind: 'error' });
       setDraft(value);
       return;
     }
-    await onSave(v);
+    await onSave(v, base.current);
   };
   const props = {
     className: `field-input ${className ?? ''}`,
     value: draft,
     placeholder,
     'aria-label': label,
-    onFocus: () => setFocused(true),
+    onFocus: () => {
+      base.current = value;
+      setFocused(true);
+    },
     onChange: (e: any) => setDraft(e.target.value),
     onBlur: commit,
     onKeyDown: (e: any) => {
@@ -101,9 +110,23 @@ function EditText({
       }
     },
   };
-  if (multiline) return <textarea {...props} rows={Math.min(Math.max(draft.split('\n').length + 1, 3), 16)} />;
-  return <input type="text" {...props} />;
+  const warn = changedUnderneath ? <span className="edit-warn">Someone else just changed this. When you leave the field you'll be asked which version to keep.</span> : null;
+  if (multiline)
+    return (
+      <>
+        <textarea {...props} rows={Math.min(Math.max(draft.split('\n').length + 1, 3), 16)} />
+        {warn}
+      </>
+    );
+  return (
+    <>
+      <input type="text" {...props} />
+      {warn}
+    </>
+  );
 }
+
+const splitTags = (v: string) => v.split(',').map((s) => s.trim()).filter(Boolean);
 
 const URL_RE = /(https?:\/\/[^\s<>"']+)/g;
 function Linkified({ text }: { text: string }) {
@@ -123,7 +146,17 @@ function Linkified({ text }: { text: string }) {
   );
 }
 
-function PathField({ value, onSave, label, placeholder }: { value: string; onSave: (v: string) => Promise<unknown>; label: string; placeholder: string }) {
+function PathField({
+  value,
+  onSave,
+  label,
+  placeholder,
+}: {
+  value: string;
+  onSave: (v: string, base: string) => Promise<unknown>;
+  label: string;
+  placeholder: string;
+}) {
   const copy = async () => {
     const ok = await copyText(value);
     toast(ok ? 'Path copied. Paste it into File Explorer.' : 'Could not copy. Select the text and press Ctrl+C.', { kind: ok ? 'success' : 'error' });
@@ -164,7 +197,7 @@ function nextStep(t: Ticket): { label: string; to: Status } | null {
 
 function PanelContent({ t, activity, onClose }: { t: Ticket; activity: Activity[]; onClose: () => void }) {
   const { me, user, engineers, jobTypes, jobType } = useApp();
-  const save = (fields: Record<string, unknown>) => updateTicket(t, fields);
+  const save = (fields: Record<string, unknown>, base?: Record<string, unknown>) => updateTicket(t, fields, base);
   const assignee = user(t.assigned_to);
   const closed = t.status === 'done' || t.status === 'cancelled';
   const step = nextStep(t);
@@ -210,7 +243,8 @@ function PanelContent({ t, activity, onClose }: { t: Ticket; activity: Activity[
         </button>
       </div>
 
-      <EditText value={t.title} onSave={(v) => save({ title: v })} className="panel-title" label="Title" required />
+      <AlsoViewing jobId={t.id} />
+      <EditText value={t.title} onSave={(v, b) => save({ title: v }, { title: b })} className="panel-title" label="Title" required />
 
       {(t.status === 'waiting' || t.status === 'blocked') && (
         <div className={`waiting-box ${t.status}`}>
@@ -381,7 +415,7 @@ function PanelContent({ t, activity, onClose }: { t: Ticket; activity: Activity[
         <div className="field">
           <dt className="field-label">Requester</dt>
           <dd>
-            <EditText value={t.requester} onSave={(v) => save({ requester: v })} label="Requester" placeholder="Who asked for this?" />
+            <EditText value={t.requester} onSave={(v, b) => save({ requester: v }, { requester: b })} label="Requester" placeholder="Who asked for this?" />
           </dd>
         </div>
         <div className="field">
@@ -389,7 +423,7 @@ function PanelContent({ t, activity, onClose }: { t: Ticket; activity: Activity[
           <dd>
             <EditText
               value={t.tags.join(', ')}
-              onSave={(v) => save({ tags: v.split(',').map((s) => s.trim()).filter(Boolean) })}
+              onSave={(v, b) => save({ tags: splitTags(v) }, { tags: splitTags(b) })}
               label="Tags"
               placeholder="e.g. customer-A, ANSYS"
             />
@@ -417,21 +451,21 @@ function PanelContent({ t, activity, onClose }: { t: Ticket; activity: Activity[
 
       <section className="panel-section">
         <label className="field-label">Description</label>
-        <EditText value={t.description} onSave={(v) => save({ description: v })} multiline label="Description" placeholder="What was asked for?" />
+        <EditText value={t.description} onSave={(v, b) => save({ description: v }, { description: b })} multiline label="Description" placeholder="What was asked for?" />
       </section>
 
       <section className="panel-section">
         <label className="field-label">Reference</label>
-        <PathField value={t.reference} onSave={(v) => save({ reference: v })} label="Reference" placeholder="Drawing, part or project number, or a URL" />
+        <PathField value={t.reference} onSave={(v, b) => save({ reference: v }, { reference: b })} label="Reference" placeholder="Drawing, part or project number, or a URL" />
         <label className="field-label">File location</label>
-        <PathField value={t.file_location} onSave={(v) => save({ file_location: v })} label="File location" placeholder="\\SERVER\Projects\…" />
+        <PathField value={t.file_location} onSave={(v, b) => save({ file_location: v }, { file_location: b })} label="File location" placeholder="\\SERVER\Projects\…" />
       </section>
 
       <section className="panel-section">
         <label className="field-label">Notes</label>
         <EditText
           value={t.notes}
-          onSave={(v) => save({ notes: v })}
+          onSave={(v, b) => save({ notes: v }, { notes: b })}
           multiline
           label="Notes"
           placeholder="Context, constraints, model locations… (Ctrl+Enter to save)"

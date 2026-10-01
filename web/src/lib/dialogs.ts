@@ -6,13 +6,16 @@ import type { Ticket } from '@board/shared';
 export type DialogSpec =
   | { type: 'reason'; ticket: Ticket; status: 'waiting' | 'blocked'; initial: string }
   | { type: 'assign'; ticket: Ticket; title: string }
-  | { type: 'confirm'; title: string; body: string; confirm: string; danger?: boolean };
+  | { type: 'confirm'; title: string; body: string; confirm: string; danger?: boolean }
+  | { type: 'conflict'; field: string; jobNumber: string; mine: string; theirs: string; canCombine: boolean };
 
 export type DialogAnswer<S extends DialogSpec> = S extends { type: 'reason' }
   ? { reason: string; status: 'waiting' | 'blocked' }
   : S extends { type: 'assign' }
     ? number
-    : true;
+    : S extends { type: 'conflict' }
+      ? 'mine' | 'theirs' | 'both'
+      : true;
 
 interface Open {
   spec: DialogSpec;

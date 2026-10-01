@@ -43,12 +43,15 @@ import {
   restoreTicket,
   setMyRank,
   ticketActivity,
+  activityPage,
   updateTicket,
 } from './domain/tickets.ts';
 import { dashboard, myWork, todayView, workload, type Horizon } from './domain/views.ts';
 import { report } from './domain/reports.ts';
+import { markSeen, notifications } from './domain/notifications.ts';
+import { Presence } from './domain/presence.ts';
 
-export const APP_VERSION = '0.4.0';
+export const APP_VERSION = '0.5.0';
 
 export interface AppOptions {
   dbPath: string;
@@ -80,6 +83,7 @@ export function createApp(opts: AppOptions): App {
   // forget idempotency keys older than 7 days
   run(db, 'DELETE FROM idempotency WHERE created_at < ?', new Date(ctx.now().getTime() - 7 * 86_400_000).toISOString());
 
+  const presence = new Presence(ctx.events, () => ctx.now().getTime());
   const router = new Router();
   const id = (req: Request) => v.int({ min: 1 })(req.params.id, 'id');
 
@@ -160,7 +164,31 @@ export function createApp(opts: AppOptions): App {
   authed('GET', '/api/activity', (req) => {
     const limit = Math.min(Math.max(Number(req.query.get('limit')) || 30, 1), 200);
     const since = Number(req.query.get('since')) || undefined;
-    return { activity: recentActivity(ctx, limit, since) };
+    if (since) return { activity: recentActivity(ctx, limit, since) };
+    return {
+      activity: activityPage(ctx, {
+        limit,
+        before: Number(req.query.get('before')) || undefined,
+        userId: Number(req.query.get('user')) || undefined,
+      }),
+    };
+  });
+
+  // ---- collaboration: notifications and presence ----
+  authed('GET', '/api/notifications', (_req, user) => notifications(ctx, user));
+  authed('POST', '/api/notifications/seen', (req, user) => {
+    const { up_to } = v.object({ up_to: v.int({ min: 0 }) })(req.body);
+    markSeen(ctx, user.id, up_to);
+    return { ok: true };
+  });
+  authed('GET', '/api/presence', () => ({ online: presence.snapshot() }));
+  authed('POST', '/api/presence', (req, user) => {
+    const { job_id, tab } = v.object({
+      job_id: v.nullable(v.int({ min: 1 })),
+      tab: v.string({ min: 1, max: 64 }),
+    })(req.body);
+    presence.view(user.id, tab, job_id);
+    return { ok: true };
   });
   authed('GET', '/api/dashboard', () => dashboard(ctx));
   authed('GET', '/api/today', () => todayView(ctx));
@@ -175,7 +203,7 @@ export function createApp(opts: AppOptions): App {
   authed('GET', '/api/workload', (req) => workload(ctx, (req.query.get('horizon') ?? 'today') as Horizon));
 
   // ---- live updates (Server-Sent Events) ----
-  authed('GET', '/api/events', (req) => {
+  authed('GET', '/api/events', (req, user) => {
     const res = req.res;
     res.writeHead(200, {
       'Content-Type': 'text/event-stream; charset=utf-8',
@@ -183,12 +211,14 @@ export function createApp(opts: AppOptions): App {
       Connection: 'keep-alive',
       'X-Accel-Buffering': 'no',
     });
-    res.write(`retry: 3000\nevent: hello\ndata: ${JSON.stringify({ time: ctx.now().toISOString() })}\n\n`);
+    res.write(`retry: 3000\nevent: hello\ndata: ${JSON.stringify({ time: ctx.now().toISOString(), version: APP_VERSION })}\n\n`);
     const unsubscribe = ctx.events.subscribe((e) => res.write(`data: ${JSON.stringify(e)}\n\n`));
     const ping = setInterval(() => res.write(': ping\n\n'), 25_000);
+    const leave = presence.connect(user.id);
     const cleanup = () => {
       clearInterval(ping);
       unsubscribe();
+      leave();
     };
     req.raw.on('close', cleanup);
     sseConnections.add(res);

@@ -18,6 +18,7 @@ export function DialogHost() {
         {d.spec.type === 'reason' && <ReasonDialog spec={d.spec} done={d.resolve} />}
         {d.spec.type === 'assign' && <AssignDialog spec={d.spec} done={d.resolve} />}
         {d.spec.type === 'confirm' && <ConfirmDialog spec={d.spec} done={d.resolve} />}
+        {d.spec.type === 'conflict' && <ConflictDialog spec={d.spec} done={d.resolve} />}
       </div>
     </div>
   );
@@ -129,6 +130,43 @@ function ConfirmDialog({ spec, done }: { spec: any; done: (v: any) => void }) {
         </button>
         <button className={`btn ${spec.danger ? 'btn-danger' : 'btn-primary'}`} onClick={() => done(true)}>
           {spec.confirm}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ConflictDialog({ spec, done }: { spec: any; done: (v: any) => void }) {
+  useEscape(() => done('theirs'));
+  return (
+    <div className="conflict">
+      <h2 className="dialog-title">
+        {spec.field} changed while you were editing
+      </h2>
+      <p className="dialog-sub">
+        Someone else saved a change to the {spec.field.toLowerCase()} of {spec.jobNumber} while you were typing. Choose what to keep. Nothing is lost until you choose.
+      </p>
+      <div className="conflict-grid">
+        <div>
+          <div className="field-label">Their version (saved)</div>
+          <pre className="conflict-text">{spec.theirs || '(empty)'}</pre>
+        </div>
+        <div>
+          <div className="field-label">Your version</div>
+          <pre className="conflict-text mine">{spec.mine || '(empty)'}</pre>
+        </div>
+      </div>
+      <div className="dialog-buttons">
+        <button className="btn btn-quiet" onClick={() => done('theirs')}>
+          Keep theirs
+        </button>
+        {spec.canCombine && (
+          <button className="btn" onClick={() => done('both')}>
+            Keep both
+          </button>
+        )}
+        <button className="btn btn-primary" autoFocus onClick={() => done('mine')}>
+          Keep mine
         </button>
       </div>
     </div>

@@ -25,6 +25,16 @@ One process serves the web app, the REST API and a live-update stream. There are
 | 11 | **Roles:** engineers create, claim and do work. The manager creates, edits, assigns and comments, but cannot claim. | These are the team rules agreed in Phase 1. |
 | 12 | **Live updates use Server-Sent Events.** Events are queued during a transaction and sent only after it commits. | Browsers never see a change that was rolled back. |
 
+## Collaboration (Phase 5)
+
+| # | Decision | Why |
+|---|---|---|
+| 13 | **Notifications are derived from the activity log.** Only a per-person "seen up to" marker is stored, in the `user_state` table. | There is no second inbox to fall out of sync. Rules live in `domain/notifications.ts`, and people are never notified about their own actions. |
+| 14 | **Edits are merged field by field.** The panel remembers each field's value when you start typing. When you save, any field that someone else changed in the meantime asks you to keep yours, keep theirs, or keep both (for notes and description). Fields nobody else touched save straight through. | Two engineers can work on the same job without silently overwriting each other, and without nagging when they edit different fields. |
+| 15 | **Presence is held in memory** and comes from the live-update connections. Viewing a job is a heartbeat that expires after 90 seconds. | It describes this moment only, so a restart clearing it is correct. |
+| 16 | **The live-update handshake carries the server version.** | Open browsers are told to reload after an upgrade, instead of running old code against a new API. |
+| 17 | **Losing the connection shows a red banner after 6 seconds.** The page reconnects by itself and re-fetches everything it missed. | People never keep working while unaware that nothing is saving. |
+
 ## Known limits
 
 - The host PC must be on for others to reach the board.

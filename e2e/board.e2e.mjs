@@ -219,3 +219,77 @@ test('my work can be reordered with the keyboard', async () => {
   await a.waitForSelector('.reorder-item:has-text("Queue two")');
   assert.notEqual((await order()).indexOf('Queue two'), idx, 'order is saved on the server');
 });
+
+// ---------------- Phase 5: collaboration ----------------
+
+async function openJob(p, title) {
+  const id = await p.locator('.card', { hasText: title }).first().getAttribute('data-card');
+  await p.goto(`${BASE}/board?job=${id}`);
+  await p.waitForSelector('.panel-title');
+  return id;
+}
+
+test('two people editing different fields of one job: both changes survive, no prompt', async () => {
+  const a = await login('Christin');
+  const b = await login('Paul');
+  await openJob(a, 'Hand calc: shaft key stress');
+  await openJob(b, 'Hand calc: shaft key stress');
+  await a.click('textarea[aria-label="Description"]'); // Christin starts editing the description
+  await b.fill('.panel-title', 'Hand calc: shaft key stress (15 kW)');
+  await b.keyboard.press('Enter'); // Paul saves a new title meanwhile
+  await a.waitForFunction(() => document.querySelector('.panel-title')?.value.includes('15 kW'));
+  await a.fill('textarea[aria-label="Description"]', 'Check keyway shear; use 1.5 safety factor.');
+  await a.click('.panel-jobno'); // blur → save
+  await a.waitForTimeout(600);
+  assert.equal(await a.locator('.dialog').count(), 0, 'no conflict prompt for different fields');
+  await b.waitForFunction(() => document.querySelector('textarea[aria-label="Description"]')?.value.includes('1.5 safety factor'));
+  assert.equal(await b.inputValue('.panel-title'), 'Hand calc: shaft key stress (15 kW)');
+});
+
+test('two people editing the same notes: asked which to keep, and "keep both" keeps both', async () => {
+  const a = await login('Christin');
+  const b = await login('Paul');
+  await openJob(a, 'Run FEA on mounting plate');
+  await openJob(b, 'Run FEA on mounting plate');
+  await b.waitForSelector('.also-viewing:has-text("Christin")');
+  await a.click('textarea[aria-label="Notes"]');
+  await b.fill('textarea[aria-label="Notes"]', 'Paul: use bonded contacts');
+  await b.click('.panel-jobno');
+  await a.waitForSelector('.edit-warn');
+  await a.fill('textarea[aria-label="Notes"]', 'Christin: mesh 2 mm');
+  await a.click('.panel-jobno');
+  await a.waitForSelector('.conflict');
+  assert.match(await a.locator('.conflict-text').first().innerText(), /Paul: use bonded contacts/);
+  await a.click('.conflict button:has-text("Keep both")');
+  await a.waitForFunction(() => {
+    const v = document.querySelector('textarea[aria-label="Notes"]')?.value ?? '';
+    return v.includes('Paul: use bonded contacts') && v.includes('Christin: mesh 2 mm');
+  });
+});
+
+test('assignment pops a notification for the engineer, with a count on the bell', async () => {
+  const allen = await login('Allen');
+  const jeffin = await login('Jeffin');
+  await jeffin.keyboard.press('n');
+  await jeffin.fill('#qc-title', 'Notify Allen about this');
+  await jeffin.keyboard.press('Enter');
+  await jeffin.waitForSelector('.quick-create', { state: 'detached' });
+  const card = jeffin.locator('.card', { hasText: 'Notify Allen about this' });
+  await card.locator('button:has-text("Assign")').click();
+  await jeffin.click('.assign-option:has-text("Allen")');
+  await allen.waitForSelector('.toast:has-text("assigned this to you")', { timeout: 8000 });
+  await allen.waitForSelector('.bell-count');
+  await allen.click('.bell-btn');
+  await allen.waitForSelector('.bell-item:has-text("Notify Allen about this")');
+  await allen.waitForSelector('.bell-count', { state: 'detached' });
+});
+
+test('the activity page shows the team history and other people show as online', async () => {
+  const a = await login('Christin');
+  await login('Paul'); // Paul has the board open too
+  await a.waitForSelector('.online .badge:has-text("PA")');
+  await a.goto(`${BASE}/activity`);
+  await a.waitForSelector('.feed-item');
+  assert.ok((await a.locator('.feed-item').count()) > 10);
+  assert.deepEqual(a.errors, []);
+});
