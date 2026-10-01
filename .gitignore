@@ -27,3 +27,6 @@ logs/
 Thumbs.db
 .vscode/
 .idea/
+
+# Build output (made by `npm run build`)
+dist/
