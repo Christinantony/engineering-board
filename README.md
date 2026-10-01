@@ -2,7 +2,9 @@
 
 An internal workboard for the mechanical design team. It combines a Kanban board, lightweight job tickets and team workload, and runs on one PC on the office LAN.
 
-> **Status: Phase 7 of 9.** Everything a team needs day to day works: the board, every view, search, collaboration, and the Admin area.
+> **Status: Phase 8 of 9.** Everything a team needs day to day works: the board, every view, search, collaboration, and the Admin area.
+> Phase 8 added a full test pass: upgrades from every older database version, a check of the packaged build exactly as the host PC runs it, many people acting at once, and junk input on every API route.
+>
 > Phase 7 polish added:
 > - A full keyboard path, including moving cards without a mouse.
 > - A right-click card menu.
@@ -21,7 +23,7 @@ An internal workboard for the mechanical design team. It combines a Kanban board
 
 ## Backups (short version)
 
-- **Automatic:** one backup per day (the first hour the board runs that day), plus one before every import and every restore. Backups are kept for 30 days, and the newest 7 are always kept.
+- **Automatic:** one backup per day (the first hour the board runs that day), plus one before every import, every restore, and every upgrade that changes the database. Backups are kept for 30 days, and the newest 7 are always kept.
 - **Location:** backups go in `data/backups` as `board-YYYY-MM-DD_HHMMSS-<why>.db`. Each is a complete SQLite database. Point `backupDir` in `config.json` at a network share or OneDrive folder so a dead PC doesn't take the backups with it.
 - **Restore:** use Admin, Backups and restore, then pick a backup and choose **Restore…**, or upload a `.db` file. The current data is backed up first, so a restore can itself be undone. Nobody gets signed out.
 - **By hand:** stop the board, copy `data/board.db` (and `board.db-wal` if present), then start it again.
@@ -32,7 +34,7 @@ An internal workboard for the mechanical design team. It combines a Kanban board
 |---|---|
 | `node.exe` 22.16 or newer (portable, no installer, no admin) | A web browser |
 
-There are **no npm packages and no native add-ons at runtime**. The whole server is one JavaScript file, `app/server.mjs`, of about 90 KB. The database is Node's built-in SQLite (`node:sqlite`), so data lives in a single file, `data/board.db`.
+There are **no npm packages and no native add-ons at runtime**. The whole server is one JavaScript file, `app/server.mjs`, of about 130 KB. The database is Node's built-in SQLite (`node:sqlite`), so data lives in a single file, `data/board.db`.
 
 ## Try it on Windows (preview)
 
@@ -52,8 +54,9 @@ npm install            # build and test tools only; the running board needs no p
 npm run build          # → dist/app/server.mjs + dist/app/web/
 npm start              # server from source on http://localhost:8080 (serves dist/app/web)
 npm run dev:web        # rebuild the web app on change
-npm test               # 62 backend tests (node:test)
-npm run e2e            # 22 browser tests (needs Playwright + Chromium; run npm run build first)
+npm test               # 79 backend tests (node:test)
+npm run e2e            # 24 browser tests (needs Playwright + Chromium; run npm run build first)
+npm run check:build    # runs the built app/server.mjs with plain node, as the host PC will (build first)
 npm run typecheck      # server and web
 npm run seed:demo      # add demo jobs  (…-- --clear to remove them)
 ```

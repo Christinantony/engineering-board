@@ -30,3 +30,21 @@
 - **Follow-ups / open issues:**
   - There is no `package-lock.json` yet, because the build environment had no npm registry access. See `HANDOFF.md`.
   - Phase 8 (testing) and Phase 9 (deployment package and guides) are still to do.
+
+### 2026-10-02 00:25 IST | Claude | branch: claude/phase8-testing
+- **What:** Phase 8 test pass, version 0.8.0.
+  - New tests: upgrading a board that was in use at every older database version (1, 2, 3), restoring an old backup, refusing data from a newer version (`migrations.test.ts`); card order through 500 drops including forced renumbering (`rank.test.ts`); the whole team acting at once and 600 jobs (`load.test.ts`); junk input on every API route (`robustness.test.ts`).
+  - New `npm run check:build` (`e2e/build.check.mjs`): runs the built `app/server.mjs` with plain node, the way the host PC does.
+  - Browser tests now fail on any page or console error. Two new browser tests: the server going down and coming back, and the "board has been updated" reload prompt.
+  - Fixes the tests found:
+    - The board now takes a `pre-upgrade` backup before a new version changes the database, and refuses to start on data written by a newer version (it used to run on it).
+    - Uploads over the size limit now get a readable 413 instead of a dropped connection.
+    - `app.close()` is safe to call twice, and a failed start no longer leaves the database file open.
+    - Node's "SQLite is an experimental feature" warning no longer shows in the server window, however the server is started.
+    - A node.exe with SQLite switched off gets its own clear message.
+- **Why:** Phase 8 of the plan: unit, integration and UI tests, migration and build checks before the deployment package.
+- **Files:** `server/src/app.ts`, `server/src/db/connection.ts`, `server/src/domain/backup.ts`, `server/src/http/http.ts`, `web/src/views/admin/Data.tsx`, `server/test/{migrations,rank,load,robustness}.test.ts`, `e2e/build.check.mjs`, `e2e/board.e2e.mjs`, `package.json`, `README.md`, `docs/API.md`, `AGENTS.md`, `HANDOFF.md`
+- **Decisions affected:** none. The pre-upgrade backup extends the backup rules without changing them.
+- **Follow-ups / open issues:**
+  - Phase 9: the deployment package and the guides.
+  - The lockfile is still missing (see `HANDOFF.md`).

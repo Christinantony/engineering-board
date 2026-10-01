@@ -1,4 +1,4 @@
-# API reference (v0.6)
+# API reference (v0.8)
 
 All endpoints are under `/api` and use JSON. Mutating requests must send `Content-Type: application/json`, which together with `SameSite=Strict` cookies blocks cross-site form posts.
 
@@ -16,6 +16,8 @@ Errors look like this:
 | 403 | Not allowed. Examples: a manager claiming, or the admin area is locked. |
 | 409 `conflict` | Someone else got there first. `current` holds the fresh ticket. |
 | 409 `needs_assignee` | The manager moved an unassigned job to a working column. |
+| 413 `too_large` | The body is over the limit: 20 MB for JSON and CSV, 1 GB for a restore upload. |
+| 415 | A binary body was sent to anything other than the restore upload. |
 | 503 `busy` | The database is busy. Retry. |
 
 ## Session ("who are you?")

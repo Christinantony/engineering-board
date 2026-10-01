@@ -27,6 +27,7 @@ const KIND: Record<string, string> = {
   manual: 'Made by hand',
   'pre-restore': 'Before a restore',
   'pre-import': 'Before an import',
+  'pre-upgrade': 'Before an upgrade',
   shutdown: 'At shutdown',
 };
 

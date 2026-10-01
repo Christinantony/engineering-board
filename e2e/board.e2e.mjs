@@ -27,18 +27,29 @@ async function api(method, path, body, cookie) {
   return { r, cookie: r.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ') };
 }
 
-before(async () => {
-  dir = mkdtempSync(join(tmpdir(), 'eb-e2e-'));
-  server = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', 'dist/app/server.mjs'], {
+async function startServer() {
+  server = spawn(process.execPath, ['dist/app/server.mjs'], {
     env: { ...process.env, EB_DATA_DIR: dir, EB_PORT: String(PORT), EB_HOST: '127.0.0.1' },
     stdio: 'ignore',
   });
   for (let i = 0; i < 50; i++) {
     try {
-      if ((await fetch(BASE + '/api/health')).ok) break;
+      if ((await fetch(BASE + '/api/health')).ok) return;
     } catch {}
     await new Promise((r) => setTimeout(r, 100));
   }
+  throw new Error('server did not start');
+}
+
+async function stopServer() {
+  const exited = new Promise((r) => server.once('exit', r));
+  server.kill('SIGTERM');
+  await exited;
+}
+
+before(async () => {
+  dir = mkdtempSync(join(tmpdir(), 'eb-e2e-'));
+  await startServer();
   const s = await api('POST', '/api/session', { user_id: 1 });
   const u = await api('POST', '/api/admin/unlock', { pin: '1234' }, s.cookie);
   await api('POST', '/api/admin/demo', {}, `${s.cookie}; ${u.cookie}`);
@@ -52,9 +63,18 @@ after(async () => {
 });
 
 // every browser window opened by a test is closed after it, so tests don't slow each other down
+// and every page must finish without an uncaught error or an unexpected console error
 const open = [];
+const pages = [];
+// 4xx answers are expected in some tests (a lost claim race is a 409); the app handles them
+const EXPECTED_CONSOLE = [/Failed to load resource: the server responded with a status of 4\d\d/];
 afterEach(async () => {
+  const problems = pages.splice(0).flatMap((p) => [
+    ...p.errors.map((e) => `page error: ${e}`),
+    ...p.consoleErrors.filter((m) => !EXPECTED_CONSOLE.some((re) => re.test(m))).map((m) => `console: ${m}`),
+  ]);
   while (open.length) await open.pop().close().catch(() => {});
+  assert.deepEqual(problems, [], 'no errors in the browser');
 });
 
 async function login(name) {
@@ -62,7 +82,10 @@ async function login(name) {
   open.push(ctx);
   const p = await ctx.newPage();
   p.errors = [];
+  p.consoleErrors = [];
   p.on('pageerror', (e) => p.errors.push(e.message));
+  p.on('console', (m) => m.type() === 'error' && p.consoleErrors.push(m.text()));
+  pages.push(p);
   await p.goto(BASE + '/');
   await p.click(`.who-option:has-text("${name}")`);
   await p.waitForSelector('.card');
@@ -455,4 +478,51 @@ test('every control on every page has a name a screen reader can read out', asyn
     for (const b of bad) problems.push(`${path}: ${b}`);
   }
   assert.deepEqual(problems, []);
+});
+
+test('the host PC going away and coming back: people are told, then it carries on by itself', async () => {
+  const p = await login('Allen');
+  await stopServer();
+  try {
+    await p.waitForSelector('.banner-bad', { timeout: 15000 });
+    assert.match(await p.textContent('.banner-bad'), /Can't reach the board server/);
+  } finally {
+    await startServer();
+  }
+  // a job created while Allen's screen was reconnecting still shows up
+  const s = await api('POST', '/api/session', { user_id: 2 });
+  await api('POST', '/api/tickets', { title: 'Made after the restart' }, s.cookie);
+  await p.waitForSelector('.banner-bad', { state: 'detached', timeout: 20000 });
+  await p.waitForSelector('.card:has-text("Made after the restart")', { timeout: 15000 });
+  // the board is usable again: open the new job
+  await p.click('.card:has-text("Made after the restart")');
+  await p.waitForSelector('.panel');
+  // the browser logs the dropped live connection while the server is down; that is expected here
+  p.consoleErrors = p.consoleErrors.filter((m) => !/ERR_CONNECTION_REFUSED|net::ERR|EventSource|Failed to load resource/.test(m));
+});
+
+test('after the board is upgraded on the host, open screens offer a reload', async () => {
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
+  open.push(ctx);
+  const p = await ctx.newPage();
+  p.errors = [];
+  p.consoleErrors = [];
+  p.on('pageerror', (e) => p.errors.push(e.message));
+  pages.push(p);
+  // the page was loaded from this version, but its live connection now reaches a newer server
+  await p.route('**/api/events', (route) =>
+    route.fulfill({
+      status: 200,
+      headers: { 'content-type': 'text/event-stream', 'cache-control': 'no-cache' },
+      body: 'retry: 5000\nevent: hello\ndata: {"version":"99.0.0"}\n\n',
+    }),
+  );
+  await p.goto(BASE + '/');
+  await p.click('.who-option:has-text("Paul")');
+  await p.waitForSelector('.card');
+  await p.waitForSelector('.banner-info', { timeout: 20000 });
+  assert.match(await p.textContent('.banner-info'), /updated on the server/);
+  const nav = p.waitForNavigation();
+  await p.click('.banner-info button');
+  await nav;
 });

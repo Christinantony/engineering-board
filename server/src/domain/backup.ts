@@ -8,7 +8,8 @@
 //
 // Automatic backups: one per day, the first time the server is running that
 // day (the host is a workstation that may be off at night), plus one before
-// every restore and every CSV import.
+// every restore and every CSV import, and before a new version of the board
+// upgrades the database schema.
 
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, writeFileSync, copyFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
@@ -19,8 +20,8 @@ import { localDate } from '../lib/time.ts';
 import { ensureAuthSettings, getSetting, setSetting } from './auth.ts';
 import { rebuildIndex } from './search.ts';
 
-export type BackupKind = 'daily' | 'manual' | 'pre-restore' | 'pre-import' | 'shutdown';
-export const BACKUP_RE = /^board-(\d{4}-\d{2}-\d{2})_(\d{6})-(daily|manual|pre-restore|pre-import|shutdown)\.db$/;
+export type BackupKind = 'daily' | 'manual' | 'pre-restore' | 'pre-import' | 'pre-upgrade' | 'shutdown';
+export const BACKUP_RE = /^board-(\d{4}-\d{2}-\d{2})_(\d{6})-(daily|manual|pre-restore|pre-import|pre-upgrade|shutdown)\.db$/;
 const KEEP_AT_LEAST = 7;
 
 export interface BackupInfo {
