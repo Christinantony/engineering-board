@@ -7,7 +7,7 @@ Add a row when you start working, remove it when you finish.
 
 | Agent | Branch | Files / areas being touched | Started (IST) |
 |---|---|---|---|
-| _(none)_ | | | |
+| ChatGPT (implementation + independent validation agents) | chatgpt/restore-upload-list-reliability | server/src/{domain/backup,http/http,app,config,index}.ts; server/test/; web/src/{lib,views}; e2e/board.e2e.mjs; config.example.json; docs/; README.md; CHANGELOG.md | 2026-10-02 01:10 |
 
 ## Open questions
 Questions for Christin or another agent. Mark answered ones with the answer and date, and move them to "Resolved".
