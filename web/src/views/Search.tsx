@@ -17,7 +17,7 @@ export function Search() {
   const { params } = useLocation();
   const filters = useMemo(() => readFilters(params), [params.toString()]);
   const qText = params.get('q') ?? '';
-  const archived = params.get('arch') === '1';
+  const arch = params.get('arch'); // '1' include, 'only'
   const [draft, setDraft] = useState(qText);
   useEffect(() => setDraft(qText), [qText]);
 
@@ -35,9 +35,14 @@ export function Search() {
 
   const api = toQuery(filters);
   if (qText.trim()) api.set('q', qText.trim());
-  api.set('archived', archived || qText.trim() ? 'include' : 'exclude');
+  api.set('archived', arch === 'only' ? 'only' : arch === '1' || qText.trim() ? 'include' : 'exclude');
   api.set('limit', String(PAGE));
   const key = `/api/tickets?${api.toString()}`;
+  const exportQuery = (() => {
+    const e = new URLSearchParams(api);
+    e.delete('limit');
+    return e.toString();
+  })();
   const q = useQuery<{ tickets: Ticket[]; total: number }>(key);
   const [more, setMore] = useState<Ticket[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -74,20 +79,30 @@ export function Search() {
             aria-label="Search text"
             onChange={(e: any) => setDraft(e.target.value)}
           />
-          <label className="check">
-            <input
-              type="checkbox"
-              checked={archived || !!qText.trim()}
-              disabled={!!qText.trim()}
-              onChange={(e: any) => {
-                const p = new URLSearchParams(location.search);
-                if (e.target.checked) p.set('arch', '1');
-                else p.delete('arch');
-                replaceParams(p);
-              }}
-            />
-            Include archived jobs{qText.trim() ? ' (always, when searching text)' : ''}
-          </label>
+          <div className="search-opts">
+            <label className="check">
+              Archived jobs:
+              <select
+                className="field-input inline"
+                value={arch === 'only' ? 'only' : arch === '1' || qText.trim() ? '1' : ''}
+                onChange={(e: any) => {
+                  const p = new URLSearchParams(location.search);
+                  if (e.target.value) p.set('arch', e.target.value);
+                  else p.delete('arch');
+                  replaceParams(p);
+                }}
+              >
+                <option value="" disabled={!!qText.trim()}>
+                  Leave out
+                </option>
+                <option value="1">Include</option>
+                <option value="only">Only archived</option>
+              </select>
+            </label>
+            <a className="btn btn-quiet" href={`/api/export/tickets.csv?${exportQuery}`} download>
+              Export these to CSV
+            </a>
+          </div>
         </div>
       </header>
       <FilterBar value={filters} onChange={(f) => replaceParams(writeFilters(new URLSearchParams(location.search), f))} showStatus />

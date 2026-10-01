@@ -1,7 +1,9 @@
 import { createServer, type Server } from 'node:http';
 import { STATUSES, PRIORITIES, ESTIMATE_BUCKETS, STATUS_LABEL, type User } from '@board/shared';
 import { v } from '@board/shared';
-import { openDb, migrate, run, all, type Db } from './db/connection.ts';
+import { openDb, migrate, run, all } from './db/connection.ts';
+import { createReadStream } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { seedBase, seedDemo, clearDemo, hasDemoData } from './db/seed.ts';
 import { EventHub, HttpError, forbidden, type Ctx } from './lib/core.ts';
 import { localDate } from './lib/time.ts';
@@ -50,8 +52,21 @@ import { dashboard, myWork, todayView, workload, type Horizon } from './domain/v
 import { report } from './domain/reports.ts';
 import { markSeen, notifications } from './domain/notifications.ts';
 import { Presence } from './domain/presence.ts';
+import {
+  backupNow,
+  backupPath,
+  dbStats,
+  listBackups,
+  pruneBackups,
+  restoreFrom,
+  runDailyBackupIfDue,
+  stageUpload,
+  type BackupCtx,
+} from './domain/backup.ts';
+import { archiveOld, commitImport, deleteTag, exportCsv, exportJson, importTemplate, listTags, previewImport, renameTag } from './domain/transfer.ts';
+import { rmSync } from 'node:fs';
 
-export const APP_VERSION = '0.5.0';
+export const APP_VERSION = '0.6.0';
 
 export interface AppOptions {
   dbPath: string;
@@ -61,10 +76,15 @@ export interface AppOptions {
   /** Planning reference shown on the workload page (not a capacity limit). */
   workday?: { hoursPerDay: number; workingDays: number[] };
   log?: boolean;
+  /** Where backups go (default: a "backups" folder next to the database). */
+  backupDir?: string;
+  backupKeepDays?: number;
+  /** Take the daily backup automatically (off in tests). */
+  autoBackup?: boolean;
 }
 
 export interface App {
-  ctx: Ctx;
+  ctx: BackupCtx;
   server: Server;
   listen(port: number, host?: string): Promise<number>;
   close(): Promise<void>;
@@ -75,13 +95,36 @@ const ADMIN_COOKIE = 'eb_admin';
 const ONE_YEAR = 365 * 24 * 3600;
 
 export function createApp(opts: AppOptions): App {
-  const db: Db = openDb(opts.dbPath);
-  const ctx: Ctx = { db, tz: opts.tz ?? 'Asia/Kolkata', now: opts.now ?? (() => new Date()), events: new EventHub() };
-  migrate(db);
+  const ctx: BackupCtx = {
+    db: openDb(opts.dbPath),
+    tz: opts.tz ?? 'Asia/Kolkata',
+    now: opts.now ?? (() => new Date()),
+    events: new EventHub(),
+    dbPath: opts.dbPath,
+    backupDir: opts.backupDir ?? join(dirname(opts.dbPath), 'backups'),
+    keepDays: opts.backupKeepDays ?? 30,
+  };
+  // NOTE: always use ctx.db (never a captured copy): a restore swaps in a new connection.
+  migrate(ctx.db);
   ensureAuthSettings(ctx);
   seedBase(ctx);
   // forget idempotency keys older than 7 days
-  run(db, 'DELETE FROM idempotency WHERE created_at < ?', new Date(ctx.now().getTime() - 7 * 86_400_000).toISOString());
+  run(ctx.db, 'DELETE FROM idempotency WHERE created_at < ?', new Date(ctx.now().getTime() - 7 * 86_400_000).toISOString());
+
+  // daily backup: a minute after start, then checked every hour
+  const timers: ReturnType<typeof setTimeout>[] = [];
+  const maintenance = () => {
+    try {
+      const b = runDailyBackupIfDue(ctx);
+      if (b) console.log(`Daily backup saved: ${join(ctx.backupDir, b.name)}`);
+    } catch (e) {
+      console.error('Daily backup failed:', (e as Error).message);
+    }
+  };
+  if (opts.autoBackup) {
+    timers.push(setTimeout(maintenance, 60_000));
+    timers.push(setInterval(maintenance, 3600_000));
+  }
 
   const presence = new Presence(ctx.events, () => ctx.now().getTime());
   const router = new Router();
@@ -136,7 +179,7 @@ export function createApp(opts: AppOptions): App {
   authed('GET', '/api/job-types', () => ({ job_types: listJobTypes(ctx) }));
   authed('GET', '/api/tags', () => ({
     tags: all<{ name: string; count: number }>(
-      db,
+      ctx.db,
       'SELECT g.name, COUNT(tt.ticket_id) count FROM tags g LEFT JOIN ticket_tags tt ON tt.tag_id = g.id GROUP BY g.id ORDER BY count DESC, g.name',
     ),
   }));
@@ -255,6 +298,71 @@ export function createApp(opts: AppOptions): App {
   });
   admin('DELETE', '/api/admin/demo', () => ({ removed: clearDemo(ctx) }));
 
+  // ---- export / import ----
+  const attach = (name: string, type: string) => ({ 'Content-Type': type, 'Content-Disposition': `attachment; filename="${name}"` });
+  const today = () => localDate(ctx.now().getTime(), ctx.tz);
+  authed('GET', '/api/export/tickets.csv', (req) =>
+    new Reply(200, exportCsv(ctx, parseFilters(req.query)), attach(`engineering-board-jobs-${today()}.csv`, 'text/csv; charset=utf-8')),
+  );
+  authed('GET', '/api/export/tickets.json', (req) =>
+    new Reply(200, exportJson(ctx, { activity: req.query.get('activity') !== '0' }), attach(`engineering-board-${today()}.json`, 'application/json; charset=utf-8')),
+  );
+  authed('GET', '/api/import/template.csv', () => new Reply(200, importTemplate(), attach('engineering-board-import-template.csv', 'text/csv; charset=utf-8')));
+  const importOpts = (req: Request) => ({
+    date_order: req.query.get('date_order') === 'MDY' ? ('MDY' as const) : ('DMY' as const),
+    create_job_types: req.query.get('create_job_types') !== '0',
+    filename: (req.query.get('filename') ?? '').slice(0, 200),
+    skip_invalid: req.query.get('skip_invalid') === '1',
+    allow_duplicate: req.query.get('allow_duplicate') === '1',
+  });
+  admin('POST', '/api/admin/import/preview', (req) => previewImport(ctx, req.rawBody, importOpts(req)));
+  admin('POST', '/api/admin/import/commit', (req, user) => {
+    const o = importOpts(req);
+    backupNow(ctx, 'pre-import');
+    return commitImport(ctx, user, req.rawBody, o);
+  });
+
+  // ---- backups, restore, archive, tags ----
+  admin('GET', '/api/admin/info', () => ({ ...dbStats(ctx), version: APP_VERSION, node: process.versions.node, tz: ctx.tz, backups: listBackups(ctx) }));
+  admin('POST', '/api/admin/backups', () => {
+    const b = backupNow(ctx, 'manual');
+    pruneBackups(ctx);
+    return new Reply(201, { backup: b });
+  });
+  admin('GET', '/api/admin/backups/:name', (req) => {
+    const path = backupPath(ctx, req.params.name);
+    req.res.writeHead(200, {
+      'Content-Type': 'application/octet-stream',
+      'Content-Disposition': `attachment; filename="${req.params.name}"`,
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    createReadStream(path).pipe(req.res);
+    return HANDLED;
+  });
+  admin('POST', '/api/admin/restore', (req) => {
+    const { name } = v.object({ name: v.string({ min: 1, max: 200 }) })(req.body);
+    return restoreFrom(ctx, backupPath(ctx, name));
+  });
+  admin('POST', '/api/admin/restore/upload', (req) => {
+    if (!req.binary?.length) throw new HttpError(400, 'bad_request', 'Choose a backup file (.db) to upload.');
+    if (req.binary.subarray(0, 16).toString('latin1') !== 'SQLite format 3\u0000')
+      throw new HttpError(400, 'bad_request', "That file isn't a board backup. Choose a .db file made by the board's backup.");
+    const staged = stageUpload(ctx, req.binary);
+    try {
+      return restoreFrom(ctx, staged);
+    } finally {
+      rmSync(staged, { force: true });
+    }
+  });
+  admin('POST', '/api/admin/archive-old', (req, user) => {
+    const { days } = v.object({ days: v.int({ min: 1, max: 3650 }) })(req.body);
+    return archiveOld(ctx, user, days);
+  });
+  admin('GET', '/api/admin/tags', () => ({ tags: listTags(ctx) }));
+  admin('PATCH', '/api/admin/tags/:id', (req) => renameTag(ctx, id(req), v.object({ name: v.string({ min: 1, max: 40 }) })(req.body).name));
+  admin('DELETE', '/api/admin/tags/:id', (req) => deleteTag(ctx, id(req)));
+
   // ---- server ----
   const sseConnections = new Set<import('node:http').ServerResponse>();
   const server = createServer(async (raw, res) => {
@@ -316,8 +424,9 @@ export function createApp(opts: AppOptions): App {
     close() {
       return new Promise((resolveClose) => {
         for (const res of sseConnections) res.end();
+        for (const t of timers) clearTimeout(t);
         server.close(() => {
-          db.close();
+          ctx.db.close();
           resolveClose();
         });
         server.closeAllConnections?.();

@@ -1,4 +1,4 @@
-# API reference (v0.5)
+# API reference (v0.6)
 
 All endpoints are under `/api` and use JSON. Mutating requests must send `Content-Type: application/json`, which together with `SameSite=Strict` cookies blocks cross-site form posts.
 
@@ -86,3 +86,17 @@ Errors look like this:
 | GET/POST | `/api/admin/users`; PATCH `/api/admin/users/:id` `{name?, initials?, color?, role?, is_admin?, active?}` |
 | POST | `/api/admin/job-types`; PATCH `/api/admin/job-types/:id` |
 | POST/DELETE | `/api/admin/demo`: load or clear the demo jobs |
+| GET | `/api/admin/info`: database size and counts, backup folder, list of backups |
+| POST | `/api/admin/backups`: back up now. GET `/api/admin/backups/:name` downloads one. |
+| POST | `/api/admin/restore` `{name}`, or `/api/admin/restore/upload` with an `application/octet-stream` body containing the `.db` file |
+| POST | `/api/admin/import/preview` and `/api/admin/import/commit`. The body is CSV text (`text/csv`). Query: `filename`, `date_order=DMY\|MDY`, `create_job_types=0\|1`, `skip_invalid=1`, `allow_duplicate=1` |
+| POST | `/api/admin/archive-old` `{days}` |
+| GET / PATCH / DELETE | `/api/admin/tags[/:id]`. A rename to an existing name merges the two tags. Only unused tags can be deleted. |
+
+## Export (any signed-in user)
+
+| GET | |
+|---|---|
+| `/api/export/tickets.csv` | Accepts the same filters as `/api/tickets`. UTF-8 with a BOM, CRLF line endings, and cells that look like formulas are escaped. |
+| `/api/export/tickets.json` | Every job with its history, plus the team and job types. Add `?activity=0` for jobs only. |
+| `/api/import/template.csv` | A starter sheet for importing. |

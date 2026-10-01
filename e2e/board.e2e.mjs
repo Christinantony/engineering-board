@@ -293,3 +293,82 @@ test('the activity page shows the team history and other people show as online',
   assert.ok((await a.locator('.feed-item').count()) > 10);
   assert.deepEqual(a.errors, []);
 });
+
+// ---------------- Phase 6: admin, import, export, backups ----------------
+
+import { writeFileSync as _wf } from 'node:fs';
+
+test('admin: unlock with the PIN, add a person and a job type', async () => {
+  const c = await login('Christin');
+  await c.goto(`${BASE}/admin`);
+  await c.fill('input[aria-label="Admin PIN"]', '0000');
+  await c.click('button:has-text("Unlock")');
+  await c.waitForSelector('.form-error');
+  await c.fill('input[aria-label="Admin PIN"]', '1234');
+  await c.click('button:has-text("Unlock")');
+  await c.waitForSelector('.admin-section h2:has-text("Team")');
+  await c.fill('input[aria-label="Name"]', 'Maya Joseph');
+  await c.click('button:has-text("Add person")');
+  await c.waitForSelector('input[aria-label="Name of Maya Joseph"]');
+  await c.click('.admin-nav a:has-text("Job types")');
+  await c.fill('input[aria-label="New job type"]', 'Tolerance Stack-up');
+  await c.click('button:has-text("Add job type")');
+  await c.waitForFunction(() => [...document.querySelectorAll('.admin-list input')].some((i) => i.value === 'Tolerance Stack-up'));
+});
+
+test('admin: import from a CSV file with a preview, then the jobs are on the board', async () => {
+  const c = await login('Christin');
+  await c.goto(`${BASE}/admin?s=import`);
+  await c.waitForSelector('input[aria-label="Admin PIN"], .admin-section');
+  if (await c.locator('input[aria-label="Admin PIN"]').count()) {
+    await c.fill('input[aria-label="Admin PIN"]', '1234');
+    await c.click('button:has-text("Unlock")');
+  }
+  const file = join(dir, 'jobs.csv');
+  _wf(file, 'Job,Assigned To,Due Date,Est,Priority\r\nImported bracket check,Paul,05/10/2026,2h,High\r\nImported BOM tidy,,06/10/2026,30,\r\n,,,,\r\nNo date here,,32/13/2026,,\r\n');
+  await c.setInputFiles('input[aria-label="CSV file"]', file);
+  await c.click('button:has-text("Check the file")');
+  await c.waitForSelector('.import-summary');
+  assert.match(await c.locator('.import-summary').innerText(), /2 of 3 rows are ready/);
+  await c.click('button:has-text("Import 2 jobs")');
+  await c.waitForSelector('.notice-ok:has-text("Imported 2 jobs")');
+  await c.goto(`${BASE}/board`);
+  await c.waitForSelector('.card:has-text("Imported bracket check") .badge:has-text("PA")');
+});
+
+test('admin: back up now, then restore it; the board follows', async () => {
+  const c = await login('Christin');
+  await c.goto(`${BASE}/admin?s=backups`);
+  await c.waitForSelector('input[aria-label="Admin PIN"], .admin-section');
+  if (await c.locator('input[aria-label="Admin PIN"]').count()) {
+    await c.fill('input[aria-label="Admin PIN"]', '1234');
+    await c.click('button:has-text("Unlock")');
+  }
+  await c.click('button:has-text("Back up now")');
+  const saved = await c.locator('.toast:has-text("Backup saved")').innerText();
+  const backupName = /board-[\w-]+\.db/.exec(saved)[0];
+  // make a change after the backup
+  const other = await login('Paul');
+  await other.keyboard.press('n');
+  await other.fill('#qc-title', 'Created after the backup');
+  await other.keyboard.press('Enter');
+  await other.waitForSelector('.card:has-text("Created after the backup")');
+  // restore the newest manual backup
+  await c.locator(`tr:has(td[title="${backupName}"])`).locator('button:has-text("Restore")').click();
+  await c.click('.dialog button:has-text("Restore")');
+  await c.waitForSelector('.toast:has-text("Restored")');
+  // Paul's board drops the job without him reloading
+  await other.waitForSelector('.card:has-text("Created after the backup")', { state: 'detached', timeout: 15000 });
+});
+
+test('export links download CSV and JSON', async () => {
+  const c = await login('Allen');
+  const cookie = (await c.context().cookies()).map((x) => `${x.name}=${x.value}`).join('; ');
+  const csv = await fetch(`${BASE}/api/export/tickets.csv`, { headers: { cookie } });
+  assert.equal(csv.status, 200);
+  const bytes = Buffer.from(await csv.arrayBuffer());
+  assert.deepEqual([...bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf], 'UTF-8 BOM so Excel reads accents correctly');
+  assert.match(bytes.subarray(3).toString('utf8'), /^job_number,title/);
+  const json = await (await fetch(`${BASE}/api/export/tickets.json`, { headers: { cookie } })).json();
+  assert.ok(json.tickets.length > 5);
+});

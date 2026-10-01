@@ -25,13 +25,25 @@ export function setUnauthenticatedHandler(fn: () => void) {
 }
 
 export async function api<T = any>(method: string, path: string, body?: unknown, headers: Record<string, string> = {}): Promise<T> {
+  return send<T>(method, path, body !== undefined ? JSON.stringify(body) : undefined, {
+    ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+    ...headers,
+  });
+}
+
+/** Send a non-JSON body (CSV text, a database file). */
+export function sendRaw<T = any>(method: string, path: string, body: string | Blob | ArrayBuffer, type: string): Promise<T> {
+  return send<T>(method, path, body, { 'Content-Type': type });
+}
+
+async function send<T>(method: string, path: string, body: BodyInit | undefined, headers: Record<string, string>): Promise<T> {
   let res: Response;
   try {
     res = await fetch(path, {
       method,
       credentials: 'same-origin',
-      headers: { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...headers },
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      headers,
+      body,
     });
   } catch {
     throw new ApiError(0, 'network', "Can't reach the board server. Check that the host PC is on, then try again. Nothing was saved.");

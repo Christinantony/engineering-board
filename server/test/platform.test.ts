@@ -45,7 +45,7 @@ describe('platform', () => {
 
   it('migrations are idempotent', () => {
     const db = openDb(':memory:');
-    assert.deepEqual(migrate(db).applied, [1, 2]);
+    assert.deepEqual(migrate(db).applied, [1, 2, 3]);
     assert.deepEqual(migrate(db).applied, []);
     db.close();
   });

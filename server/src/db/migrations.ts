@@ -148,4 +148,19 @@ CREATE TABLE user_state (
 );
 `,
   },
+  {
+    id: 3,
+    name: 'import log',
+    sql: /* sql */ `
+CREATE TABLE imports (
+  id       INTEGER PRIMARY KEY,
+  hash     TEXT NOT NULL,
+  filename TEXT NOT NULL DEFAULT '',
+  rows     INTEGER NOT NULL,
+  user_id  INTEGER REFERENCES users(id),
+  at       TEXT NOT NULL
+);
+CREATE INDEX idx_imports_hash ON imports(hash);
+`,
+  },
 ];

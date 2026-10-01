@@ -18,6 +18,8 @@ export interface Request {
   cookies: Record<string, string>;
   body: unknown;
   rawBody: string;
+  /** Present for application/octet-stream uploads (database restore). */
+  binary?: Buffer;
   headers: IncomingMessage['headers'];
 }
 
@@ -93,22 +95,23 @@ export function cookie(name: string, value: string, opts: { maxAge?: number; htt
   return parts.join('; ');
 }
 
-const MAX_BODY = 5 * 1024 * 1024;
+const MAX_BODY = 20 * 1024 * 1024; // JSON and CSV
+const MAX_UPLOAD = 1024 * 1024 * 1024; // database files
 
-function readBody(req: IncomingMessage): Promise<string> {
+function readBody(req: IncomingMessage, limit = MAX_BODY): Promise<Buffer> {
   return new Promise((resolveBody, reject) => {
     let size = 0;
     const chunks: Buffer[] = [];
     req.on('data', (c: Buffer) => {
       size += c.length;
-      if (size > MAX_BODY) {
-        reject(new HttpError(413, 'too_large', 'Request is too large'));
+      if (size > limit) {
+        reject(new HttpError(413, 'too_large', `That file is too large (limit ${Math.round(limit / 1048576)} MB).`));
         req.destroy();
         return;
       }
       chunks.push(c);
     });
-    req.on('end', () => resolveBody(Buffer.concat(chunks).toString('utf8')));
+    req.on('end', () => resolveBody(Buffer.concat(chunks)));
     req.on('error', reject);
   });
 }
@@ -151,14 +154,21 @@ export async function buildRequest(raw: IncomingMessage, res: ServerResponse): P
   const url = new URL(raw.url ?? '/', 'http://localhost');
   const method = (raw.method ?? 'GET').toUpperCase();
   let rawBody = '';
+  let binary: Buffer | undefined;
   let body: unknown = undefined;
   if (method !== 'GET' && method !== 'HEAD') {
-    rawBody = await readBody(raw);
     const ct = String(raw.headers['content-type'] ?? '');
-    if (rawBody.length) {
-      if (ct.includes('application/json')) body = JSON.parse(rawBody);
-      else if (!ct.startsWith('text/')) {
-        throw new HttpError(415, 'unsupported_media_type', 'Send JSON (Content-Type: application/json)');
+    if (ct.startsWith('application/octet-stream')) {
+      // only the database-restore upload takes large binary bodies
+      if (url.pathname !== '/api/admin/restore/upload') throw new HttpError(415, 'unsupported_media_type', 'Send JSON (Content-Type: application/json)');
+      binary = await readBody(raw, MAX_UPLOAD);
+    } else {
+      rawBody = (await readBody(raw)).toString('utf8');
+      if (rawBody.length) {
+        if (ct.includes('application/json')) body = JSON.parse(rawBody);
+        else if (!ct.startsWith('text/')) {
+          throw new HttpError(415, 'unsupported_media_type', 'Send JSON (Content-Type: application/json)');
+        }
       }
     }
   }
@@ -172,6 +182,7 @@ export async function buildRequest(raw: IncomingMessage, res: ServerResponse): P
     cookies: parseCookies(raw.headers.cookie),
     body,
     rawBody,
+    binary,
     headers: raw.headers,
   };
 }

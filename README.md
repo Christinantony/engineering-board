@@ -2,15 +2,21 @@
 
 An internal workboard for the mechanical design team. It combines a Kanban board, lightweight job tickets and team workload, and runs on one PC on the office LAN.
 
-> **Status: Phase 5 of 9.** The board, every operational page, filters and search work.
+> **Status: Phase 6 of 9.** Everything a team needs day to day works: the board, every view, search, collaboration, and the Admin area.
 >
-> Phase 5 adds the collaboration features:
-> - Notifications.
-> - Who's online.
-> - Who has a job open.
-> - Edits that never overwrite each other.
-> - A team activity feed.
-> - Offline and new-version banners.
+> The Admin area covers:
+> - Team, job types and tags.
+> - CSV import with a preview.
+> - CSV and JSON export.
+> - Daily automatic backups, with one-click restore.
+> - Archiving and the admin PIN.
+
+## Backups (short version)
+
+- **Automatic:** one backup per day (the first hour the board runs that day), plus one before every import and every restore. Backups are kept for 30 days, and the newest 7 are always kept.
+- **Location:** backups go in `data/backups` as `board-YYYY-MM-DD_HHMMSS-<why>.db`. Each is a complete SQLite database. Point `backupDir` in `config.json` at a network share or OneDrive folder so a dead PC doesn't take the backups with it.
+- **Restore:** use Admin, Backups and restore, then pick a backup and choose **Restore…**, or upload a `.db` file. The current data is backed up first, so a restore can itself be undone. Nobody gets signed out.
+- **By hand:** stop the board, copy `data/board.db` (and `board.db-wal` if present), then start it again.
 
 ## What it needs
 
@@ -32,8 +38,8 @@ There are **no npm packages and no native add-ons at runtime**. The whole server
 npm run build          # → dist/app/server.mjs + dist/app/web/
 npm start              # server from source on http://localhost:8080 (serves dist/app/web)
 npm run dev:web        # rebuild the web app on change
-npm test               # 49 backend tests (node:test)
-npm run e2e            # 14 browser tests (needs Playwright + Chromium; run npm run build first)
+npm test               # 62 backend tests (node:test)
+npm run e2e            # 18 browser tests (needs Playwright + Chromium; run npm run build first)
 npm run typecheck      # server and web
 npm run seed:demo      # add demo jobs  (…-- --clear to remove them)
 ```
@@ -53,6 +59,8 @@ Configuration comes from `config.json` next to the `app` folder, or from environ
 | `timezone` | `EB_TIMEZONE` | `Asia/Kolkata` |
 | `hoursPerDay` | n/a | `8`: the reference line on the Workload page |
 | `workingDays` | n/a | `[1,2,3,4,5,6]`: Monday to Saturday (0 is Sunday) |
+| `backupDir` | `EB_BACKUP_DIR` | `data/backups` |
+| `backupKeepDays` | `EB_BACKUP_KEEP_DAYS` | `30` |
 
 ## Layout
 

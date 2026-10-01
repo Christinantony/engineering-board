@@ -12,7 +12,7 @@ const MIN_NODE = [22, 16];
  * Load the built-in SQLite module lazily so an old node.exe produces a clear
  * message instead of a crash at startup.
  */
-function sqlite(): typeof import('node:sqlite') {
+export function sqlite(): typeof import('node:sqlite') {
   const [maj, min] = process.versions.node.split('.').map(Number);
   const mod = (process as any).getBuiltinModule?.('node:sqlite') as typeof import('node:sqlite') | undefined;
   if (!mod || maj < MIN_NODE[0] || (maj === MIN_NODE[0] && min < MIN_NODE[1])) {

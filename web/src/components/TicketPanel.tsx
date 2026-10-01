@@ -579,10 +579,17 @@ function ActivityItem({ a }: { a: Activity }) {
       );
       break;
     case 'archived':
-      text = <>{who} archived it</>;
+      text = <>{who} archived it{a.body ? ` (${a.body})` : ''}</>;
       break;
     case 'restored':
       text = <>{who} restored it</>;
+      break;
+    case 'imported':
+      text = (
+        <>
+          {who} imported this job from {a.body}
+        </>
+      );
       break;
     default:
       text = (

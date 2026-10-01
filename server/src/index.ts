@@ -21,6 +21,9 @@ async function main() {
   const app = createApp({ dbPath: join(cfg.dataDir, 'board.db'), tz: cfg.timezone, webRoot,
     workday: { hoursPerDay: cfg.hoursPerDay, workingDays: cfg.workingDays },
     log: process.env.EB_LOG === '1',
+    backupDir: cfg.backupDir,
+    backupKeepDays: cfg.backupKeepDays,
+    autoBackup: true,
   });
 
   let port: number;
@@ -46,6 +49,7 @@ async function main() {
   For your team:     http://${hostname()}:${port}
 ${ips.map((ip) => `                     http://${ip}:${port}`).join('\n')}
   Data folder:       ${cfg.dataDir}
+  Backups:           ${cfg.backupDir}
   Time zone:         ${cfg.timezone}
   ${webRoot ? '' : '(web app not built yet — API only)\n  '}Keep this window open. Press Ctrl+C to stop.
 `);

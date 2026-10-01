@@ -13,6 +13,7 @@ import { TicketPanel } from './components/TicketPanel.tsx';
 import { SearchBox } from './components/SearchBox.tsx';
 import { Bell, ConnectionBanner, OnlineNow } from './components/Collab.tsx';
 import { ActivityFeed } from './views/ActivityFeed.tsx';
+import { Admin } from './views/admin/Admin.tsx';
 import { BoardPage } from './views/BoardPage.tsx';
 import { Dashboard } from './views/Dashboard.tsx';
 import { MyWork } from './views/MyWork.tsx';
@@ -39,6 +40,7 @@ const VIEWS: Record<string, () => any> = {
   '/reports': Reports,
   '/search': Search,
   '/activity': ActivityFeed,
+  '/admin': Admin,
 };
 
 export function App() {
@@ -214,6 +216,12 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
               <span className="me-name">{state.me.name}</span>
             </summary>
             <div className="me-pop">
+              <button className="btn btn-quiet" onClick={() => navigate('/activity')}>
+                Team activity
+              </button>
+              <button className="btn btn-quiet" onClick={() => navigate('/admin')}>
+                Admin
+              </button>
               <button className="btn btn-quiet" onClick={() => void signOut()}>
                 Switch user
               </button>
@@ -222,8 +230,13 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
         </header>
 
         <ConnectionBanner />
-        {meta.pin_is_default && state.me.is_admin && (
-          <div className="banner">The admin PIN is still the default (1234). It can be changed from the admin area once that's built in Phase 6.</div>
+        {meta.pin_is_default && state.me.is_admin && path !== '/admin' && (
+          <div className="banner">
+            The admin PIN is still the default (1234).{' '}
+            <button className="link-btn" onClick={() => navigate('/admin?s=pin')}>
+              Change it in Admin
+            </button>
+          </div>
         )}
 
         <main className="main">
