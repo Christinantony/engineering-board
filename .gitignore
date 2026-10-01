@@ -1,0 +1,29 @@
+# Database and runtime data: never commit
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+
+# Secrets and local config
+.env
+.env.*
+config.local.*
+secrets.*
+*.pem
+*.key
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Logs
+*.log
+logs/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
