@@ -1,4 +1,4 @@
-import { describe, it, beforeEach, afterEach } from 'node:test';
+import { describe, it, beforeEach, afterEach, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startHarness, type Harness, type Client } from './helpers.ts';
 
@@ -173,5 +173,45 @@ describe('views', () => {
       assert.deepEqual(mine.up_next.map((x: any) => x.id), [n2.id, n1.id]);
       assert.equal((await paul.post(`/api/tickets/${n1.id}/my-rank`, {})).status, 403);
     });
+  });
+});
+
+describe('reports', () => {
+  let h: Harness;
+  before(async () => {
+    h = await startHarness();
+  });
+  after(() => h.close());
+
+  it('summarises completed work by engineer and job type, with lead times', async () => {
+    const [christin, paul] = await Promise.all(['Christin', 'Paul'].map((n) => h.as(n)));
+    const types = (await christin.get('/api/job-types')).body.job_types;
+    const fea = types.find((t: any) => t.name === 'FEA').id;
+    const a = await christin.create({ title: 'A', claim: true, job_type_id: fea, estimate_minutes: 60 });
+    await christin.post(`/api/tickets/${a.id}/move`, { status: 'in_progress' });
+    h.clock.advance(2 * 3600_000);
+    await christin.patch(`/api/tickets/${a.id}`, { version: (await christin.get(`/api/tickets/${a.id}`)).body.ticket.version, actual_minutes: 90 });
+    await christin.post(`/api/tickets/${a.id}/move`, { status: 'done' });
+    const b = await paul.create({ title: 'B', claim: true });
+    h.clock.advance(4 * 3600_000);
+    await paul.post(`/api/tickets/${b.id}/move`, { status: 'done' });
+    await paul.create({ title: 'still open' });
+
+    const r = (await christin.get('/api/reports?from=2026-10-01&to=2026-10-01')).body;
+    assert.equal(r.completed, 2);
+    assert.equal(r.created, 3);
+    assert.equal(r.open_now, 1);
+    assert.deepEqual(r.lead_time_hours, { average: 3, median: 3 }); // 2 h and 4 h
+    assert.equal(r.work_time_hours.jobs, 1);
+    assert.deepEqual(r.estimate_vs_actual, { jobs: 1, estimated_minutes: 60, actual_minutes: 90 });
+    const c = r.by_engineer.find((e: any) => e.name === 'Christin');
+    assert.equal(c.completed, 1);
+    assert.ok(!r.by_engineer.some((e: any) => e.name === 'Jeffin'));
+    assert.deepEqual(r.by_type.find((t: any) => t.job_type === 'FEA'), { job_type: 'FEA', completed: 1, created: 1 });
+    assert.equal(r.per_day.length, 1);
+    assert.equal(r.per_day[0].completed, 2);
+    // a range before any work
+    assert.equal((await christin.get('/api/reports?from=2026-09-01&to=2026-09-30')).body.completed, 0);
+    assert.equal((await christin.get('/api/reports?from=2026-10-05&to=2026-10-01')).status, 400);
   });
 });

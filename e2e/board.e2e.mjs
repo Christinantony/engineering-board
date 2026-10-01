@@ -139,3 +139,83 @@ test('panel edits sync to another open panel; comments land in the history', asy
   await a.click('button:has-text("Add to history")');
   await a.waitForSelector('.tl-bubble:has-text("Mesh converged")');
 });
+
+// ---------------- Phase 4: operational views, filters, search ----------------
+
+test('board filters combine and survive a reload', async () => {
+  const c = await login('Christin');
+  const cookie = async () => (await c.context().cookies()).map((x) => `${x.name}=${x.value}`).join('; ');
+  const shown = async () => {
+    const ids = await c.locator('.card').evaluateAll((els) => els.map((e) => e.dataset.card));
+    return Promise.all(ids.map(async (id) => (await (await fetch(`${BASE}/api/tickets/${id}`, { headers: { cookie: await cookie() } })).json()).ticket));
+  };
+  await c.click('.fchip:has-text("Urgent")');
+  await c.waitForSelector('.fcount');
+  const urgent = await shown();
+  assert.ok(urgent.length >= 1);
+  assert.ok(urgent.every((t) => t.priority === 'urgent'));
+  await c.click('.fchip:has-text("Unassigned")');
+  await c.waitForTimeout(200);
+  assert.ok((await shown()).every((t) => t.priority === 'urgent' && t.assigned_to === null));
+  assert.match(c.url(), /p=urgent/);
+  assert.match(c.url(), /u=1/);
+  await c.reload();
+  await c.waitForSelector('.fchip.on:has-text("Urgent")');
+  await c.click('button:has-text("Clear filters")');
+  assert.doesNotMatch(c.url(), /p=urgent/);
+});
+
+test('search box finds by partial word and opens the job', async () => {
+  const c = await login('Paul');
+  await c.keyboard.press('/');
+  await c.keyboard.type('weld fix');
+  await c.waitForSelector('.search-row:has-text("Prototype jig for weld fixture")');
+  await c.keyboard.press('ArrowDown');
+  await c.keyboard.press('Enter');
+  await c.waitForFunction(() => document.querySelector('.panel-title')?.value === 'Prototype jig for weld fixture');
+});
+
+test('today, dashboard, workload and reports pages render real data', async () => {
+  const c = await login('Jeffin');
+  await c.keyboard.press('t');
+  await c.waitForSelector('.vsection-head h2:has-text("Being worked on")');
+  await c.keyboard.press('d');
+  await c.waitForSelector('.tally-item');
+  assert.equal(await c.locator('.tally-item').count(), 6);
+  await c.keyboard.press('w');
+  await c.waitForSelector('.wl-row');
+  await c.click('.seg-tabs button:has-text("This week")');
+  await c.waitForURL(/h=week/);
+  await c.keyboard.press('r');
+  await c.waitForSelector('.table');
+  assert.deepEqual(c.errors, []);
+});
+
+test('my work can be reordered with the keyboard', async () => {
+  const a = await login('Allen');
+  // give Allen two queued jobs
+  for (const title of ['Queue one', 'Queue two']) {
+    await a.keyboard.press('n');
+    await a.fill('#qc-title', title);
+    await a.keyboard.press('Shift+Enter');
+    await a.waitForSelector('.quick-create', { state: 'detached' });
+  }
+  await a.keyboard.press('m');
+  await a.waitForSelector('.reorder-item:has-text("Queue two")');
+  const order = () => a.locator('.vsection:has(h2:has-text("Up next")) .jobrow-title').allInnerTexts();
+  const before = await order();
+  const idx = before.indexOf('Queue two');
+  await a.locator('.reorder-item:has-text("Queue two") .jobrow').focus();
+  await a.keyboard.press(idx > 0 ? 'Alt+ArrowUp' : 'Alt+ArrowDown');
+  await a.waitForFunction(
+    ([i]) => {
+      const t = [...document.querySelectorAll('.vsection')].find((s) => s.textContent.includes('Up next'));
+      const titles = [...t.querySelectorAll('.jobrow-title')].map((x) => x.textContent);
+      return titles.indexOf('Queue two') !== i;
+    },
+    [idx],
+  );
+  await a.reload();
+  await a.waitForSelector('.reorder-item:has-text("Queue two")');
+  assert.notEqual((await order()).indexOf('Queue two'), idx, 'order is saved on the server');
+});

@@ -1,4 +1,4 @@
-# API reference (v0.2)
+# API reference (v0.4)
 
 All endpoints are under `/api` and use JSON. Mutating requests must send `Content-Type: application/json`, which together with `SameSite=Strict` cookies blocks cross-site form posts.
 
@@ -60,6 +60,7 @@ Errors look like this:
 | `/api/my-work[?user=id]` | `in_progress`, `waiting`, `review`, `up_next` (ordered by `my_rank`), `summary` |
 | `/api/workload?horizon=today\|3days\|week` | Per engineer: `load_minutes`, `unestimated`, `backlog_minutes`, `in_progress`, `assigned_open`, `overdue`, `blocked`. Also `unclaimed`. |
 | `/api/activity?limit&since` | The team activity feed. |
+| `/api/reports?from&to` | For local dates, inclusive. Returns `completed` and `created`, `open_now` and `overdue_now`, `lead_time_hours` and `work_time_hours` (median and average), `estimate_vs_actual`, `by_engineer`, `by_type` and `per_day`. |
 | `/api/job-types`, `/api/tags` | Reference data. |
 | `/api/events` | Server-Sent Events: `{type:'ticket', id, version, by}`, `users`, `job_types`, `reload` |
 

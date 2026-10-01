@@ -10,6 +10,8 @@ export interface Config {
   timezone: string;
   backupDir: string;
   backupKeepDays: number;
+  hoursPerDay: number;
+  workingDays: number[];
 }
 
 export function loadConfig(appRoot: string): Config {
@@ -31,6 +33,9 @@ export function loadConfig(appRoot: string): Config {
     timezone: env.EB_TIMEZONE ?? fromFile.timezone ?? 'Asia/Kolkata',
     backupDir: resolve(appRoot, env.EB_BACKUP_DIR ?? fromFile.backupDir ?? join(dataDir, 'backups')),
     backupKeepDays: Number(env.EB_BACKUP_KEEP_DAYS ?? fromFile.backupKeepDays ?? 30),
+    hoursPerDay: Number(fromFile.hoursPerDay ?? 8),
+    // 0 = Sunday … 6 = Saturday. Default Monday–Saturday.
+    workingDays: Array.isArray(fromFile.workingDays) ? fromFile.workingDays.map(Number) : [1, 2, 3, 4, 5, 6],
   };
   if (!Number.isInteger(cfg.port) || cfg.port < 1 || cfg.port > 65535) throw new Error(`Invalid port: ${cfg.port}`);
   try {

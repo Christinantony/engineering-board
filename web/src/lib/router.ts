@@ -40,3 +40,12 @@ export function setJob(id: number | null) {
   history.pushState(null, '', next);
   emit();
 }
+
+/** Replace the query string (filters, search text) without adding history entries. */
+export function replaceParams(params: URLSearchParams) {
+  const qs = params.toString();
+  const next = location.pathname + (qs ? `?${qs}` : '');
+  if (next === snapshot()) return;
+  history.replaceState(null, '', next);
+  emit();
+}

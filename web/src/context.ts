@@ -7,6 +7,7 @@ export interface Meta {
   today: string;
   estimates: { label: string; minutes: number }[];
   pin_is_default: boolean;
+  workday: { hours_per_day: number; working_days: number[] };
   demo_present: boolean;
 }
 

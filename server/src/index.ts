@@ -18,7 +18,10 @@ const appRoot = process.env.EB_APP_ROOT
 async function main() {
   const cfg = loadConfig(appRoot);
   const webRoot = [join(appRoot, 'app', 'web'), join(appRoot, 'dist', 'app', 'web')].find((p) => existsSync(p));
-  const app = createApp({ dbPath: join(cfg.dataDir, 'board.db'), tz: cfg.timezone, webRoot, log: process.env.EB_LOG === '1' });
+  const app = createApp({ dbPath: join(cfg.dataDir, 'board.db'), tz: cfg.timezone, webRoot,
+    workday: { hoursPerDay: cfg.hoursPerDay, workingDays: cfg.workingDays },
+    log: process.env.EB_LOG === '1',
+  });
 
   let port: number;
   try {

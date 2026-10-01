@@ -88,7 +88,7 @@ export function dashboard(ctx: Ctx) {
   return {
     counts: c,
     workload: workload(ctx, 'today'),
-    recent_activity: recentActivity(ctx, 20),
+    recent_activity: recentActivity(ctx, 60),
     attention: ticketsWhere(ctx, `${OPEN} AND (t.assigned_to IS NULL OR t.priority = 'urgent')`, `${URGENCY_ORDER} LIMIT 30`),
   };
 }

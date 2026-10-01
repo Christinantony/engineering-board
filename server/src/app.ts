@@ -46,14 +46,17 @@ import {
   updateTicket,
 } from './domain/tickets.ts';
 import { dashboard, myWork, todayView, workload, type Horizon } from './domain/views.ts';
+import { report } from './domain/reports.ts';
 
-export const APP_VERSION = '0.3.0';
+export const APP_VERSION = '0.4.0';
 
 export interface AppOptions {
   dbPath: string;
   tz?: string;
   now?: () => Date;
   webRoot?: string;
+  /** Planning reference shown on the workload page (not a capacity limit). */
+  workday?: { hoursPerDay: number; workingDays: number[] };
   log?: boolean;
 }
 
@@ -110,6 +113,7 @@ export function createApp(opts: AppOptions): App {
     priorities: PRIORITIES,
     estimates: ESTIMATE_BUCKETS.map(({ label, minutes }) => ({ label, minutes })),
     pin_is_default: pinIsDefault(ctx),
+    workday: { hours_per_day: opts.workday?.hoursPerDay ?? 8, working_days: opts.workday?.workingDays ?? [1, 2, 3, 4, 5, 6] },
     demo_present: hasDemoData(ctx),
   }));
   pub('GET', '/api/users', (req) => ({ users: listUsers(ctx, req.query.get('all') === '1') }));
@@ -163,6 +167,10 @@ export function createApp(opts: AppOptions): App {
   authed('GET', '/api/my-work', (req, user) => {
     const uid = req.query.get('user') ? v.int({ min: 1 })(req.query.get('user'), 'user') : user.id;
     return myWork(ctx, uid);
+  });
+  authed('GET', '/api/reports', (req) => {
+    const today = localDate(ctx.now().getTime(), ctx.tz);
+    return report(ctx, req.query.get('from') ?? today, req.query.get('to') ?? today);
   });
   authed('GET', '/api/workload', (req) => workload(ctx, (req.query.get('horizon') ?? 'today') as Horizon));
 

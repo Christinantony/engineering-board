@@ -2,8 +2,10 @@
 
 An internal workboard for the mechanical design team. It combines a Kanban board, lightweight job tickets and team workload, and runs on one PC on the office LAN.
 
-> **Status: Phase 3 of 9.** The board is usable: Kanban with drag and drop, job panel, quick create, claiming, live updates.
-> Today, My work, Dashboard and Workload pages arrive in Phase 4 (their APIs already exist).
+> **Status: Phase 4 of 9.** The board and every operational page work:
+> - Board, Today, My work, Dashboard, Workload and Reports.
+> - Filters, which are kept in the URL.
+> - Instant search, opened with F or /.
 
 ## What it needs
 
@@ -25,8 +27,8 @@ There are **no npm packages and no native add-ons at runtime**. The whole server
 npm run build          # → dist/app/server.mjs + dist/app/web/
 npm start              # server from source on http://localhost:8080 (serves dist/app/web)
 npm run dev:web        # rebuild the web app on change
-npm test               # 42 backend tests (node:test)
-npm run e2e            # 6 browser tests (needs Playwright + Chromium; run npm run build first)
+npm test               # 43 backend tests (node:test)
+npm run e2e            # 10 browser tests (needs Playwright + Chromium; run npm run build first)
 npm run typecheck      # server and web
 npm run seed:demo      # add demo jobs  (…-- --clear to remove them)
 ```
@@ -44,6 +46,8 @@ Configuration comes from `config.json` next to the `app` folder, or from environ
 | `host` | `EB_HOST` | `0.0.0.0` (reachable on the LAN) |
 | `dataDir` | `EB_DATA_DIR` | `./data` |
 | `timezone` | `EB_TIMEZONE` | `Asia/Kolkata` |
+| `hoursPerDay` | n/a | `8`: the reference line on the Workload page |
+| `workingDays` | n/a | `[1,2,3,4,5,6]`: Monday to Saturday (0 is Sunday) |
 
 ## Layout
 

@@ -10,7 +10,14 @@ import { Badge, ErrorBox, Spinner } from './components/bits.tsx';
 import { DialogHost, Toasts } from './components/Overlays.tsx';
 import { QuickCreate } from './components/QuickCreate.tsx';
 import { TicketPanel } from './components/TicketPanel.tsx';
-import { Board } from './views/Board.tsx';
+import { SearchBox } from './components/SearchBox.tsx';
+import { BoardPage } from './views/BoardPage.tsx';
+import { Dashboard } from './views/Dashboard.tsx';
+import { MyWork } from './views/MyWork.tsx';
+import { Reports } from './views/Reports.tsx';
+import { Search } from './views/Search.tsx';
+import { Today } from './views/Today.tsx';
+import { Workload } from './views/Workload.tsx';
 
 const NAV = [
   { path: '/board', label: 'Board', key: 'b' },
@@ -18,7 +25,18 @@ const NAV = [
   { path: '/my-work', label: 'My work', key: 'm' },
   { path: '/dashboard', label: 'Dashboard', key: 'd' },
   { path: '/workload', label: 'Workload', key: 'w' },
+  { path: '/reports', label: 'Reports', key: 'r' },
 ];
+
+const VIEWS: Record<string, () => any> = {
+  '/board': BoardPage,
+  '/today': Today,
+  '/my-work': MyWork,
+  '/dashboard': Dashboard,
+  '/workload': Workload,
+  '/reports': Reports,
+  '/search': Search,
+};
 
 export function App() {
   const session = useQuery<{ user: User | null }>('/api/session');
@@ -177,6 +195,7 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
             ))}
           </nav>
           <span className="spacer" />
+          <SearchBox />
           <span className={`live live-${live}`} title={live === 'live' ? 'Changes from your team appear automatically' : 'Trying to reconnect to the server'}>
             <span className="live-dot" aria-hidden="true" />
             {live === 'live' ? 'Live' : live === 'connecting' ? 'Reconnecting…' : 'Offline'}
@@ -202,7 +221,7 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
         )}
 
         <main className="main">
-          {path === '/board' || path === '/' ? <Board /> : <ComingSoon path={path} />}
+          <View path={path} />
         </main>
 
         {jobId && <TicketPanel id={jobId} onClose={() => setJob(null)} />}
@@ -214,18 +233,18 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
   );
 }
 
-function ComingSoon({ path }: { path: string }) {
-  const n = NAV.find((x) => x.path === path);
-  return (
-    <div className="center-screen">
-      <div className="error-box">
-        <p>
-          <strong>{n?.label ?? 'This page'}</strong> is part of Phase 4 and isn't built yet.
-        </p>
-        <button className="btn" onClick={() => navigate('/board')}>
-          Back to the board
-        </button>
+function View({ path }: { path: string }) {
+  const V = VIEWS[path] ?? (path === '/' ? BoardPage : null);
+  if (!V)
+    return (
+      <div className="center-screen">
+        <div className="error-box">
+          <p>There's no page at {path}.</p>
+          <button className="btn" onClick={() => navigate('/board')}>
+            Go to the board
+          </button>
+        </div>
       </div>
-    </div>
-  );
+    );
+  return <V />;
 }
