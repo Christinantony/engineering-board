@@ -63,6 +63,8 @@ Every page has a one-key shortcut. Press <kbd>?</kbd> anywhere for the full list
 
 **A8 Drawing review.** The queue, and the workspace with the signed reference on the left and the submitted drawing on the right, each with its own page, zoom and rotation. The open comment blocks **Pass board review** until it is resolved.
 
+![Submitting drawings for board review: the signed reference scan, one single-page PDF per drawing, its number, type and change notes](assets/screenshots/review-submit.png)
+
 ![Drawing review queue: counts, tabs, and a preview of the submission](assets/screenshots/review-queue.png)
 
 ![Drawing review workspace: signed reference and submitted drawing side by side, revision notes, reviewer comments](assets/screenshots/review-workspace.png)
@@ -135,6 +137,8 @@ Drawing review: engineers submit drawings, mark prints handed over and record si
 | **D3** | **Export to CSV** | What a search shows, ready for Excel. Opens correctly with accents and guards against formula injection. |
 | **D4** | **Full export** | **Admin → Export:** every job as CSV, or everything with full history as JSON. |
 
+![Search for "housing": matches any part of a word, with the same filters as the board and an Export to CSV link](assets/screenshots/search.png)
+
 ## E. Administration
 
 Behind the admin PIN, unlocked per browser for 12 hours. The PIN starts as `1234`; change it on day one. The PIN is separate from the sign-in passwords (E9): it unlocks Admin for anyone signed in who knows it.
@@ -150,6 +154,8 @@ Behind the admin PIN, unlocked per browser for 12 hours. The PIN starts as `1234
 | **E7** | **Admin PIN** | Change it. If it is forgotten, put an empty file named `RESET-ADMIN-PIN` next to `start.bat` and restart. |
 | **E9** | **Passwords** | Everyone signs in with their own password, created at their first sign-in and changeable from the account menu. Admins reset a forgotten one (the person creates a new one next time). If everyone is locked out, an empty file named `RESET-PASSWORDS` next to `start.bat` clears them all on the next start. |
 | **E8** | **Demo data** | Twelve example jobs across every column, removable in one click without touching real jobs. |
+
+![The sign-in screen: pick your name, then enter or create your password; the theme can be chosen before signing in](assets/screenshots/sign-in.png)
 
 ![Admin → Team: role, badge colour, admin menu, active, and password reset per person](assets/screenshots/admin.png)
 
