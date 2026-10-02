@@ -126,10 +126,17 @@ export function migrate(db: Db): { applied: number[] } {
   const applied: number[] = [];
   for (const m of [...migrations].sort((a, b) => a.id - b.id)) {
     if (done.has(m.id)) continue;
-    tx(db, () => {
-      db.exec(m.sql);
-      run(db, 'INSERT INTO schema_migrations (id, name, applied_at) VALUES (?, ?, ?)', m.id, m.name, new Date().toISOString());
-    });
+    if (m.rebuildsTables) db.exec('PRAGMA foreign_keys = OFF');
+    try {
+      tx(db, () => {
+        db.exec(m.sql);
+        if (m.rebuildsTables && all(db, 'PRAGMA foreign_key_check').length)
+          throw new Error(`Database upgrade ${m.id} (${m.name}) would break references between tables; nothing was changed.`);
+        run(db, 'INSERT INTO schema_migrations (id, name, applied_at) VALUES (?, ?, ?)', m.id, m.name, new Date().toISOString());
+      });
+    } finally {
+      if (m.rebuildsTables) db.exec('PRAGMA foreign_keys = ON');
+    }
     applied.push(m.id);
   }
   return { applied };

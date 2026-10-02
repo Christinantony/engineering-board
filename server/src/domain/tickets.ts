@@ -107,6 +107,9 @@ function log(
   );
 }
 
+/** Append to a job's history (used by the review workflow too). */
+export const logActivity = log;
+
 const ACTIVITY_SELECT = `
   SELECT a.*, u.name AS user_name, t.job_number, t.title AS ticket_title
   FROM activity a
@@ -156,7 +159,7 @@ function requireAssignable(ctx: Ctx, userId: number): User {
   const u = getUser(ctx, userId);
   if (!u) throw badRequest('That engineer does not exist');
   if (!u.active) throw badRequest(`${u.name} is inactive and cannot be assigned work`);
-  if (u.role !== 'engineer') throw badRequest(`${u.name} is a manager; only engineers can be assigned jobs`);
+  if (u.role !== 'engineer') throw badRequest(`${u.name} is a ${u.role}; only engineers can be assigned jobs`);
   return u;
 }
 
@@ -204,7 +207,7 @@ function touch(ctx: Ctx, id: number) {
   run(ctx.db, 'UPDATE tickets SET updated_at = ?, version = version + 1 WHERE id = ?', nowIso(ctx), id);
 }
 
-function emitTicket(ctx: Ctx, id: number, by: number | null) {
+export function emitTicket(ctx: Ctx, id: number, by: number | null) {
   const v = get<{ version: number }>(ctx.db, 'SELECT version FROM tickets WHERE id = ?', id)?.version;
   ctx.events.emit({ type: 'ticket', id, version: v, by });
 }
@@ -440,6 +443,20 @@ export function moveTicket(ctx: Ctx, actor: User, id: number, input: unknown): T
         }
       } else {
         waitingFor = '';
+      }
+      if (target === 'done') {
+        // Drawings under board review must be physically signed first (decision #26).
+        const pending = all<{ identifier: string }>(
+          ctx.db,
+          `SELECT identifier FROM review_drawings WHERE ticket_id = ? AND required = 1 AND state <> 'signed' ORDER BY identifier`,
+          id,
+        );
+        if (pending.length)
+          throw new HttpError(
+            409,
+            'signatures_pending',
+            `${row.job_number} can't be Done yet: ${pending.length === 1 ? '1 drawing still needs' : `${pending.length} drawings still need`} a physical signature (${pending.map((p) => p.identifier).join(', ')}). Record the signatures in Review first.`,
+          );
       }
       const startedAt = target === 'in_progress' ? row.started_at ?? now : row.started_at;
       const completedAt = target === 'done' ? now : CLOSED_STATUSES.includes(target) ? row.completed_at : null;

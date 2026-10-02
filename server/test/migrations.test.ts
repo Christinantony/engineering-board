@@ -13,23 +13,11 @@ import { join } from 'node:path';
 import { openDb, migrate, all, get, run, SCHEMA_VERSION, pendingMigrations } from '../src/db/connection.ts';
 import { migrations } from '../src/db/migrations.ts';
 import { createApp } from '../src/app.ts';
-import { startHarness, Client, type Harness } from './helpers.ts';
-
-/** What undoes each migration, to rebuild the database an older version wrote. */
-const UNDO: Record<number, string> = {
-  2: 'DROP TABLE user_state;',
-  3: 'DROP TABLE imports;',
-  4: `UPDATE users SET color = '#059669' WHERE color = '#047857';
-      UPDATE users SET color = '#d97706' WHERE color = '#b45309';`,
-};
+import { startHarness, Client, UNDO, undoMigrationsAfter, type Harness } from './helpers.ts';
 
 function downgrade(dbPath: string, to: number) {
   const db = openDb(dbPath);
-  for (const id of Object.keys(UNDO).map(Number).sort((a, b) => b - a)) {
-    if (id <= to) continue;
-    db.exec(UNDO[id]);
-    run(db, 'DELETE FROM schema_migrations WHERE id = ?', id);
-  }
+  undoMigrationsAfter(db, to);
   db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
   db.close();
 }

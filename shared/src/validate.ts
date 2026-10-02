@@ -251,3 +251,45 @@ export const jobTypeSchema = v.object({
   sort_order: v.optional(v.int({ min: 0, max: 10_000 })),
   active: v.optional(v.bool()),
 });
+
+// ---------- Drawing review ----------
+
+const sha = v.string({ min: 64, max: 64, pattern: /^[0-9a-f]{64}$/, patternMessage: 'must be a file reference from an upload' });
+const filename = v.string({ min: 1, max: 255 });
+export const identifierField = v.string({ min: 1, max: 100, pattern: /^[^\\/:*?"<>|]+$/, patternMessage: 'cannot contain \\ / : * ? " < > |' });
+
+export const reviewSubmissionSchema = v.object({
+  references: v.withDefault(v.array(v.object({ sha256: sha, filename }), { max: 10 }), []),
+  drawings: v.array(
+    v.object({
+      sha256: sha,
+      filename,
+      /** Defaults to the file name without ".pdf". */
+      identifier: v.optional(identifierField),
+      kind: v.withDefault(v.enum(['revision', 'new'] as const), 'revision'),
+      notes: v.string({ min: 1, max: 5000 }),
+      /** Optional reference bookmark chosen while preparing the submission. */
+      ref_sha256: v.optional(v.nullable(sha)),
+      ref_page: v.optional(v.nullable(v.int({ min: 1, max: 100_000 }))),
+    }),
+    { max: 50 },
+  ),
+});
+export type ReviewSubmissionInput = Infer<typeof reviewSubmissionSchema>;
+
+export const referenceAttachSchema = v.object({ sha256: sha, filename });
+export const bookmarkSchema = v.object({
+  reference_id: v.nullable(v.int({ min: 1 })),
+  page: v.nullable(v.int({ min: 1, max: 100_000 })),
+});
+export const decisionSchema = v.object({
+  attempt_id: v.int({ min: 1 }),
+  outcome: v.enum(['passed', 'returned'] as const),
+  note: v.withDefault(v.string({ max: 5000 }), ''),
+});
+export const reviewCommentSchema = v.object({
+  body: v.string({ min: 1, max: 5000 }),
+  attempt_id: v.optional(v.nullable(v.int({ min: 1 }))),
+});
+export const reviewTextSchema = v.object({ body: v.withDefault(v.string({ max: 5000 }), '') });
+export const drawingEditSchema = v.object({ identifier: identifierField });

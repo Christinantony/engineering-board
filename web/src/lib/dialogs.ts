@@ -8,6 +8,7 @@ export type DialogSpec =
   | { type: 'assign'; ticket: Ticket; title: string }
   | { type: 'confirm'; title: string; body: string; confirm: string; danger?: boolean }
   | { type: 'conflict'; field: string; jobNumber: string; mine: string; theirs: string; canCombine: boolean }
+  | { type: 'text'; title: string; body: string; label: string; confirm: string; required?: boolean; danger?: boolean }
   | { type: 'help' };
 
 export type DialogAnswer<S extends DialogSpec> = S extends { type: 'reason' }
@@ -16,7 +17,9 @@ export type DialogAnswer<S extends DialogSpec> = S extends { type: 'reason' }
     ? number
     : S extends { type: 'conflict' }
       ? 'mine' | 'theirs' | 'both'
-      : true;
+      : S extends { type: 'text' }
+        ? string
+        : true;
 
 interface Open {
   spec: DialogSpec;

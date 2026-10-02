@@ -10,6 +10,11 @@
 // day (the host is a workstation that may be off at night), plus one before
 // every restore and every CSV import, and before a new version of the board
 // upgrades the database schema.
+//
+// Drawing-review PDFs are files next to the database (data/review-files). Each
+// backup copies any it doesn't have yet into <backupDir>/review-files and lists
+// the ones it needs in "<backup>.review-files.txt"; a restore puts back any
+// listed file missing from the live folder.
 
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, statSync, copyFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
@@ -19,6 +24,7 @@ import { HttpError, badRequest, type Ctx } from '../lib/core.ts';
 import { localDate } from '../lib/time.ts';
 import { ensureAuthSettings, getSetting, setSetting } from './auth.ts';
 import { rebuildIndex } from './search.ts';
+import { backupReviewFiles, manifestFor, pruneBackupStore, restoreReviewFiles } from './reviewStore.ts';
 
 export type BackupKind = 'daily' | 'manual' | 'pre-restore' | 'pre-import' | 'pre-upgrade' | 'shutdown';
 export const BACKUP_RE = /^board-(\d{4}-\d{2}-\d{2})_(\d{6})-(daily|manual|pre-restore|pre-import|pre-upgrade|shutdown)\.db$/;
@@ -74,6 +80,8 @@ export function backupNow(ctx: BackupCtx, kind: BackupKind): BackupInfo {
   ctx.db.exec(`VACUUM INTO '${tmp.replace(/'/g, "''")}'`);
   verifyDatabaseFile(tmp); // never keep a backup we couldn't restore from
   renameSync(tmp, target);
+  // drawing-review PDFs live next to the database, not in it: copy them too
+  backupReviewFiles(ctx, ctx.backupDir, target);
   if (kind === 'daily') setSetting(ctx, 'last_daily_backup', localDate(ctx.now().getTime(), ctx.tz));
   const st = statSync(target);
   return { name, kind, size: st.size, created_at: st.mtime.toISOString() };
@@ -92,9 +100,12 @@ export function pruneBackups(ctx: BackupCtx): string[] {
     const date = BACKUP_RE.exec(b.name)![1];
     if (Date.parse(`${date}T23:59:59Z`) < cutoff) {
       rmSync(join(ctx.backupDir, b.name), { force: true });
+      rmSync(manifestFor(join(ctx.backupDir, b.name)), { force: true });
       removed.push(b.name);
     }
   });
+  // review PDFs no remaining backup needs (intermediates kept until their backups expire)
+  pruneBackupStore(ctx.backupDir, (name) => BACKUP_RE.test(name));
   return removed;
 }
 
@@ -192,7 +203,7 @@ export function verifyDatabaseFile(path: string): { tickets: number; activity: n
  * Sessions and the admin PIN of the running board are kept, so nobody is
  * signed out and the person restoring keeps admin access.
  */
-export function restoreFrom(ctx: BackupCtx, sourcePath: string): { tickets: number; safety_backup: string } {
+export function restoreFrom(ctx: BackupCtx, sourcePath: string): { tickets: number; safety_backup: string; review_files_missing: number } {
   verifyDatabaseFile(sourcePath);
   const keep = {
     cookie_secret: getSetting(ctx, 'cookie_secret')!,
@@ -249,8 +260,10 @@ export function restoreFrom(ctx: BackupCtx, sourcePath: string): { tickets: numb
       for (const [key, value] of Object.entries(keep)) {
         if (getSetting(ctx, key) !== value) throw new Error(`Restored ${key} did not match the running board`);
       }
+      // put back review PDFs the restored data needs, from the backup store
+      const files = restoreReviewFiles(ctx, ctx.backupDir);
       ctx.events.emit({ type: 'reload' });
-      return { tickets: check.tickets, safety_backup: safety.name };
+      return { tickets: check.tickets, safety_backup: safety.name, review_files_missing: files.missing };
     } catch (e) {
       if (closed || !ctx.db.isOpen) {
         try {

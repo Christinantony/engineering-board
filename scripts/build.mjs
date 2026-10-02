@@ -10,6 +10,11 @@ import { writeGuides } from './lib/guides.mjs';
 const watch = process.argv.includes('--watch');
 const only = process.argv.find((a) => a === '--web-only' || a === '--server-only');
 const version = JSON.parse(readFileSync('package.json', 'utf8')).version;
+// The PDF viewer for drawing review (decision #23): pdf.js, copied from the
+// devDependency into the web assets under a versioned folder. It runs in the
+// browser only; the server still has no dependencies.
+const pdfjsVersion = JSON.parse(readFileSync('node_modules/pdfjs-dist/package.json', 'utf8')).version;
+const pdfjsBase = `/assets/pdfjs-${pdfjsVersion}/`;
 
 const serverOpts = {
   entryPoints: ['server/src/index.ts'],
@@ -36,7 +41,7 @@ const webOpts = {
   minify: !watch,
   sourcemap: watch ? 'inline' : false,
   legalComments: 'linked',
-  define: { 'process.env.NODE_ENV': JSON.stringify(watch ? 'development' : 'production') },
+  define: { 'process.env.NODE_ENV': JSON.stringify(watch ? 'development' : 'production'), __PDFJS_BASE__: JSON.stringify(pdfjsBase) },
   logLevel: 'info',
 };
 
@@ -46,6 +51,12 @@ function writeStatic() {
   const stamp = watch ? Date.now().toString(36) : version;
   writeFileSync('dist/app/web/index.html', readFileSync('web/index.html', 'utf8').replaceAll('__VERSION__', stamp));
   writeGuides('dist/app/web/guides', version); // served at /guides/user-guide.html
+  const pdfjsOut = `dist/app/web${pdfjsBase}`;
+  const src = 'node_modules/pdfjs-dist';
+  mkdirSync(pdfjsOut, { recursive: true });
+  // the "legacy" build carries polyfills, so older Edge/Chrome on office PCs can show drawings too
+  for (const f of ['legacy/build/pdf.min.mjs', 'legacy/build/pdf.worker.min.mjs', 'LICENSE']) cpSync(`${src}/${f}`, `${pdfjsOut}${f.split('/').pop()}`);
+  for (const d of ['wasm', 'standard_fonts', 'cmaps', 'iccs']) cpSync(`${src}/${d}`, `${pdfjsOut}${d}`, { recursive: true });
 }
 
 if (!watch && only !== '--server-only') rmSync('dist/app/web', { recursive: true, force: true });

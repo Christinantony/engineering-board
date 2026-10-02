@@ -2,7 +2,8 @@
 // static files. Kept deliberately small — about what Fastify gave us, minus
 // the dependency.
 
-import { createReadStream, existsSync, statSync, mkdtempSync, rmSync } from 'node:fs';
+import { createReadStream, existsSync, statSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { open } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';
@@ -19,8 +20,8 @@ export interface Request {
   cookies: Record<string, string>;
   body: unknown;
   rawBody: string;
-  /** A streamed database upload. Removed by the HTTP handler after use. */
-  upload?: { path: string; dir: string; bytes: number };
+  /** A streamed upload (database or PDF). Removed by the HTTP handler after use. */
+  upload?: { path: string; dir: string; bytes: number; sha256?: string };
   headers: IncomingMessage['headers'];
 }
 
@@ -189,16 +190,17 @@ export async function readRequestBody(req: Request): Promise<void> {
 }
 
 /** Header checks also run before an Expect: 100-continue response or creating a file. */
-export function checkUploadHeaders(req: Request, maxBytes: number): void {
-  if (String(req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase() !== 'application/octet-stream')
-    throw new HttpError(415, 'unsupported_media_type', 'Send a backup file (Content-Type: application/octet-stream).');
+export function checkUploadHeaders(req: Request, maxBytes: number, what = 'a backup file (.db)'): void {
+  const type = String(req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
+  if (type !== 'application/octet-stream' && !(what.includes('PDF') && type === 'application/pdf'))
+    throw new HttpError(415, 'unsupported_media_type', `Send ${what} (Content-Type: application/octet-stream).`);
   const length = req.headers['content-length'];
   if (length !== undefined) {
     const n = Number(length);
     if (!/^\d+$/.test(length) || !Number.isSafeInteger(n))
       throw new HttpError(400, 'bad_request', 'Invalid upload size.');
     if (n > maxBytes) throw uploadTooLarge(maxBytes);
-    if (n === 0) throw new HttpError(400, 'bad_request', 'Choose a backup file (.db) to upload.');
+    if (n === 0) throw new HttpError(400, 'bad_request', `Choose ${what} to upload.`);
   }
 }
 
@@ -243,6 +245,47 @@ export async function streamUpload(req: Request, dataDir: string, maxBytes: numb
   }
 }
 
+/**
+ * Stream a PDF upload to a private folder while hashing it (SHA-256), so the
+ * exact bytes received are what the board stores and reviews.
+ */
+export async function streamPdfUpload(req: Request, storeDir: string, maxBytes: number): Promise<void> {
+  checkUploadHeaders(req, maxBytes, 'a PDF file');
+  mkdirSync(storeDir, { recursive: true });
+  const dir = mkdtempSync(join(storeDir, '.incoming-'));
+  const path = join(dir, 'upload.pdf');
+  const hash = createHash('sha256');
+  let file: Awaited<ReturnType<typeof open>> | undefined;
+  let bytes = 0;
+  let header = Buffer.alloc(0);
+  try {
+    file = await open(path, 'wx', 0o600);
+    for await (const chunk of req.raw.iterator({ destroyOnReturn: false })) {
+      const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      bytes += data.length;
+      if (bytes > maxBytes) throw uploadTooLarge(maxBytes);
+      if (header.length < 1024) header = Buffer.concat([header, data.subarray(0, 1024 - header.length)]);
+      hash.update(data);
+      let written = 0;
+      while (written < data.length) {
+        const part = await file.write(data, written, data.length - written);
+        if (!part.bytesWritten) throw new Error('The upload could not be written to disk.');
+        written += part.bytesWritten;
+      }
+    }
+    if (!bytes) throw new HttpError(400, 'bad_request', 'Choose a PDF file to upload.');
+    if (!header.includes('%PDF-')) throw new HttpError(400, 'not_pdf', "That file isn't a PDF. Attach the drawing as a PDF.");
+    await file.sync();
+    await file.close();
+    file = undefined;
+    req.upload = { path, dir, bytes, sha256: hash.digest('hex') };
+  } catch (e) {
+    await file?.close().catch(() => {});
+    rmSync(dir, { recursive: true, force: true });
+    throw e;
+  }
+}
+
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -254,6 +297,12 @@ const MIME: Record<string, string> = {
   '.ico': 'image/x-icon',
   '.woff2': 'font/woff2',
   '.txt': 'text/plain; charset=utf-8',
+  // the bundled PDF viewer (decision #23)
+  '.wasm': 'application/wasm',
+  '.pfb': 'application/octet-stream',
+  '.ttf': 'font/ttf',
+  '.bcmap': 'application/octet-stream',
+  '.icc': 'application/vnd.iccprofile',
 };
 
 export function serveStatic(root: string, raw: IncomingMessage, res: ServerResponse, path: string): boolean {
@@ -272,7 +321,12 @@ export function serveStatic(root: string, raw: IncomingMessage, res: ServerRespo
     'Content-Type': MIME[extname(file)] ?? 'application/octet-stream',
     'Cache-Control': isHtml ? 'no-cache' : 'public, max-age=31536000, immutable',
     ...(isHtml
-      ? { 'Content-Security-Policy': "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'" }
+      ? {
+          // 'wasm-unsafe-eval' lets the bundled PDF viewer compile its image decoders
+          // (JBIG2, JPEG 2000) for scanned drawings; it does not allow JavaScript eval.
+          'Content-Security-Policy':
+            "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; worker-src 'self'",
+        }
       : {}),
   });
   if (raw.method === 'HEAD') res.end();

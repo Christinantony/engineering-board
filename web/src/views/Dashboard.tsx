@@ -50,6 +50,18 @@ export function activitySentence(a: Activity): string {
       return `${who} archived`;
     case 'restored':
       return `${who} restored`;
+    case 'review_submitted':
+      return `${who} submitted drawings for board review: ${a.body ?? ''}`;
+    case 'review_passed':
+      return `${who} passed ${a.to_value} in board review`;
+    case 'review_returned':
+      return `${who} returned ${a.to_value} for correction`;
+    case 'review_comment':
+      return `${who} commented on ${a.to_value}: “${(a.body ?? '').slice(0, 80)}${(a.body ?? '').length > 80 ? '…' : ''}”`;
+    case 'review_handover':
+      return `${who} handed a print to ${a.to_value} for signature`;
+    case 'review_signed':
+      return `${who} recorded the physical signature of ${a.to_value}`;
     default:
       return `${who}: ${a.kind}`;
   }

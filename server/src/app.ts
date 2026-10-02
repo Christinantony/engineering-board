@@ -1,7 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import { STATUSES, PRIORITIES, ESTIMATE_BUCKETS, STATUS_LABEL, type User } from '@board/shared';
 import { v } from '@board/shared';
-import { openDb, migrate, pendingMigrations, run, all } from './db/connection.ts';
+import { openDb, migrate, pendingMigrations, run, all, tx } from './db/connection.ts';
 import { createReadStream } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { seedBase, seedDemo, clearDemo, hasDemoData } from './db/seed.ts';
@@ -15,6 +15,7 @@ import {
   readRequestBody,
   checkUploadHeaders,
   streamUpload,
+  streamPdfUpload,
   DEFAULT_RESTORE_UPLOAD_MAX_MB,
   cookie,
   errorToReply,
@@ -68,9 +69,35 @@ import {
   type BackupCtx,
 } from './domain/backup.ts';
 import { archiveOld, commitImport, deleteTag, exportCsv, exportJson, importTemplate, listTags, previewImport, renameTag } from './domain/transfer.ts';
-import { rmSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
+import type { ReviewWorkspace } from '@board/shared';
+import { inspectPdf, PdfError } from './domain/pdf.ts';
+import { collectUnusedUploads, ingest, storeDir } from './domain/reviewStore.ts';
+import {
+  addReference,
+  addReviewComment,
+  cleanupDrawing,
+  decide,
+  handover,
+  markSigned,
+  renameDrawing,
+  resolveComment,
+  respondToComment,
+  reviewQueue,
+  runPendingCleanups,
+  servableBlob,
+  setBookmark,
+  submit,
+  withdraw,
+  workspace,
+  type QueueTab,
+} from './domain/reviews.ts';
+import { jobsNeedingSync, markSyncPending, revisionLog, settleSyncs, syncProjectFolder } from './domain/projectFolder.ts';
 
-export const APP_VERSION = '1.0.2';
+/** Default maximum PDF upload for drawing review (merged signed scans can be large). */
+export const DEFAULT_REVIEW_UPLOAD_MAX_MB = 200;
+
+export const APP_VERSION = '1.1.0';
 
 export interface AppOptions {
   dbPath: string;
@@ -89,6 +116,10 @@ export interface AppOptions {
   restoreUploadMaxMB?: number;
   /** Take the daily backup automatically (off in tests). */
   autoBackup?: boolean;
+  /** Maximum PDF upload for drawing review, in MiB (default 200; 1..2048). */
+  reviewUploadMaxMB?: number;
+  /** Retry project-folder copies and clean-ups in the background (off in tests). */
+  reviewMaintenance?: boolean;
 }
 
 export interface App {
@@ -109,6 +140,10 @@ export function createApp(opts: AppOptions): App {
   if (!Number.isInteger(uploadMaxMB) || uploadMaxMB < 1 || uploadMaxMB > 1024)
     throw new Error('restoreUploadMaxMB must be a whole number from 1 to 1024.');
   const uploadMaxBytes = uploadMaxMB * 1048576;
+  const reviewMaxMB = opts.reviewUploadMaxMB ?? DEFAULT_REVIEW_UPLOAD_MAX_MB;
+  if (!Number.isInteger(reviewMaxMB) || reviewMaxMB < 1 || reviewMaxMB > 2048)
+    throw new Error('reviewUploadMaxMB must be a whole number from 1 to 2048.');
+  const reviewMaxBytes = reviewMaxMB * 1048576;
   const ctx: BackupCtx = {
     db: openDb(opts.dbPath),
     tz: opts.tz ?? 'Asia/Kolkata',
@@ -153,6 +188,35 @@ export function createApp(opts: AppOptions): App {
     timers.push(setTimeout(maintenance, 60_000));
     timers.push(setInterval(maintenance, 3600_000));
   }
+  // drawing review: finish clean-ups and project-folder copies that failed
+  // (a share that was offline, say), and forget uploads never submitted
+  const reviewMaintenance = () => {
+    try {
+      runPendingCleanups(ctx);
+      collectUnusedUploads(ctx);
+      for (const id of jobsNeedingSync(ctx)) void syncProjectFolder(ctx, id);
+    } catch (e) {
+      console.error('Drawing review maintenance failed:', (e as Error).message);
+    }
+  };
+  if (opts.reviewMaintenance) {
+    timers.push(setTimeout(reviewMaintenance, 30_000));
+    timers.push(setInterval(reviewMaintenance, 5 * 60_000));
+  }
+  /** After a review change commits: clean up (if a drawing passed), then update the project folder. */
+  const afterReview = (ticketId: number, cleanupDrawingId?: number) => {
+    markSyncPending(ctx, ticketId);
+    setImmediate(() => {
+      if (!ctx.db.isOpen) return;
+      try {
+        if (cleanupDrawingId) cleanupDrawing(ctx, cleanupDrawingId);
+        ctx.events.flush();
+      } catch (e) {
+        console.error('Review clean-up failed:', (e as Error).message);
+      }
+      void syncProjectFolder(ctx, ticketId);
+    });
+  };
 
   const presence = new Presence(ctx.events, () => ctx.now().getTime());
   const router = new Router();
@@ -181,6 +245,12 @@ export function createApp(opts: AppOptions): App {
   }
   const admin = (method: string, path: string, h: (req: Request, user: User) => unknown) =>
     router.add(method, path, (req) => h(req, requireAdmin(req)));
+  /** Job editing routes: reviewers look, comment and review, but don't change jobs (decision #24). */
+  const worker = (method: string, path: string, h: (req: Request, user: User) => unknown) =>
+    authed(method, path, (req, user) => {
+      if (user.role === 'reviewer') throw forbidden('Reviewers can comment on jobs and review drawings, but not create or change jobs.');
+      return h(req, user);
+    });
 
   // ---- public ----
   pub('GET', '/api/health', () => ({ ok: true, version: APP_VERSION, time: ctx.now().toISOString() }));
@@ -218,22 +288,97 @@ export function createApp(opts: AppOptions): App {
 
   // ---- tickets ----
   authed('GET', '/api/tickets', (req) => listTickets(ctx, parseFilters(req.query)));
-  authed('POST', '/api/tickets', (req, user) => {
+  worker('POST', '/api/tickets', (req, user) => {
     const key = req.headers['idempotency-key'];
     const k = typeof key === 'string' && key.length >= 8 && key.length <= 100 ? key : undefined;
     const { ticket, replayed } = createTicket(ctx, user, req.body ?? {}, k);
     return new Reply(replayed ? 200 : 201, { ticket, replayed });
   });
   authed('GET', '/api/tickets/:id', (req) => ({ ticket: getTicket(ctx, id(req)), activity: ticketActivity(ctx, id(req)) }));
-  authed('PATCH', '/api/tickets/:id', (req, user) => ({ ticket: updateTicket(ctx, user, id(req), req.body ?? {}) }));
-  authed('POST', '/api/tickets/:id/move', (req, user) => ({ ticket: moveTicket(ctx, user, id(req), req.body ?? {}) }));
-  authed('POST', '/api/tickets/:id/claim', (req, user) => ({ ticket: claimTicket(ctx, user, id(req)) }));
-  authed('POST', '/api/tickets/:id/release', (req, user) => ({ ticket: releaseTicket(ctx, user, id(req)) }));
-  authed('POST', '/api/tickets/:id/my-rank', (req, user) => ({ ticket: setMyRank(ctx, user, id(req), req.body ?? {}) }));
+  worker('PATCH', '/api/tickets/:id', (req, user) => ({ ticket: updateTicket(ctx, user, id(req), req.body ?? {}) }));
+  worker('POST', '/api/tickets/:id/move', (req, user) => ({ ticket: moveTicket(ctx, user, id(req), req.body ?? {}) }));
+  worker('POST', '/api/tickets/:id/claim', (req, user) => ({ ticket: claimTicket(ctx, user, id(req)) }));
+  worker('POST', '/api/tickets/:id/release', (req, user) => ({ ticket: releaseTicket(ctx, user, id(req)) }));
+  worker('POST', '/api/tickets/:id/my-rank', (req, user) => ({ ticket: setMyRank(ctx, user, id(req), req.body ?? {}) }));
   authed('POST', '/api/tickets/:id/comments', (req, user) => new Reply(201, { activity: addComment(ctx, user, id(req), req.body ?? {}) }));
-  authed('POST', '/api/tickets/:id/archive', (req, user) => ({ ticket: archiveTicket(ctx, user, id(req)) }));
-  authed('POST', '/api/tickets/:id/restore', (req, user) => ({ ticket: restoreTicket(ctx, user, id(req)) }));
+  worker('POST', '/api/tickets/:id/archive', (req, user) => ({ ticket: archiveTicket(ctx, user, id(req)) }));
+  worker('POST', '/api/tickets/:id/restore', (req, user) => ({ ticket: restoreTicket(ctx, user, id(req)) }));
   authed('GET', '/api/tickets/:id/activity', (req) => ({ activity: ticketActivity(ctx, id(req)) }));
+
+  // ---- drawing review ----
+  const did = (req: Request) => v.int({ min: 1 })(req.params.id, 'id');
+  authed('GET', '/api/reviews', (req, user) => {
+    const tab = (req.query.get('tab') ?? 'awaiting') as QueueTab;
+    if (!['awaiting', 'returned', 'signature', 'done', 'all'].includes(tab)) throw new HttpError(400, 'bad_request', 'Unknown review tab');
+    return reviewQueue(ctx, user, tab, (req.query.get('q') ?? '').slice(0, 100));
+  });
+  authed('POST', '/api/review/uploads', (req) => {
+    // streamed and hashed before this runs (see handleRequest)
+    const up = req.upload!;
+    const filename = (req.query.get('name') ?? 'drawing.pdf').replace(/^.*[\\/]/, '').slice(0, 255) || 'drawing.pdf';
+    let pages: number;
+    try {
+      pages = inspectPdf(readFileSync(up.path)).pages;
+    } catch (e) {
+      if (e instanceof PdfError) throw new HttpError(400, 'bad_pdf', `${filename}: ${e.message}`);
+      throw e;
+    }
+    if (req.query.get('kind') === 'drawing' && pages !== 1)
+      throw new HttpError(
+        400,
+        'not_single_page',
+        `${filename} has ${pages} pages. Each drawing submitted for board review must be a single-page PDF: export each sheet on its own.`,
+      );
+    tx(ctx.db, () => ingest(ctx, up.path, up.sha256!, pages));
+    return new Reply(201, { file: { sha256: up.sha256, filename, size: up.bytes, pages } });
+  });
+  authed('GET', '/api/review-files/:sha', (req) => {
+    const f = servableBlob(ctx, req.params.sha);
+    req.res.writeHead(200, {
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="${f.filename.replace(/[^\w .()-]/g, '_')}"`,
+      // named by content: the bytes behind this address never change
+      'Cache-Control': 'private, max-age=31536000, immutable',
+      'X-Content-Type-Options': 'nosniff',
+    });
+    createReadStream(f.path).pipe(req.res);
+    return HANDLED;
+  });
+  authed('GET', '/api/tickets/:id/review', (req) => workspace(ctx, id(req)));
+  authed('GET', '/api/tickets/:id/review/log', (req) => {
+    const t = getTicket(ctx, id(req));
+    return new Reply(200, revisionLog(ctx, t.file_location, t.id), {
+      'Content-Type': 'text/markdown; charset=utf-8',
+      'Content-Disposition': `inline; filename="${t.job_number}-REVISION_LOG.md"`,
+    });
+  });
+  const reviewed = (ticketId: number, w: unknown, cleanup?: number) => {
+    afterReview(ticketId, cleanup);
+    return w;
+  };
+  authed('POST', '/api/tickets/:id/review/submissions', (req, user) => new Reply(201, reviewed(id(req), submit(ctx, user, id(req), req.body ?? {}))));
+  authed('POST', '/api/tickets/:id/review/references', (req, user) => reviewed(id(req), addReference(ctx, user, id(req), req.body ?? {})));
+  authed('POST', '/api/tickets/:id/review/sync', (req) => {
+    const t = getTicket(ctx, id(req));
+    afterReview(t.id);
+    return { ok: true };
+  });
+  const onDrawing = (fn: (req: Request, user: User) => ReviewWorkspace) => (req: Request, user: User) => {
+    const w = fn(req, user);
+    return reviewed(w.ticket.id, w);
+  };
+  authed('PUT', '/api/review/drawings/:id/reference-page', onDrawing((req, user) => setBookmark(ctx, user, did(req), req.body ?? {})));
+  authed('POST', '/api/review/drawings/:id/decision', (req, user) => {
+    const r = decide(ctx, user, did(req), req.body ?? {});
+    return reviewed(r.workspace.ticket.id, r.workspace, r.cleanup ? did(req) : undefined);
+  });
+  authed('POST', '/api/review/drawings/:id/handover', onDrawing((req, user) => handover(ctx, user, did(req))));
+  authed('POST', '/api/review/drawings/:id/signed', onDrawing((req, user) => markSigned(ctx, user, did(req))));
+  authed('POST', '/api/review/drawings/:id/withdraw', onDrawing((req, user) => withdraw(ctx, user, did(req), req.body ?? {})));
+  authed('PATCH', '/api/review/drawings/:id', onDrawing((req, user) => renameDrawing(ctx, user, did(req), req.body ?? {})));
+  authed('POST', '/api/review/drawings/:id/comments', onDrawing((req, user) => addReviewComment(ctx, user, did(req), req.body ?? {})));
+  authed('POST', '/api/review/comments/:id/respond', onDrawing((req, user) => respondToComment(ctx, user, did(req), req.body ?? {})));
+  authed('POST', '/api/review/comments/:id/resolve', onDrawing((req, user) => resolveComment(ctx, user, did(req))));
 
   // ---- views ----
   authed('GET', '/api/activity', (req) => {
@@ -414,6 +559,13 @@ export function createApp(opts: AppOptions): App {
         checkUploadHeaders(req, uploadMaxBytes);
         if (raw.headers.expect?.toLowerCase() === '100-continue') res.writeContinue();
         await streamUpload(req, dirname(ctx.dbPath), uploadMaxBytes);
+      } else if (req.path === '/api/review/uploads' && req.method === 'POST') {
+        const who = currentUser(req); // before reading any bytes
+        if (!who) throw new HttpError(401, 'unauthenticated', 'Please choose who you are first.');
+        if (who.role !== 'engineer') throw forbidden('Only engineers attach drawings and signed scans for board review.');
+        checkUploadHeaders(req, reviewMaxBytes, 'a PDF file');
+        if (raw.headers.expect?.toLowerCase() === '100-continue') res.writeContinue();
+        await streamPdfUpload(req, storeDir(ctx), reviewMaxBytes);
       } else {
         if (raw.headers.expect?.toLowerCase() === '100-continue') res.writeContinue();
         await readRequestBody(req);
@@ -474,10 +626,14 @@ export function createApp(opts: AppOptions): App {
           if (ctx.db.isOpen) ctx.db.close();
           resolveClose();
         };
-        if (server.listening) {
-          server.close(done);
-          server.closeAllConnections?.();
-        } else done();
+        // let project-folder copies in progress finish (bounded), then close
+        const settled = Promise.race([settleSyncs(), new Promise((r) => setTimeout(r, 5000))]);
+        void settled.then(() => {
+          if (server.listening) {
+            server.close(done);
+            server.closeAllConnections?.();
+          } else done();
+        });
       });
       return closing;
     },

@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createApp, type App } from '../src/app.ts';
+import { run, type Db } from '../src/db/connection.ts';
 
 /** A controllable clock. Default: 2026-10-01 10:00 IST (04:30Z). */
 export class Clock {
@@ -62,6 +63,7 @@ export class Client {
   get = (p: string) => this.req('GET', p);
   post = (p: string, b: unknown = {}, h?: Record<string, string>) => this.req('POST', p, b, h);
   patch = (p: string, b: unknown) => this.req('PATCH', p, b);
+  put = (p: string, b: unknown) => this.req('PUT', p, b);
   del = (p: string) => this.req('DELETE', p);
 
   /** Create a ticket and return it (asserts success). */
@@ -106,4 +108,42 @@ export async function startHarness(clock = new Clock()): Promise<Harness> {
   }
   await boot();
   return h;
+}
+
+/** What undoes each migration, to rebuild the database an older version wrote. */
+export const UNDO: Record<number, string> = {
+  2: 'DROP TABLE user_state;',
+  3: 'DROP TABLE imports;',
+  4: `UPDATE users SET color = '#059669' WHERE color = '#047857';
+      UPDATE users SET color = '#d97706' WHERE color = '#b45309';`,
+  // version 4 wrote the users table with the two-role CHECK
+  5: `PRAGMA foreign_keys = OFF;
+      PRAGMA legacy_alter_table = ON;
+      ALTER TABLE users RENAME TO users_v5;
+      CREATE TABLE users (
+        id         INTEGER PRIMARY KEY,
+        name       TEXT NOT NULL COLLATE NOCASE UNIQUE,
+        initials   TEXT NOT NULL,
+        color      TEXT NOT NULL,
+        role       TEXT NOT NULL DEFAULT 'engineer' CHECK (role IN ('engineer','manager')),
+        is_admin   INTEGER NOT NULL DEFAULT 0 CHECK (is_admin IN (0,1)),
+        active     INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1)),
+        created_at TEXT NOT NULL
+      );
+      INSERT INTO users SELECT * FROM users_v5;
+      DROP TABLE users_v5;
+      PRAGMA legacy_alter_table = OFF;
+      PRAGMA foreign_keys = ON;`,
+  6: `DROP TABLE review_sync; DROP TABLE project_files; DROP TABLE review_events; DROP TABLE review_comments;
+      DROP TABLE review_attempts; DROP TABLE review_drawings; DROP TABLE review_submissions;
+      DROP TABLE review_references; DROP TABLE review_files;`,
+};
+
+/** Take a database back to schema `to`, as the version that wrote it would have left it. */
+export function undoMigrationsAfter(db: Db, to: number) {
+  for (const id of Object.keys(UNDO).map(Number).sort((a, b) => b - a)) {
+    if (id <= to) continue;
+    db.exec(UNDO[id]);
+    run(db, 'DELETE FROM schema_migrations WHERE id = ?', id);
+  }
 }

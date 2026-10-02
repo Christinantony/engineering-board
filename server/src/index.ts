@@ -29,7 +29,9 @@ async function main() {
     backupDir: cfg.backupDir,
     backupKeepDays: cfg.backupKeepDays,
     restoreUploadMaxMB: cfg.restoreUploadMaxMB,
+    reviewUploadMaxMB: cfg.reviewUploadMaxMB,
     autoBackup: true,
+    reviewMaintenance: true,
   });
 
   for (const f of resetFiles) rmSync(f, { force: true });

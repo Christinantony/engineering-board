@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { JobType, User } from '@board/shared';
+import { ROLE_LABEL, type JobType, type User } from '@board/shared';
 import { AppContext, type AppState, type Meta } from './context.ts';
 import { del, post, setUnauthenticatedHandler } from './lib/api.ts';
 import { setTimeZone } from './lib/format.ts';
@@ -25,12 +25,15 @@ import { Reports } from './views/Reports.tsx';
 import { Search } from './views/Search.tsx';
 import { Today } from './views/Today.tsx';
 import { Workload } from './views/Workload.tsx';
+import { ReviewQueue } from './views/ReviewQueue.tsx';
+import { ReviewWorkspaceView } from './views/ReviewWorkspace.tsx';
 
 const NAV = [
   { path: '/board', label: 'Board', key: 'b' },
   { path: '/today', label: 'Today', key: 't' },
   { path: '/my-work', label: 'My work', key: 'm' },
   { path: '/dashboard', label: 'Dashboard', key: 'd' },
+  { path: '/review', label: 'Review', key: 'v' },
   { path: '/workload', label: 'Workload', key: 'w' },
   { path: '/reports', label: 'Reports', key: 'r' },
 ];
@@ -45,6 +48,7 @@ const VIEWS: Record<string, () => any> = {
   '/search': Search,
   '/activity': ActivityFeed,
   '/admin': Admin,
+  '/review': ReviewQueue,
 };
 
 export function App() {
@@ -94,7 +98,7 @@ function WhoAreYou() {
             <button key={u.id} className="who-option" disabled={busy} onClick={() => void pick(u)}>
               <Badge user={u} size="lg" />
               <span className="who-name">{u.name}</span>
-              <span className="muted who-role">{u.role === 'manager' ? 'Manager' : 'Engineer'}</span>
+              <span className="muted who-role">{ROLE_LABEL[u.role]}</span>
             </button>
           ))}
         </div>
@@ -137,7 +141,7 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
       const k = e.key.toLowerCase();
       if (k === 'n') {
         e.preventDefault();
-        setCreating(true);
+        if (me.role !== 'reviewer') setCreating(true);
         return;
       }
       const nav = NAV.find((n) => n.key === k);
@@ -200,8 +204,8 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
               <a
                 key={n.path}
                 href={n.path}
-                className={path === n.path ? 'active' : ''}
-                aria-current={path === n.path ? 'page' : undefined}
+                className={path === n.path || path.startsWith(n.path + '/') ? 'active' : ''}
+                aria-current={path === n.path || path.startsWith(n.path + '/') ? 'page' : undefined}
                 title={`${n.label} (${n.key.toUpperCase()})`}
                 onClick={(e: any) => {
                   e.preventDefault();
@@ -224,9 +228,11 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
           </button>
           <Bell />
           <ThemePicker />
-          <button className="btn btn-primary new-job" onClick={() => setCreating(true)} title="New job (N)">
-            + New job
-          </button>
+          {state.me.role !== 'reviewer' && (
+            <button className="btn btn-primary new-job" onClick={() => setCreating(true)} title="New job (N)">
+              + New job
+            </button>
+          )}
           <details className="me-menu">
             <summary aria-label="Account">
               <Badge user={state.me} />
@@ -284,10 +290,13 @@ const TITLES: Record<string, string> = {
   '/search': 'Search',
   '/activity': 'Team activity',
   '/admin': 'Admin',
+  '/review': 'Drawing review',
 };
 
 function View({ path }: { path: string }) {
-  useEffect(() => setPageTitle(TITLES[path] ?? ''), [path]);
+  useEffect(() => setPageTitle(TITLES[path] ?? (path.startsWith('/review/') ? 'Drawing review' : '')), [path]);
+  const reviewJob = /^\/review\/(\d+)$/.exec(path);
+  if (reviewJob) return <ReviewWorkspaceView ticketId={Number(reviewJob[1])} />;
   const V = VIEWS[path] ?? (path === '/' ? BoardPage : null);
   if (!V)
     return (

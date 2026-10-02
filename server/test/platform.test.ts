@@ -4,6 +4,7 @@ import { startHarness, Client, type Harness } from './helpers.ts';
 import { dueAtIso, endOfWeek, localDate, localToUtcMs } from '../src/lib/time.ts';
 import { v, ValidationError, estimateLabel } from '@board/shared';
 import { openDb, migrate } from '../src/db/connection.ts';
+import { migrations } from '../src/db/migrations.ts';
 
 describe('unit: time zone helpers', () => {
   it('converts IST wall-clock to UTC and back', () => {
@@ -45,7 +46,7 @@ describe('platform', () => {
 
   it('migrations are idempotent', () => {
     const db = openDb(':memory:');
-    assert.deepEqual(migrate(db).applied, [1, 2, 3, 4]);
+    assert.deepEqual(migrate(db).applied, migrations.map((m) => m.id));
     assert.deepEqual(migrate(db).applied, []);
     db.close();
   });
