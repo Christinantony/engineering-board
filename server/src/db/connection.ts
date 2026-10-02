@@ -52,13 +52,18 @@ export function sqlite(): typeof import('node:sqlite') {
 export function openDb(path: string): Db {
   if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true });
   const db = new (sqlite().DatabaseSync)(path);
-  db.exec(`
+  try {
+    db.exec(`
     PRAGMA journal_mode = WAL;
     PRAGMA synchronous = NORMAL;
     PRAGMA foreign_keys = ON;
     PRAGMA busy_timeout = 5000;
   `);
-  return db;
+    return db;
+  } catch (e) {
+    db.close();
+    throw e;
+  }
 }
 
 const depthByDb = new WeakMap<Db, number>();

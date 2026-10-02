@@ -6,7 +6,7 @@ An internal workboard for the mechanical design team: a Kanban board, lightweigh
 - **Nothing is ever lost.** Jobs can't be deleted (only archived), every change is in an append-only history, and the board backs itself up every day and before anything risky.
 - **Built for a small team working at the same time:** live updates, safe simultaneous claiming, and field-by-field merging when two people edit one job.
 
-> **Version 1.0.0.** All nine phases of the plan are complete.
+> **Version 1.0.1.** All nine phases of the plan are complete.
 
 ## Install on Windows (5 minutes)
 
@@ -49,6 +49,7 @@ Copy `config.example.json` to `config.json` next to `start.bat`, edit it, restar
 | `dataDir` | `EB_DATA_DIR` | `data` |
 | `backupDir` | `EB_BACKUP_DIR` | `data/backups` |
 | `backupKeepDays` | `EB_BACKUP_KEEP_DAYS` | `30` |
+| `restoreUploadMaxMB` | `EB_RESTORE_UPLOAD_MAX_MB` | `64` MiB (1–1024) |
 | `timezone` | `EB_TIMEZONE` | `Asia/Kolkata` |
 | `hoursPerDay` | | `8` (Workload reference line) |
 | `workingDays` | | `[1,2,3,4,5,6]` (Monday to Saturday; 0 is Sunday) |

@@ -3,12 +3,15 @@
 
 import { useEffect, useSyncExternalStore } from 'react';
 import { ApiError, get } from './api.ts';
+import { getAllTicketPages, type TicketPage } from './ticketPages.ts';
 
 interface Entry {
   data?: unknown;
   error?: ApiError;
   loading: boolean;
   inflight?: Promise<void>;
+  fetcher?: (key: string) => Promise<unknown>;
+  invalidated?: boolean;
   listeners: Set<() => void>;
   snapshot: { data?: unknown; error?: ApiError; loading: boolean };
 }
@@ -34,7 +37,7 @@ function fetchKey(key: string): Promise<void> {
   if (e.inflight) return e.inflight;
   e.loading = true;
   publish(e);
-  e.inflight = get(key)
+  e.inflight = (e.fetcher ?? get)(key)
     .then((data) => {
       e.data = data;
       e.error = undefined;
@@ -46,6 +49,13 @@ function fetchKey(key: string): Promise<void> {
       e.loading = false;
       e.inflight = undefined;
       publish(e);
+      // An SSE update arriving midway through a multi-page load must not be
+      // swallowed. Coalesce it into one subsequent refresh of watched data.
+      if (e.invalidated) {
+        e.invalidated = false;
+        if (e.listeners.size) void fetchKey(key);
+        else cache.delete(key);
+      }
     });
   return e.inflight;
 }
@@ -59,7 +69,8 @@ export interface QueryResult<T> {
 
 const EMPTY = { data: undefined, error: undefined, loading: false };
 
-export function useQuery<T>(key: string | null): QueryResult<T> {
+export function useQuery<T>(key: string | null, fetcher?: (key: string) => Promise<unknown>): QueryResult<T> {
+  if (key && fetcher) entry(key).fetcher = fetcher;
   const snap = useSyncExternalStore(
     (cb) => {
       if (!key) return () => {};
@@ -80,13 +91,20 @@ export function useQuery<T>(key: string | null): QueryResult<T> {
   };
 }
 
+/** All pages share one cache entry and are replaced atomically on refresh. */
+export function useTicketQuery(key: string | null): QueryResult<TicketPage> {
+  return useQuery<TicketPage>(key, getAllTicketPages);
+}
+
 /** Refetch every watched query whose key matches; forget unwatched ones. */
 export function invalidate(match: string | ((key: string) => boolean) = () => true) {
   const test = typeof match === 'string' ? (k: string) => k.startsWith(match) : match;
   for (const [key, e] of cache) {
     if (!test(key)) continue;
-    if (e.listeners.size) void fetchKey(key);
-    else cache.delete(key);
+    if (e.listeners.size) {
+      if (e.inflight) e.invalidated = true;
+      else void fetchKey(key);
+    } else cache.delete(key);
   }
 }
 

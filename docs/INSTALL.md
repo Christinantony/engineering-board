@@ -26,7 +26,7 @@ It needs no internet connection, no administrator rights on the host, no databas
 3. **Start it.** Double-click `start.bat`. A black window opens and shows:
 
    ```
-   Engineering Board v1.0.0
+   Engineering Board v1.0.1
    ─────────────────────────────────────────────
    On this PC:        http://localhost:8080
    For your team:     http://CHRISTIN-PC:8080

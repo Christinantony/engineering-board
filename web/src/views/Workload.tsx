@@ -5,7 +5,7 @@ import type { Ticket } from '@board/shared';
 import { useApp } from '../context.ts';
 import { localDate } from '../lib/format.ts';
 import { navigate, useLocation } from '../lib/router.ts';
-import { useQuery } from '../lib/store.ts';
+import { useQuery, useTicketQuery } from '../lib/store.ts';
 import { ErrorBox, Spinner } from '../components/bits.tsx';
 import { JobRow } from '../components/JobRow.tsx';
 import { WorkloadBars, referenceMinutes, type WorkloadData } from '../components/WorkloadBars.tsx';
@@ -22,7 +22,7 @@ export function Workload() {
   const horizon = HORIZONS.some((h) => h.v === params.get('h')) ? params.get('h')! : 'today';
   const q = useQuery<WorkloadData>(`/api/workload?horizon=${horizon}`);
   const [picked, setPicked] = useState<number | null>(null);
-  const jobs = useQuery<{ tickets: Ticket[] }>(picked ? `/api/tickets?assignee=${picked}&status=claimed,in_progress,waiting,blocked,review` : null);
+  const jobs = useTicketQuery(picked ? `/api/tickets?assignee=${picked}&status=claimed,in_progress,waiting,blocked,review` : null);
 
   if (q.error && !q.data) return <ErrorBox message={q.error.message} retry={q.refresh} />;
   if (!q.data) return <Spinner label="Loading workload" />;
@@ -55,10 +55,11 @@ export function Workload() {
       {picked && (
         <section className="vsection">
           <header className="vsection-head">
-            <h2>Open jobs</h2>
+            <h2>Open jobs{jobs.data ? ` (${jobs.data.total})` : ''}</h2>
           </header>
+          {jobs.error && <ErrorBox message={`${jobs.data ? 'The displayed jobs are from the last complete load. ' : ''}${jobs.error.message}`} retry={jobs.refresh} />}
           {!jobs.data ? (
-            <Spinner />
+            jobs.error ? null : <Spinner label="Loading all open jobs" />
           ) : jobs.data.tickets.length === 0 ? (
             <p className="vsection-empty">No open jobs.</p>
           ) : (

@@ -16,7 +16,7 @@ Errors look like this:
 | 403 | Not allowed. Examples: a manager claiming, or the admin area is locked. |
 | 409 `conflict` | Someone else got there first. `current` holds the fresh ticket. |
 | 409 `needs_assignee` | The manager moved an unassigned job to a working column. |
-| 413 `too_large` | The body is over the limit: 20 MB for JSON and CSV, 1 GB for a restore upload. |
+| 413 `too_large` | The body is over the limit: 20 MiB for JSON and CSV; restore uploads default to 64 MiB, configurable through `restoreUploadMaxMB` / `EB_RESTORE_UPLOAD_MAX_MB` (1–1024 MiB). |
 | 415 | A binary body was sent to anything other than the restore upload. |
 | 503 `busy` | The database is busy. Retry. |
 
@@ -33,7 +33,7 @@ Errors look like this:
 
 | Method | Path | Body / query |
 |---|---|---|
-| GET | `/api/tickets` | Query: `view=board` (hides cancelled jobs and done jobs older than 7 days), `q`, `assignee=1,2,none`, `status`, `priority`, `job_type`, `tag`, `overdue=1`, `blocked=1`, `unassigned=1`, `due_from`/`due_to`, `created_from`/`created_to` (YYYY-MM-DD), `archived=exclude\|only\|include`, `limit`, `offset`. Returns `{tickets, total}`. |
+| GET | `/api/tickets` | Query: `view=board` (hides cancelled jobs and done jobs older than 7 days), `q`, `assignee=1,2,none`, `status`, `priority`, `job_type`, `tag`, `overdue=1`, `blocked=1`, `unassigned=1`, `due_from`/`due_to`, `created_from`/`created_to` (YYYY-MM-DD), `archived=exclude\|only\|include`, `limit`, `offset`. Returns `{tickets, total, revision}`. Default page size: 2000 for `view=board`, otherwise 100; explicit `limit` is capped at 2000. |
 | POST | `/api/tickets` | `{title, description?, priority?, requester?, job_type_id?, estimate_minutes?, due_date?, due_time?, reference?, file_location?, notes?, tags?, parent_job_id?, claim?, assigned_to?}`. Send an `Idempotency-Key` header so retries never duplicate. Returns 201, or 200 with `replayed: true`. |
 | GET | `/api/tickets/:id` | `{ticket, activity}` |
 | PATCH | `/api/tickets/:id` | `{version, ...fields}`. A stale `version` returns 409 with `current`. |
@@ -52,6 +52,10 @@ Errors look like this:
 - **Waiting, Blocked:** the job needs a reason. The reason is kept when switching between waiting and blocked, and cleared on leaving.
 - **In progress:** sets `started_at` once.
 - **Done:** sets `completed_at`. Reopening the job clears it.
+
+### Loading complete ticket lists
+
+Request pages with an explicit `limit` and successive `offset` values until the number loaded equals `total`. Every page must have the same opaque `revision` and `total`; restart from offset 0 if either changes. `revision` changes on database writes or connection replacement, including reorder-only operations. It is a consistency token, not a job version. The Board and Workload drill-down use this protocol and display a retryable error if a complete list cannot be loaded.
 
 ## Views
 
@@ -102,3 +106,9 @@ Errors look like this:
 | `/api/export/tickets.csv` | Accepts the same filters as `/api/tickets`. UTF-8 with a BOM, CRLF line endings, and cells that look like formulas are escaped. |
 | `/api/export/tickets.json` | Every job with its history, plus the team and job types. Add `?activity=0` for jobs only. |
 | `/api/import/template.csv` | A starter sheet for importing. |
+
+### Restore upload handling
+
+`POST /api/admin/restore/upload` requires an active name session and an unexpired admin unlock before any body is read or `100 Continue` is sent. Only `application/octet-stream` is accepted. Both advertised Content-Length and received bytes are checked against the configured limit. The file streams with backpressure to a unique private directory beside the database; rejected, interrupted and completed uploads are cleaned up. Authorization is checked again before activating the restored database.
+
+Restore validates the source schema and references, migrates and initializes a staged candidate, then activates it while keeping the original database available for rollback. Activation failures reopen the original database; a pre-restore safety backup remains available. If disk or connection failure also prevents rollback, the original recovery files are retained and their location is logged.

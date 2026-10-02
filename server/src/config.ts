@@ -14,6 +14,7 @@ export interface Config {
   timezone: string;
   backupDir: string;
   backupKeepDays: number;
+  restoreUploadMaxMB: number;
   hoursPerDay: number;
   workingDays: number[];
 }
@@ -25,7 +26,7 @@ export interface LoadedConfig extends Config {
   warnings: string[];
 }
 
-const KNOWN = ['port', 'host', 'dataDir', 'timezone', 'backupDir', 'backupKeepDays', 'hoursPerDay', 'workingDays'] as const;
+const KNOWN = ['port', 'host', 'dataDir', 'timezone', 'backupDir', 'backupKeepDays', 'restoreUploadMaxMB', 'hoursPerDay', 'workingDays'] as const;
 
 function readConfigFile(file: string): Record<string, unknown> {
   // Notepad saves "UTF-8" with a byte-order mark; JSON.parse does not accept one.
@@ -76,6 +77,7 @@ export function loadConfig(appRoot: string, env: NodeJS.ProcessEnv = process.env
     timezone: str('timezone', env.EB_TIMEZONE ?? f.timezone ?? 'Asia/Kolkata'),
     backupDir: resolve(appRoot, str('backupDir', env.EB_BACKUP_DIR ?? f.backupDir ?? join(dataDir, 'backups'))),
     backupKeepDays: num('backupKeepDays', env.EB_BACKUP_KEEP_DAYS ?? f.backupKeepDays ?? 30, (n) => Number.isInteger(n) && n >= 1, 'a whole number of days, 1 or more'),
+    restoreUploadMaxMB: num('restoreUploadMaxMB', env.EB_RESTORE_UPLOAD_MAX_MB ?? f.restoreUploadMaxMB ?? 64, (n) => Number.isInteger(n) && n >= 1 && n <= 1024, 'a whole number of MiB from 1 to 1024'),
     hoursPerDay: num('hoursPerDay', f.hoursPerDay ?? 8, (n) => n > 0 && n <= 24, 'a number of hours from 1 to 24'),
     // 0 = Sunday … 6 = Saturday. Default Monday to Saturday.
     workingDays: [1, 2, 3, 4, 5, 6],

@@ -7,7 +7,7 @@ import type { Status, Ticket } from '@board/shared';
 import { useApp } from '../context.ts';
 import { moveTicket } from '../lib/actions.ts';
 import { hours } from '../lib/format.ts';
-import { useQuery } from '../lib/store.ts';
+import { useTicketQuery } from '../lib/store.ts';
 import { ErrorBox, Spinner } from '../components/bits.tsx';
 import { TicketCard } from '../components/TicketCard.tsx';
 import { CardMenu, type MenuTarget } from '../components/CardMenu.tsx';
@@ -46,7 +46,7 @@ type Overrides = Map<number, { status: Status; board_rank: number }>;
 
 export function Board({ filter }: { filter?: (t: Ticket) => boolean }) {
   const { me, openJob } = useApp();
-  const q = useQuery<{ tickets: Ticket[] }>('/api/tickets?view=board');
+  const q = useTicketQuery('/api/tickets?view=board');
   const [overrides, setOverrides] = useState<Overrides>(new Map());
   const [drag, setDrag] = useState<Drag | null>(null);
   const ghostRef = useRef<HTMLDivElement | null>(null);
@@ -292,6 +292,8 @@ export function Board({ filter }: { filter?: (t: Ticket) => boolean }) {
   const dragged = drag ? tickets.find((t) => t.id === drag.id) : undefined;
 
   return (
+    <>
+      {q.error && <ErrorBox message={`The displayed board is from the last complete load. ${q.error.message}`} retry={q.refresh} />}
     <div className="board" aria-label="Kanban board" onKeyDown={onBoardKeyDown} onContextMenu={onBoardContextMenu}>
       {COLUMNS.map((c) => {
         const list = byColumn.get(c.id)!;
@@ -357,5 +359,6 @@ export function Board({ filter }: { filter?: (t: Ticket) => boolean }) {
           document.body,
         )}
     </div>
+    </>
   );
 }

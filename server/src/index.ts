@@ -28,6 +28,7 @@ async function main() {
     log: process.env.EB_LOG === '1',
     backupDir: cfg.backupDir,
     backupKeepDays: cfg.backupKeepDays,
+    restoreUploadMaxMB: cfg.restoreUploadMaxMB,
     autoBackup: true,
   });
 
@@ -46,13 +47,19 @@ async function main() {
     throw e;
   }
 
-  const ips = Object.values(networkInterfaces())
-    .flat()
-    .filter((n) => n && n.family === 'IPv4' && !n.internal)
-    .map((n) => n!.address);
   const localOnly = /^(127\.|localhost$|::1$)/.test(cfg.host);
-  // in a container, its own name and addresses mean nothing to colleagues
+  // Local-only and container banners do not need interface discovery. Some
+  // restricted hosts also forbid it; that must not prevent the board starting.
   const inContainer = existsSync('/.dockerenv') || existsSync('/run/.containerenv');
+  let ips: string[] = [];
+  if (!localOnly && !inContainer) {
+    try {
+      ips = Object.values(networkInterfaces()).flat()
+        .filter((n) => n && n.family === 'IPv4' && !n.internal).map((n) => n!.address);
+    } catch {
+      console.log('  LAN IP addresses could not be listed. Use the PC name shown below.');
+    }
+  }
   const team = localOnly
     ? `  For your team:     (nobody else: "host" in config.json is ${cfg.host}, which allows this PC only)`
     : inContainer

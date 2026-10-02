@@ -17,7 +17,8 @@ import {
   type Ticket,
   type User,
 } from '@board/shared';
-import { all, get, run, tx, type Param } from '../db/connection.ts';
+import { randomUUID } from 'node:crypto';
+import { all, get, run, tx, type Db, type Param } from '../db/connection.ts';
 import { HttpError, badRequest, bool, conflict, forbidden, notFound, nowIso, type Ctx } from '../lib/core.ts';
 import { dueAtIso, localDate, startOfLocalDayIso, addDays } from '../lib/time.ts';
 import { boardScope, bottomRank, myScope, rankFor } from './rank.ts';
@@ -644,7 +645,23 @@ export function parseFilters(qs: URLSearchParams): TicketFilters {
   return f;
 }
 
-export function listTickets(ctx: Ctx, f: TicketFilters = {}): { tickets: Ticket[]; total: number } {
+// Offset pages must all describe the same database state. SQLite's own writes
+// increment total_changes (including triggers/rank renumbering), external writes
+// increment data_version, and a nonce distinguishes reopened/restored databases.
+// No database state is retained: a changed token tells clients to restart paging.
+const listConnectionIds = new WeakMap<Db, string>();
+function listRevision(db: Db): string {
+  let id = listConnectionIds.get(db);
+  if (!id) {
+    id = randomUUID();
+    listConnectionIds.set(db, id);
+  }
+  const changes = get<{ n: number }>(db, 'SELECT total_changes() n')!.n;
+  const version = get<{ data_version: number }>(db, 'PRAGMA data_version')!.data_version;
+  return `${id}:${changes}:${version}`;
+}
+
+export function listTickets(ctx: Ctx, f: TicketFilters = {}): { tickets: Ticket[]; total: number; revision: string } {
   const where: string[] = [];
   const params: Param[] = [];
   const now = nowIso(ctx);
@@ -690,12 +707,12 @@ export function listTickets(ctx: Ctx, f: TicketFilters = {}): { tickets: Ticket[
     if (cond) {
       add(cond.sql, ...cond.params);
       if (cond.ranked) {
-        order = `${rankExpr()}, t.updated_at DESC`;
+        order = `${rankExpr()}, t.updated_at DESC, t.id`;
         orderParams.push(cond.params[0]);
-      } else order = 't.updated_at DESC';
+      } else order = 't.updated_at DESC, t.id';
     }
   } else if (f.view !== 'board') {
-    order = 't.updated_at DESC';
+    order = 't.updated_at DESC, t.id';
   }
 
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
@@ -709,7 +726,7 @@ export function listTickets(ctx: Ctx, f: TicketFilters = {}): { tickets: Ticket[
     limit,
     f.offset ?? 0,
   );
-  return { tickets: toTickets(ctx, rows), total };
+  return { tickets: toTickets(ctx, rows), total, revision: listRevision(ctx.db) };
 }
 
 /** Tickets for a raw SQL condition (used by the operational views). */

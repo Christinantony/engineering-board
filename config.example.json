@@ -16,6 +16,9 @@
   "_backupKeepDays": "Backups older than this are deleted. The newest 7 are always kept.",
   "backupKeepDays": 30,
 
+  "_restoreUploadMaxMB": "Maximum backup file upload, in MiB (1 to 1024). Uploads stream to disk after admin authorization.",
+  "restoreUploadMaxMB": 64,
+
   "_timezone": "Decides when a job becomes overdue and what 'today' means.",
   "timezone": "Asia/Kolkata",
 

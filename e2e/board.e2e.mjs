@@ -53,7 +53,7 @@ before(async () => {
   const s = await api('POST', '/api/session', { user_id: 1 });
   const u = await api('POST', '/api/admin/unlock', { pin: '1234' }, s.cookie);
   await api('POST', '/api/admin/demo', {}, `${s.cookie}; ${u.cookie}`);
-  browser = await chromium.launch();
+  browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH });
 });
 
 after(async () => {
@@ -530,4 +530,93 @@ test('after the board is upgraded on the host, open screens offer a reload', asy
   const nav = p.waitForNavigation();
   await p.click('.banner-info button');
   await nav;
+});
+
+test('large board and workload lists show every job; later-page failures stay visible and retry', async () => {
+  // Seed directly while stopped: thousands of API creates would test creation
+  // throughput instead of the pagination boundary and make the suite slow.
+  const s = await api('POST', '/api/session', { user_id: 2 });
+  const users = await (await api('GET', '/api/users', undefined, s.cookie)).r.json();
+  const paul = users.users.find((u) => u.name === 'Paul').id;
+  const { DatabaseSync } = process.getBuiltinModule('node:sqlite');
+  let p;
+  await stopServer();
+  const db = new DatabaseSync(join(dir, 'board.db'));
+  db.exec('BEGIN');
+  const insert = db.prepare(`INSERT INTO tickets
+    (job_number, title, status, assigned_to, estimate_minutes, board_rank, created_at, updated_at, is_demo)
+    VALUES (?, ?, 'in_progress', ?, 60, ?, ?, ?, 1)`);
+  const now = new Date().toISOString();
+  for (let i = 0; i < 2005; i++) insert.run(`PAGING-${i}`, `Pagination regression ${i}`, paul, 100_000 + i, now, now);
+  db.exec('COMMIT');
+  db.close();
+  await startServer();
+  try {
+    const expected = await (await api('GET', '/api/tickets?view=board', undefined, s.cookie)).r.json();
+    assert.ok(expected.total > 2000);
+    p = await login('Paul');
+    await p.waitForFunction((n) => document.querySelectorAll('.card[data-card]').length === n, expected.total, { timeout: 20000 });
+    assert.equal(await p.locator('.card[data-card]').count(), expected.total);
+    assert.equal(await p.locator('.card', { hasText: 'Pagination regression 2004' }).count(), 1);
+
+    // Fail the second page of an SSE refresh, keeping the last complete list.
+    await p.route('**/api/tickets?*', async (route) => {
+      const url = new URL(route.request().url());
+      if (url.searchParams.get('view') === 'board' && url.searchParams.get('offset') === '2000') {
+        await route.fulfill({ status: 429, contentType: 'application/json', body: JSON.stringify({ error: 'test_page_failure', message: 'Later page temporarily unavailable.' }) });
+      } else await route.continue();
+    });
+    const made = await api('POST', '/api/tickets', { title: 'Pagination refresh trigger' }, s.cookie);
+    assert.equal(made.r.status, 201);
+    await p.waitForSelector('.error-box:has-text("last complete load")');
+    assert.equal(await p.locator('.card[data-card]').count(), expected.total, 'no partial refresh replaces the complete board');
+    await p.unroute('**/api/tickets?*');
+    await p.click('.error-box button:has-text("Try again")');
+    await p.waitForSelector('.error-box', { state: 'detached' });
+    await p.waitForFunction((n) => document.querySelectorAll('.card[data-card]').length === n, expected.total + 1);
+
+    // An event after the server has produced the last page can only be caught
+    // by the cache's queued invalidation, not by cross-page revision checking.
+    let releaseLastPage, sawLastPage;
+    const held = new Promise((resolve) => { releaseLastPage = resolve; });
+    const received = new Promise((resolve) => { sawLastPage = resolve; });
+    let lastPageCalls = 0;
+    await p.route('**/api/tickets?*', async (route) => {
+      const url = new URL(route.request().url());
+      if (url.searchParams.get('view') === 'board' && url.searchParams.get('offset') === '2000' && ++lastPageCalls === 1) {
+        const response = await route.fetch();
+        sawLastPage();
+        await held;
+        await route.fulfill({ response });
+      } else await route.continue();
+    });
+    try {
+      assert.equal((await api('POST', '/api/tickets', { title: 'Pagination inflight trigger' }, s.cookie)).r.status, 201);
+      let deadline;
+      try {
+        await Promise.race([received, new Promise((_, reject) => { deadline = setTimeout(() => reject(new Error('refresh did not request its last page')), 5000); })]);
+      } finally { clearTimeout(deadline); }
+      assert.equal((await api('POST', '/api/tickets', { title: 'Created while last page was inflight' }, s.cookie)).r.status, 201);
+      // Let the 120 ms SSE coalescer invalidate the still-pending collection.
+      await p.waitForTimeout(300);
+    } finally { releaseLastPage(); }
+    await p.waitForSelector('.card:has-text("Created while last page was inflight")', { timeout: 10000 });
+    assert.ok(lastPageCalls >= 2, 'an inflight invalidation caused another complete refresh');
+    await p.unroute('**/api/tickets?*');
+
+    const jobs = await (await api('GET', `/api/tickets?assignee=${paul}&status=claimed,in_progress,waiting,blocked,review`, undefined, s.cookie)).r.json();
+    assert.ok(jobs.total > 2000);
+    await p.keyboard.press('w');
+    await p.click('.wl-row:has-text("Paul")');
+    await p.waitForFunction((n) => document.querySelectorAll('.vsection-list .jobrow').length === n, jobs.total, { timeout: 20000 });
+    assert.equal(await p.locator('.vsection-list .jobrow').count(), jobs.total);
+    assert.match(await p.textContent('.vsection-head h2'), new RegExp(`\\(${jobs.total}\\)`));
+  } finally {
+    await p?.context().close();
+    await stopServer();
+    const cleanup = new DatabaseSync(join(dir, 'board.db'));
+    cleanup.exec("DELETE FROM tickets WHERE job_number LIKE 'PAGING-%'");
+    cleanup.close();
+    await startServer();
+  }
 });

@@ -1,6 +1,6 @@
 {
   "name": "engineering-board",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "type": "module",
   "description": "Internal engineering workboard. Zero runtime dependencies: Node.js 22.16+ only.",
@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "tsx watch --disable-warning=ExperimentalWarning server/src/index.ts",
     "start": "tsx --disable-warning=ExperimentalWarning server/src/index.ts",
-    "test": "tsx --disable-warning=ExperimentalWarning --test --test-reporter=spec \"server/test/**/*.test.ts\"",
+    "test": "node --import tsx --disable-warning=ExperimentalWarning --test --test-reporter=spec \"server/test/**/*.test.ts\"",
     "typecheck": "tsc -p tsconfig.json && tsc -p web/tsconfig.json",
     "seed:demo": "tsx --disable-warning=ExperimentalWarning server/src/db/seedDemoCli.ts",
     "build": "node scripts/build.mjs",
