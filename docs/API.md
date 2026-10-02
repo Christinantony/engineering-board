@@ -1,4 +1,4 @@
-# API reference (v1.0)
+# API reference (v1.1)
 
 All endpoints are under `/api` and use JSON. Mutating requests must send `Content-Type: application/json`, which together with `SameSite=Strict` cookies blocks cross-site form posts.
 
@@ -17,7 +17,12 @@ Errors look like this:
 | 409 `conflict` | Someone else got there first. `current` holds the fresh ticket. |
 | 409 `needs_assignee` | The manager moved an unassigned job to a working column. |
 | 413 `too_large` | The body is over the limit: 20 MiB for JSON and CSV; restore uploads default to 64 MiB, configurable through `restoreUploadMaxMB` / `EB_RESTORE_UPLOAD_MAX_MB` (1–1024 MiB). |
-| 415 | A binary body was sent to anything other than the restore upload. |
+| 415 | A binary body was sent to anything other than the restore upload or a review PDF upload. |
+| 400 `not_single_page` | A drawing submitted for board review has more than one page. |
+| 400 `bad_pdf` / `not_pdf` | The upload is not a readable PDF (damaged, encrypted, or not a PDF). |
+| 409 `open_comments` | A drawing can't pass board review while it has unresolved comments. |
+| 409 `signatures_pending` | A job with drawings in board review can't be Done until every required drawing is recorded as physically signed. |
+| 410 `removed` | An intermediate review PDF was removed after its drawing passed board review. |
 | 503 `busy` | The database is busy. Retry. |
 
 ## Session ("who are you?")
@@ -74,13 +79,39 @@ Request pages with an explicit `limit` and successive `offset` values until the 
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/api/notifications` | Returns `{items[], unread, latest_activity_id, overdue_mine, due_today_mine}`. Items cover the last 14 days. Each item's kind is one of `urgent`, `assigned`, `review`, `waiting`, `comment`, `done` or `unassigned`. |
+| GET | `/api/notifications` | Returns `{items[], unread, latest_activity_id, overdue_mine, due_today_mine}`. Items cover the last 14 days. Each item's kind is one of `urgent`, `assigned`, `review`, `waiting`, `comment`, `done`, `unassigned`, `review_submitted` (manager and reviewers), `review_passed`, `review_returned`, `review_comment` or `signature` (the one reminder to the reviewer who passed a drawing, when its print is handed over; `detail` holds the reminder sentence). |
 | POST | `/api/notifications/seen` | `{up_to}` marks everything up to that activity id as seen. It never moves backwards. |
 | GET | `/api/presence` | Returns `{online: [{user_id, viewing: [ticket ids]}]}` |
 | POST | `/api/presence` | `{job_id \| null, tab}` is the heartbeat while a job panel is open, sent every 30 seconds. It expires after 90 seconds. |
 | GET | `/api/activity?limit&before&user` | The team feed, newest first. Page backwards with `before=<id>`. |
 
 `/api/events` also emits `{type:'presence'}`, and its `hello` event carries the server `version`.
+
+## Drawing review
+
+Roles: engineers upload and submit, mark handovers and respond to comments; the manager and reviewers (`role: "reviewer"`) pass or return drawings, never their own submission. Engineers and reviewers can set the reference-page bookmark and record signatures. Reviewers get 403 on every route that creates or changes jobs.
+
+| Method | Path | Body / notes |
+|---|---|---|
+| POST | `/api/review/uploads?kind=drawing\|reference&name=<file name>` | Body: the PDF bytes (`application/octet-stream` or `application/pdf`). Engineers only. Streamed to disk and hashed (SHA-256) before anything else. `kind=drawing` must be one page. Returns 201 `{file: {sha256, filename, size, pages}}`. Default limit 200 MiB (`reviewUploadMaxMB`). |
+| GET | `/api/review-files/:sha256` | The stored PDF, byte for byte. 410 for an intermediate removed after board review. Cached as immutable (the address is the content hash). |
+| GET | `/api/reviews?tab=awaiting\|returned\|signature\|done\|all&q=` | The queue: `{rows: ReviewQueueRow[], counts}`. |
+| GET | `/api/tickets/:id/review` | The workspace: `{ticket, submissions, references[], drawings[] (with attempts[] and comments[]), events[], sync, signatures_pending}`. |
+| GET | `/api/tickets/:id/review/log` | The job's revision log as Markdown. |
+| POST | `/api/tickets/:id/review/submissions` | `{references?: [{sha256, filename}], drawings: [{sha256, filename, identifier?, kind: "revision"\|"new", notes, ref_sha256?, ref_page?}]}`. A drawing whose number matches an existing one becomes its next attempt. Moves the job to Review. Returns 201 with the workspace. |
+| POST | `/api/tickets/:id/review/references` | `{sha256, filename}`: attach another signed scan (it becomes protected). |
+| POST | `/api/tickets/:id/review/sync` | Retry the project-folder copies now. |
+| PUT | `/api/review/drawings/:id/reference-page` | `{reference_id, page}`, or both `null` to clear. |
+| POST | `/api/review/drawings/:id/decision` | `{attempt_id, outcome: "passed"\|"returned", note?}`. Only the current, undecided attempt. Returning needs a note or an open comment. |
+| POST | `/api/review/drawings/:id/handover` | Passed → handed over. Creates the reviewer's reminder once; a repeat is 409. |
+| POST | `/api/review/drawings/:id/signed` | Handed over → signed. The last signature moves the job to Done. |
+| POST | `/api/review/drawings/:id/withdraw` | `{body?}`: awaiting or returned drawings only; it no longer counts towards the job. |
+| PATCH | `/api/review/drawings/:id` | `{identifier}`: correct the drawing number. |
+| POST | `/api/review/drawings/:id/comments` | `{body, attempt_id?}` |
+| POST | `/api/review/comments/:id/respond` | `{body}`: the engineer's correction response. |
+| POST | `/api/review/comments/:id/resolve` | A reviewer, the manager, or the comment's author. |
+
+Every mutating review route returns the updated workspace. After it commits, the board removes intermediate PDFs (after a pass) and updates the project folder in the background; `sync.state` is `ok`, `pending`, `failed` (with `detail`) or `no_folder`.
 
 ## Admin (unlock with the PIN first)
 
@@ -89,7 +120,7 @@ Request pages with an explicit `limit` and successive `offset` values until the 
 | GET | `/api/admin/status` |
 | POST | `/api/admin/unlock` `{pin}` and `/api/admin/lock`. Unlocks for 12 hours. |
 | POST | `/api/admin/pin` `{new_pin}` |
-| GET/POST | `/api/admin/users`; PATCH `/api/admin/users/:id` `{name?, initials?, color?, role?, is_admin?, active?}` |
+| GET/POST | `/api/admin/users`; PATCH `/api/admin/users/:id` `{name?, initials?, color?, role?, is_admin?, active?}`. `role` is `engineer`, `manager` or `reviewer`. |
 | POST | `/api/admin/job-types`; PATCH `/api/admin/job-types/:id` |
 | POST/DELETE | `/api/admin/demo`: load or clear the demo jobs |
 | GET | `/api/admin/info`: database size and counts, backup folder, list of backups |

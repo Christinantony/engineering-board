@@ -14,7 +14,7 @@ import { Badge } from './bits.tsx';
 
 interface Notice {
   id: number;
-  kind: 'urgent' | 'assigned' | 'review' | 'waiting' | 'comment' | 'done' | 'unassigned';
+  kind: 'urgent' | 'assigned' | 'review' | 'waiting' | 'comment' | 'done' | 'unassigned' | 'review_submitted' | 'review_passed' | 'review_returned' | 'review_comment' | 'signature';
   ticket_id: number;
   job_number: string;
   title: string;
@@ -48,11 +48,21 @@ function noticeText(n: Notice): string {
       return `${who} finished a job you raised`;
     case 'unassigned':
       return `${who} took this off you`;
+    case 'review_submitted':
+      return `${who} submitted drawings for board review`;
+    case 'review_passed':
+      return `${who} passed ${n.detail ?? 'a drawing'} in board review`;
+    case 'review_returned':
+      return `${who} returned a drawing for correction`;
+    case 'review_comment':
+      return `${who} commented on a drawing`;
+    case 'signature':
+      return `${who} handed you a print to sign`;
   }
 }
 
 /** Kinds worth a pop-up toast the moment they arrive. */
-const LOUD = new Set(['urgent', 'assigned', 'unassigned']);
+const LOUD = new Set(['urgent', 'assigned', 'unassigned', 'signature', 'review_returned']);
 
 export function Bell() {
   const { openJob } = useApp();
@@ -71,7 +81,7 @@ export function Bell() {
         toast(`${noticeText(n)}: ${n.job_number} ${n.title}`, {
           kind: n.kind === 'urgent' ? 'error' : 'info',
           timeout: 12_000,
-          action: { label: 'Open', run: () => openJob(n.ticket_id) },
+          action: { label: 'Open', run: () => (n.kind.startsWith('review') || n.kind === 'signature' ? navigate(`/review/${n.ticket_id}`) : openJob(n.ticket_id)) },
         });
     }
     lastSeenTop.current = Math.max(lastSeenTop.current ?? 0, top);
@@ -155,7 +165,8 @@ export function Bell() {
                     className={`bell-item k-${n.kind}${n.unread ? ' unread' : ''}`}
                     onClick={() => {
                       setOpen(false);
-                      openJob(n.ticket_id);
+                      if (n.kind.startsWith('review') || n.kind === 'signature') navigate(`/review/${n.ticket_id}`);
+                      else openJob(n.ticket_id);
                     }}
                   >
                     <span className="bell-what">{noticeText(n)}</span>

@@ -129,6 +129,15 @@ export function clearDemo(ctx: Ctx): number {
     if (!ids.length) return 0;
     const list = ids.join(',');
     run(ctx.db, `UPDATE tickets SET parent_job_id = NULL WHERE parent_job_id IN (${list})`);
+    // drawing review records of demo jobs (signed-scan file rows stay protected)
+    run(ctx.db, `DELETE FROM review_comments WHERE drawing_id IN (SELECT id FROM review_drawings WHERE ticket_id IN (${list}))`);
+    run(ctx.db, `DELETE FROM review_events WHERE ticket_id IN (${list})`);
+    run(ctx.db, `DELETE FROM review_attempts WHERE drawing_id IN (SELECT id FROM review_drawings WHERE ticket_id IN (${list}))`);
+    run(ctx.db, `DELETE FROM review_drawings WHERE ticket_id IN (${list})`);
+    run(ctx.db, `DELETE FROM review_submissions WHERE ticket_id IN (${list})`);
+    run(ctx.db, `DELETE FROM review_references WHERE ticket_id IN (${list})`);
+    run(ctx.db, `DELETE FROM review_sync WHERE ticket_id IN (${list})`);
+    run(ctx.db, `UPDATE project_files SET ticket_id = NULL WHERE ticket_id IN (${list})`);
     run(ctx.db, `DELETE FROM activity WHERE ticket_id IN (${list})`);
     run(ctx.db, `DELETE FROM ticket_tags WHERE ticket_id IN (${list})`);
     run(ctx.db, `DELETE FROM idempotency WHERE ticket_id IN (${list})`);

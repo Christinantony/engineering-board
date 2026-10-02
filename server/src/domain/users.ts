@@ -1,4 +1,4 @@
-import type { User } from '@board/shared';
+import type { Role, User } from '@board/shared';
 import { createUserSchema, updateUserSchema } from '@board/shared';
 import { all, get, run, tx } from '../db/connection.ts';
 import { bool, conflict, int, notFound, nowIso, type Ctx } from '../lib/core.ts';
@@ -12,7 +12,7 @@ interface UserRow {
   name: string;
   initials: string;
   color: string;
-  role: 'engineer' | 'manager';
+  role: Role;
   is_admin: number;
   active: number;
 }
@@ -77,8 +77,8 @@ export function updateUser(ctx: Ctx, id: number, input: unknown): User {
     const u = requireUser(ctx, id);
     if (data.name && get(ctx.db, 'SELECT 1 FROM users WHERE name = ? AND id <> ?', data.name, id))
       throw conflict(`A user called "${data.name}" already exists`);
-    if (data.role === 'manager' && u.role === 'engineer') {
-      // managers cannot hold claimed work; refuse rather than silently unassign
+    if (data.role && data.role !== 'engineer' && u.role === 'engineer') {
+      // managers and reviewers cannot hold claimed work; refuse rather than silently unassign
       const n = get<{ n: number }>(
         ctx.db,
         `SELECT COUNT(*) n FROM tickets WHERE assigned_to = ? AND status NOT IN ('done','cancelled') AND archived = 0`,

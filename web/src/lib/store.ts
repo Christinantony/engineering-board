@@ -116,7 +116,7 @@ export function setCached<T>(key: string, fn: (prev: T | undefined) => T) {
 }
 
 export const TICKET_KEYS = (k: string) =>
-  /^\/api\/(tickets|dashboard|today|my-work|workload|activity|tags|notifications|reports)/.test(k);
+  /^\/api\/(tickets|dashboard|today|my-work|workload|activity|tags|notifications|reports|reviews)/.test(k);
 
 // ---------------------------------------------------------------------------
 // Live updates (Server-Sent Events) with a 30-second polling fallback

@@ -2,7 +2,7 @@
 
 ### The workboard for the mechanical design team
 
-*Catalogue edition, version 1.0.2*
+*Catalogue edition, version 1.1.0*
 
 One shared board for every design job: who is on it, what it is waiting for, when it is due and how it ended. It runs on a single PC on the office network. Everyone else opens it in a web browser.
 
@@ -11,7 +11,7 @@ One shared board for every design job: who is on it, what it is waiting for, whe
 | **Runs on** | One host PC (Windows, or Linux), no admin rights needed |
 | **Used from** | Any browser on the office network, including phones and tablets |
 | **Needs** | `node.exe` 22.16 or newer. No internet, no database server, no npm |
-| **Stores** | One SQLite file, `data\board.db`, plus daily backups |
+| **Stores** | One SQLite file, `data\board.db`, the drawing-review PDFs in `data\review-files`, plus daily backups |
 | **Team size** | Built for a handful of people working at the same moment |
 | **Cost to run** | Nothing to subscribe to, nothing to renew |
 
@@ -19,7 +19,7 @@ One shared board for every design job: who is on it, what it is waiting for, whe
 
 | Section | What you will find |
 |---|---|
-| [A. The pages](#a-the-pages) | Seven views, each with its shortcut key |
+| [A. The pages](#a-the-pages) | Eight views, each with its shortcut key |
 | [B. The job record](#b-the-job-record) | Every field a job carries, and how a job moves |
 | [C. Working together](#c-working-together) | Claiming, live updates, edit merging, notifications |
 | [D. Finding things](#d-finding-things) | Search, filters, export |
@@ -46,6 +46,7 @@ Every page has a one-key shortcut. Press <kbd>?</kbd> anywhere for the full list
 | **A5** | **Workload** | <kbd>W</kbd> | Estimated hours per engineer for today, the next 3 days or this week, against an 8-hour reference day. Jobs with no estimate are counted, not guessed. | You are planning who can take more. |
 | **A6** | **Reports** | <kbd>R</kbd> | Jobs completed per day, per engineer and per job type, plus how long jobs take. This and last week, this and last month, last 30 days. | You need numbers for a review meeting. |
 | **A7** | **Team activity** | name menu | Every change to every job, newest first. History cannot be edited or deleted. | You want to know who did what, and when. |
+| **A8** | **Drawing review** | <kbd>V</kbd> | Jobs with drawings in board review; a workspace per job with the signed reference and the submitted drawing side by side (independent page, zoom and rotation), revision notes, comments, pass or return, handover and signature. | You check drawings before they are printed and signed. |
 
 ## B. The job record
 
@@ -87,6 +88,9 @@ Drag a card, press <kbd>Shift</kbd>+<kbd>←</kbd> / <kbd>→</kbd>, or use the 
 |---|:---:|:---:|:---:|:---:|
 | **Engineer** | yes | yes | yes | yes |
 | **Manager** | yes | yes | no | yes |
+| **Reviewer** | no | yes | no | no |
+
+Drawing review: engineers submit drawings, mark prints handed over and record signatures; the manager and reviewers pass or return drawings (never their own submission) and record signatures. Engineers can't review drawings. A job with drawings in board review is Done only when every drawing is physically signed.
 
 ## C. Working together
 
@@ -180,6 +184,7 @@ Copy `config.example.json` to `config.json` next to `start.bat`, edit it, restar
 | `backupDir` | `EB_BACKUP_DIR` | `data/backups` |
 | `backupKeepDays` | `EB_BACKUP_KEEP_DAYS` | `30` |
 | `restoreUploadMaxMB` | `EB_RESTORE_UPLOAD_MAX_MB` | `64` (1 to 1024) |
+| `reviewUploadMaxMB` | `EB_REVIEW_UPLOAD_MAX_MB` | `200` (1 to 2048; largest PDF for drawing review) |
 | `timezone` | `EB_TIMEZONE` | `Asia/Kolkata` |
 | `hoursPerDay` | | `8` (Workload reference line) |
 | `workingDays` | | `[1,2,3,4,5,6]` (Monday to Saturday; 0 is Sunday) |
@@ -188,13 +193,13 @@ Copy `config.example.json` to `config.json` next to `start.bat`, edit it, restar
 
 | | |
 |---|---|
-| **Dependencies at runtime** | None. Node built-ins only: `node:http`, `node:sqlite`, `node:crypto`. |
+| **Dependencies at runtime** | None on the server. Node built-ins only: `node:http`, `node:sqlite`, `node:crypto`, `node:zlib`. The review screen's PDF viewer (pdf.js) is built into the web files and served by the board itself. |
 | **History** | Append-only, enforced by database triggers. Jobs cannot be deleted. |
 | **Concurrency** | Version-checked edits, atomic claiming, idempotent creation. |
 | **Search** | SQLite full-text with trigram matching, so any three letters match. |
-| **Upgrades** | Schema version 4. A backup is taken before a new version changes the database. A board refuses to start on data written by a newer version. |
+| **Upgrades** | Schema version 6. A backup is taken before a new version changes the database. A board refuses to start on data written by a newer version. |
 | **Network** | LAN only; no outbound traffic. Name picker plus signed cookie; admin behind a hashed PIN. |
-| **Checked by** | 120 backend tests, 31 browser tests, 14 package checks, and a typecheck. |
+| **Checked by** | 145 backend tests, 34 browser tests, 14 package checks, and a typecheck. |
 
 ## J. Documentation
 
@@ -212,6 +217,7 @@ Copy `config.example.json` to `config.json` next to `start.bat`, edit it, restar
 
 | Version | What it brought |
 |---|---|
+| **1.1.0** | Drawing review: submit single-page drawings with the signed reference scan, compare them in two independent viewers, remember the matching reference page, comment, pass or return per drawing, print, hand over (with a reminder for the reviewer) and record the physical signature before a job can be Done. Project-folder copies, REVISION_LOG.md and clean-up of intermediate PDFs. New Reviewer role. |
 | **1.0.2** | Optional Charcoal and Midnight themes beside the original Light. |
 | **1.0.1** | Safer restore (prepared and checked before it replaces live data, with rollback), streamed uploads with a configurable limit, and complete Board and Workload lists with a visible retry. |
 | **1.0.0** | The full plan: board, tickets, claiming, workload, search, history, collaboration, Admin, import and export, backups, polish, tests, and the Windows, Linux and Docker packages with guides. |

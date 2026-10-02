@@ -34,7 +34,7 @@ describe('config.json', () => {
     const c = withConfig(example).load();
     const d = withConfig(null).load();
     assert.deepEqual(c.warnings, [], 'no unknown settings in the example');
-    for (const k of ['port', 'host', 'timezone', 'backupKeepDays', 'restoreUploadMaxMB', 'hoursPerDay', 'workingDays'] as const) assert.deepEqual(c[k], d[k], k);
+    for (const k of ['port', 'host', 'timezone', 'backupKeepDays', 'restoreUploadMaxMB', 'reviewUploadMaxMB', 'hoursPerDay', 'workingDays'] as const) assert.deepEqual(c[k], d[k], k);
   });
 
   it('accepts a file saved by Notepad with a byte-order mark, and "_comment" keys', () => {

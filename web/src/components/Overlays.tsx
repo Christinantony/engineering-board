@@ -35,6 +35,7 @@ function DialogFrame({ d }: { d: NonNullable<ReturnType<typeof useDialog>> }) {
         {d.spec.type === 'reason' && <ReasonDialog spec={d.spec} done={d.resolve} />}
         {d.spec.type === 'assign' && <AssignDialog spec={d.spec} done={d.resolve} />}
         {d.spec.type === 'confirm' && <ConfirmDialog spec={d.spec} done={d.resolve} />}
+        {d.spec.type === 'text' && <TextDialog spec={d.spec} done={d.resolve} />}
         {d.spec.type === 'conflict' && <ConflictDialog spec={d.spec} done={d.resolve} />}
       </div>
     </div>
@@ -150,6 +151,35 @@ function ConfirmDialog({ spec, done }: { spec: any; done: (v: any) => void }) {
         </button>
       </div>
     </div>
+  );
+}
+
+function TextDialog({ spec, done }: { spec: any; done: (v: any) => void }) {
+  const [text, setText] = useState('');
+  useEscape(() => done(null));
+  const ok = !spec.required || text.trim().length > 0;
+  return (
+    <form
+      onSubmit={(e: any) => {
+        e.preventDefault();
+        if (ok) done(text.trim());
+      }}
+    >
+      <h2 className="dialog-title" id="dialog-title">{spec.title}</h2>
+      <p className="dialog-sub">{spec.body}</p>
+      <label className="field-label" htmlFor="dialog-text">
+        {spec.label}
+      </label>
+      <textarea id="dialog-text" className="field-input" rows={4} autoFocus value={text} onChange={(e: any) => setText(e.target.value)} />
+      <div className="dialog-buttons">
+        <button type="button" className="btn btn-quiet" onClick={() => done(null)}>
+          Cancel
+        </button>
+        <button type="submit" className={`btn ${spec.danger ? 'btn-danger' : 'btn-primary'}`} disabled={!ok}>
+          {spec.confirm}
+        </button>
+      </div>
+    </form>
   );
 }
 

@@ -8,7 +8,7 @@ Press <kbd>?</kbd> on any page for the keyboard shortcuts.
 
 The first time, pick your name. The browser remembers you. On a shared PC, use **your name (top right) → Switch user**.
 
-Everyone can create jobs, edit them and comment. **Engineers** claim and do jobs. The **manager** can't claim, but can assign jobs to an engineer. Nothing is ever deleted: every change is kept in each job's history.
+Engineers and the manager can create jobs, edit them and comment. **Engineers** claim and do jobs. The **manager** can't claim, but can assign jobs to an engineer. **Reviewers** check drawings in [drawing review](#drawing-review): they can see everything and comment, but don't create or change jobs. Nothing is ever deleted: every change is kept in each job's history.
 
 ## Themes
 
@@ -26,7 +26,7 @@ The board shows every open job in columns, left to right:
 | **Claimed** | Someone owns it but hasn't started. |
 | **In progress** | Being worked on now. |
 | **Waiting / blocked** | Can't continue. The card says what it's waiting for (a supplier, a decision, input from someone). |
-| **Review** | Done and ready to be checked. Checking your own work is fine. |
+| **Review** | Done and ready to be checked. Checking your own work is fine, except for drawings submitted for board review: those are checked by the manager or a reviewer (see [Drawing review](#drawing-review)). |
 | **Done** | Finished. Done jobs leave the board after 7 days but stay searchable for ever. |
 
 Cards show the job number, title, owner, priority, due date and estimate. The due date is marked when a job is due today, and in red with a dot when it is overdue.
@@ -64,6 +64,65 @@ Click a card to open its panel on the right. Every field saves as you finish wit
 
 **Release** gives a claimed job back to the Inbox. **Archive** (for done or cancelled jobs) hides it from normal lists; **Restore** brings it back.
 
+## Drawing review
+
+Drawings are checked on the board before they are printed and signed. **Board review is an internal check, not official approval.** The physically signed drawing is the approved record, and the signed scans you attach are never changed, replaced or deleted by the board.
+
+**Who does what**
+
+| | Engineers | Manager and reviewers |
+|---|:---:|:---:|
+| Submit drawings and signed scans | yes | no |
+| Comment | yes | yes |
+| Pass or return a drawing | no | yes (not their own submission) |
+| Mark a print handed over | yes | no |
+| Record the physical signature | yes | yes |
+
+### 1. Submit
+
+Open the job and press **Submit for board review…** (or **Review → the job → Submit drawings…**).
+
+- **Signed reference scan**: for a revision, attach the signed, scanned set of the previous revision. It is usually one merged PDF for the whole set. Attach the file from the project folder: the board keeps its own copy and never touches yours.
+- **Drawings**: attach each drawing as **its own single-page PDF**, named with its part number (for example `BRK-023.pdf`). The file name becomes the drawing number; correct it in the form if needed. A PDF with more than one page is refused: export each sheet on its own.
+- For each drawing, say **what changed and why** (or, for a new drawing, its purpose), and choose **Revision** or **New drawing**. A revision needs a signed reference scan on the job.
+
+The job moves to the Review column, and the manager and reviewers are notified.
+
+### 2. Review
+
+**Review** in the top bar lists the jobs waiting for board review (press <kbd>V</kbd>). Open one to see:
+
+- **Drawing set** on the left: every drawing with its state. A drawing can pass while others are still being corrected.
+- **Two viewers**: the signed reference on the left, the submitted drawing on the right. Each has its own page, zoom (**−**, **+**, **Fit page**, **Fit width**) and rotation (**↺**, **↻**, **Reset**). Rotating or zooming only changes what you see, never the PDF.
+- **Finding the matching page**: page through the merged signed scan in the left viewer until it shows the old revision of this drawing, then press **Remember page N**. The board saves that page for this drawing and opens it there next time, for everyone. Anyone can change it later. The board never guesses the page.
+- **Compare with**: switch the left viewer to **Previous attempt** to compare a corrected drawing with the one that was returned, or choose **Drawing only**.
+- **Revision notes** and **Reviewer comments** on the right. Engineers can **Respond** to a comment; the reviewer (or the comment's author) **Resolves** it.
+
+The manager or a reviewer then either:
+
+- **Return for correction**, with a note or open comments. The engineer submits a corrected PDF as a new **attempt**: the drawing's engineering revision doesn't change (it can stay Rev C through attempts 1, 2 and 3). Only the drawings that need changes are resubmitted.
+- **Pass board review**. It can't be passed while comments are open. The status then reads **Board review passed — signature pending**.
+
+A drawing can't be reviewed by the person who submitted it.
+
+### 3. Print, hand over, sign
+
+1. Print **the exact PDF that passed** (**Open reviewed PDF to print**).
+2. Take it to the reviewer who passed it and press **Mark handed over for signature**. That reviewer gets one reminder in the board: "*BRK-023.pdf was approved by you in the board on 2 Oct 2026. The printed drawing has now been handed over for your signature.*" Pressing it again sends no second reminder.
+3. Once it is signed, press **Record physical signature**. Nothing needs uploading.
+
+**The job becomes Done by itself when every drawing is recorded as signed**, and it can't be moved to Done before that. If a PDF changes after it passed, it needs a new board review decision and a new print: the earlier handover doesn't carry over.
+
+### Project folder copies and the revision log
+
+If the job's **File location** is its project folder, the board keeps there:
+
+- `BoardReview\<JOB>\<drawing>\attempt N.pdf`: drawings under review.
+- `BoardReview\<JOB>\<drawing> - board reviewed (attempt N).pdf`: the exact PDF that passed (an internally reviewed copy, not an officially approved one).
+- `REVISION_LOG.md`: every drawing and attempt, with what changed, comments and responses, the outcome, who and when, handover and signature, and clean-up.
+
+After a drawing passes, the board removes the earlier attempts' PDFs (the history keeps their notes, comments and decisions, and says *Intermediate PDF removed after board review*). It never touches signed scans, CAD files or anything it didn't write. If the share can't be reached, the review screen says so and the board keeps trying; its own copies stay viewable. **Revision log** on the review screen shows the log for one job at any time.
+
 ## Other pages
 
 | Page | Key | What it's for |
@@ -71,6 +130,7 @@ Click a card to open its panel on the right. Every field saves as you finish wit
 | **Today** | <kbd>T</kbd> | The team's day at a glance: urgent, overdue, due today, unclaimed, in progress, waiting, ready for review, and what was finished since yesterday. |
 | **My work** | <kbd>M</kbd> | Your own jobs in your own order: drag them, or use <kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd>. You can also look at another engineer's list. |
 | **Dashboard** | <kbd>D</kbd> | Counts (unclaimed, in progress, waiting, due today, overdue, done today) and recent team activity. |
+| <kbd>V</kbd> | Drawing review |
 | **Workload** | <kbd>W</kbd> | Estimated hours per engineer for today, the next 3 days or this week, against an 8-hour day. It's a planning aid, not a limit. Jobs without an estimate are counted separately, not guessed. |
 | **Reports** | <kbd>R</kbd> | Jobs completed per day, per engineer and per job type, and how long jobs take, for this or last week or month. |
 | **Team activity** | your name menu | Every change to every job, newest first. |

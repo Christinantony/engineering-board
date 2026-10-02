@@ -1,6 +1,6 @@
 {
   "name": "engineering-board",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "description": "Internal engineering workboard. Zero runtime dependencies: Node.js 22.16+ only.",
@@ -15,13 +15,14 @@
     "seed:demo": "tsx --disable-warning=ExperimentalWarning server/src/db/seedDemoCli.ts",
     "build": "node scripts/build.mjs",
     "dev:web": "node scripts/build.mjs --watch --web-only",
-    "e2e": "node --test --test-concurrency=1 e2e/board.e2e.mjs",
+    "e2e": "node --test --test-concurrency=1 e2e/board.e2e.mjs e2e/review.e2e.mjs",
     "check:build": "node scripts/package.mjs && node --test --test-reporter=spec e2e/build.check.mjs",
     "package": "node scripts/package.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "esbuild": "^0.27.0",
+    "pdfjs-dist": "^6.3.289",
     "playwright": "^1.56.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",

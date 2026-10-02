@@ -19,6 +19,9 @@
   "_restoreUploadMaxMB": "Maximum backup file upload, in MiB (1 to 1024). Uploads stream to disk after admin authorization.",
   "restoreUploadMaxMB": 64,
 
+  "_reviewUploadMaxMB": "Largest PDF that can be attached for drawing review, in MiB (1 to 2048). Merged signed scans can be large.",
+  "reviewUploadMaxMB": 200,
+
   "_timezone": "Decides when a job becomes overdue and what 'today' means.",
   "timezone": "Asia/Kolkata",
 

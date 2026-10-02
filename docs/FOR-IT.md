@@ -8,7 +8,8 @@ The Engineering Board is an internal web app for the mechanical design team. It 
 | **Runs as** | the signed-in user; no service, no admin rights, no registry changes |
 | **Listens on** | TCP **8080** (configurable), all interfaces |
 | **Outbound traffic** | none; it needs no internet access |
-| **Data** | one SQLite file in the board folder (`data\board.db`) plus daily backup copies |
+| **Data** | one SQLite file in the board folder (`data\board.db`), drawing-review PDFs in `data\review-files`, plus daily backup copies |
+| **Writes to shares** | only for drawing review: into a job's project folder, under `BoardReview\` and a generated `REVISION_LOG.md`, as the signed-in user. It never changes or deletes files it didn't write. |
 | **Starts** | by the user, or at sign-in from the user's own Startup folder |
 
 ## The rule

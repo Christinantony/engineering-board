@@ -14,7 +14,7 @@ const refresh = () => {
 export function TeamSection() {
   const q = useQuery<{ users: User[] }>('/api/admin/users');
   const [name, setName] = useState('');
-  const [role, setRole] = useState<'engineer' | 'manager'>('engineer');
+  const [role, setRole] = useState<'engineer' | 'manager' | 'reviewer'>('engineer');
   if (!q.data) return <Spinner />;
 
   const add = async (e: any) => {
@@ -33,7 +33,7 @@ export function TeamSection() {
     <section className="admin-section">
       <h2>Team</h2>
       <p className="muted">
-        Engineers can claim and be assigned jobs; managers create, assign and comment. People who leave can be made inactive: their history stays, they
+        Engineers can claim and be assigned jobs; managers create, assign and comment. Reviewers (and managers) pass or return drawings in board review and sign the prints; reviewers don't create or change jobs. People who leave can be made inactive: their history stays, they
         disappear from pickers, and they can't sign in. Nobody is ever deleted.
       </p>
       <table className="table admin-table">
@@ -58,6 +58,7 @@ export function TeamSection() {
         <select className="field-input" value={role} aria-label="Role" onChange={(e: any) => setRole(e.target.value)}>
           <option value="engineer">Engineer</option>
           <option value="manager">Manager</option>
+          <option value="reviewer">Reviewer</option>
         </select>
         <button className="btn btn-primary" disabled={!name.trim()}>
           Add person
@@ -111,6 +112,7 @@ function UserRow({ u }: { u: User }) {
         <select className="field-input" value={u.role} aria-label={`Role of ${u.name}`} onChange={(e: any) => void save({ role: e.target.value })}>
           <option value="engineer">Engineer</option>
           <option value="manager">Manager</option>
+          <option value="reviewer">Reviewer</option>
         </select>
       </td>
       <td>

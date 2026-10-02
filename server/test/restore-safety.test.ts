@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { all, get, migrate, openDb, run, sqlite, type Db } from '../src/db/connection.ts';
+import { all, get, migrate, openDb, run, sqlite, SCHEMA_VERSION, type Db } from '../src/db/connection.ts';
+import { undoMigrationsAfter } from './helpers.ts';
 import { migrations } from '../src/db/migrations.ts';
 import { restoreFrom, verifyDatabaseFile, type BackupCtx } from '../src/domain/backup.ts';
 import { changePin, ensureAuthSettings, getSetting, readSession, sessionCookie, verifyPin } from '../src/domain/auth.ts';
@@ -114,7 +115,7 @@ describe('restore safety', () => {
   it('rejects a migration failure on the staged candidate without closing the live connection', () => {
     const f = fixture();
     try {
-      f.editSource(db => db.exec('DROP TABLE user_state; DELETE FROM schema_migrations WHERE id > 1'));
+      f.editSource(db => { undoMigrationsAfter(db, 3); db.exec('DROP TABLE user_state; DELETE FROM schema_migrations WHERE id > 1'); });
       // An unexpected imports table is tolerated by structural verification of
       // v1, but causes the v3 CREATE TABLE to fail during staged migration.
       assert.equal(verifyDatabaseFile(f.source.dbPath).schema, 1);
@@ -130,7 +131,7 @@ describe('restore safety', () => {
   it('migrates a v1 backup, rebuilds search and preserves the running PIN and cookies', () => {
     const f = fixture();
     try {
-      f.editSource(db => db.exec('DROP TABLE imports; DROP TABLE user_state; DELETE FROM schema_migrations WHERE id > 1'));
+      f.editSource(db => undoMigrationsAfter(db, 1));
       const sourceBefore = verifyDatabaseFile(f.source.dbPath);
       changePin(f.live, '54321');
       const token = sessionCookie(f.live, 1);
@@ -146,7 +147,7 @@ describe('restore safety', () => {
       assert.equal(get<{ n: number }>(f.live.db, 'SELECT COUNT(*) n FROM idempotency')!.n, 0);
       assert.equal(get<{ n: number }>(f.live.db, `SELECT COUNT(*) n FROM tickets_fts WHERE tickets_fts MATCH '"Restored"'`)!.n, 1);
       assert.deepEqual(verifyDatabaseFile(f.source.dbPath), sourceBefore, 'source backup was not migrated or modified');
-      assert.equal(verifyDatabaseFile(f.live.dbPath).schema, 4);
+      assert.equal(verifyDatabaseFile(f.live.dbPath).schema, SCHEMA_VERSION);
       assert.equal(verifyDatabaseFile(join(f.live.backupDir, result.safety_backup)).tickets, 1);
       f.live.events.flush();
       assert.equal(reloads, 1);

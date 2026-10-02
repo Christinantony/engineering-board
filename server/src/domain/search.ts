@@ -19,19 +19,21 @@ interface IndexRow {
   job_type: string | null;
   assignee: string | null;
   tags: string | null;
+  drawings: string | null;
 }
 
 const INDEX_SELECT = `
   SELECT t.id, t.job_number, t.title, t.description, t.notes, t.requester, t.reference,
          t.file_location, t.waiting_for, jt.name AS job_type, u.name AS assignee,
-         (SELECT group_concat(g.name, ' ') FROM ticket_tags tt JOIN tags g ON g.id = tt.tag_id WHERE tt.ticket_id = t.id) AS tags
+         (SELECT group_concat(g.name, ' ') FROM ticket_tags tt JOIN tags g ON g.id = tt.tag_id WHERE tt.ticket_id = t.id) AS tags,
+         (SELECT group_concat(d.identifier, ' ') FROM review_drawings d WHERE d.ticket_id = t.id) AS drawings
   FROM tickets t
   LEFT JOIN job_types jt ON jt.id = t.job_type_id
   LEFT JOIN users u ON u.id = t.assigned_to`;
 
 function writeIndex(ctx: Ctx, r: IndexRow) {
   run(ctx.db, 'DELETE FROM tickets_fts WHERE rowid = ?', r.id);
-  const body = [r.description, r.notes, r.requester, r.reference, r.file_location, r.waiting_for, r.job_type, r.assignee, r.tags]
+  const body = [r.description, r.notes, r.requester, r.reference, r.file_location, r.waiting_for, r.job_type, r.assignee, r.tags, r.drawings]
     .filter(Boolean)
     .join('\n');
   run(ctx.db, 'INSERT INTO tickets_fts (rowid, job_number, title, body) VALUES (?, ?, ?, ?)', r.id, r.job_number, r.title, body);

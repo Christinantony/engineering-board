@@ -2,13 +2,14 @@
 // The board stays visible behind it.
 
 import { useEffect, useRef, useState } from 'react';
-import { ESTIMATE_BUCKETS, PRIORITIES, STATUS_LABEL, estimateLabel, type Activity, type Status, type Ticket } from '@board/shared';
+import { ESTIMATE_BUCKETS, PRIORITIES, STATUS_LABEL, estimateLabel, type Activity, type ReviewWorkspace, type Status, type Ticket } from '@board/shared';
 import { useApp } from '../context.ts';
 import { addComment, archiveTicket, claimTicket, moveTicket, releaseTicket, updateTicket } from '../lib/actions.ts';
 import { copyText } from '../lib/clipboard.ts';
 import { ask } from '../lib/dialogs.ts';
 import { clock, dueLabel, when } from '../lib/format.ts';
 import { useQuery } from '../lib/store.ts';
+import { navigate } from '../lib/router.ts';
 import { toast } from '../lib/toasts.ts';
 import { Badge, ErrorBox, PRIORITY_TEXT, Spinner } from './bits.tsx';
 import { AlsoViewing, useAnnounceViewing } from './Collab.tsx';
@@ -178,6 +179,47 @@ function PathField({
   );
 }
 
+/** Drawings in board review on this job, with a way into the review screen. */
+function ReviewSummary({ t }: { t: Ticket }) {
+  const { me } = useApp();
+  const q = useQuery<ReviewWorkspace>(`/api/tickets/${t.id}/review`);
+  const w = q.data;
+  const open = !t.archived && t.status !== 'done' && t.status !== 'cancelled';
+  if (!w) return null;
+  const ds = w.drawings.filter((d) => d.required);
+  if (!ds.length && !(open && me.role === 'engineer')) return null;
+  const count = (s: string) => ds.filter((d) => d.state === s).length;
+  const parts = [
+    count('awaiting') && `${count('awaiting')} awaiting review`,
+    count('returned') && `${count('returned')} returned`,
+    count('passed') + count('handed_over') && `${count('passed') + count('handed_over')} signature pending`,
+    count('signed') && `${count('signed')} signed`,
+  ].filter(Boolean);
+  return (
+    <div className="panel-review">
+      <span className="field-label">Drawing review</span>
+      {ds.length ? (
+        <span>
+          {ds.length} drawing{ds.length === 1 ? '' : 's'}: {parts.join(', ')}
+        </span>
+      ) : (
+        <span className="muted">No drawings submitted</span>
+      )}
+      <span className="spacer" />
+      {ds.length > 0 && (
+        <button className="btn btn-sm" onClick={() => navigate(`/review/${t.id}`)}>
+          Open review
+        </button>
+      )}
+      {open && me.role === 'engineer' && (
+        <button className="btn btn-sm" onClick={() => navigate(`/review/${t.id}?submit=1`)}>
+          Submit for board review…
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** What can happen next from each status — one primary action, shown big. */
 function nextStep(t: Ticket): { label: string; to: Status } | null {
   switch (t.status) {
@@ -200,7 +242,10 @@ function PanelContent({ t, activity, onClose }: { t: Ticket; activity: Activity[
   const save = (fields: Record<string, unknown>, base?: Record<string, unknown>) => updateTicket(t, fields, base);
   const assignee = user(t.assigned_to);
   const closed = t.status === 'done' || t.status === 'cancelled';
-  const step = nextStep(t);
+  const review = useQuery<ReviewWorkspace>(`/api/tickets/${t.id}/review`).data;
+  // a job with drawings in board review is done when the prints are signed, not from here
+  const signaturesPending = (review?.signatures_pending ?? 0) > 0;
+  const step = t.status === 'review' && signaturesPending ? null : nextStep(t);
   const [comment, setComment] = useState('');
   const [posting, setPosting] = useState(false);
   const isBucket = t.estimate_minutes == null || ESTIMATE_BUCKETS.some((b) => b.minutes === t.estimate_minutes);
@@ -258,6 +303,8 @@ function PanelContent({ t, activity, onClose }: { t: Ticket; activity: Activity[
         </div>
       )}
 
+      <ReviewSummary t={t} />
+
       <div className="panel-actions">
         {t.assigned_to == null && !closed && me.role === 'engineer' && (
           <button className="btn btn-claim" onClick={() => void claimTicket(t)}>
@@ -279,7 +326,7 @@ function PanelContent({ t, activity, onClose }: { t: Ticket; activity: Activity[
             Mark waiting…
           </button>
         )}
-        {(t.status === 'in_progress' || t.status === 'claimed') && (
+        {(t.status === 'in_progress' || t.status === 'claimed') && !signaturesPending && (
           <button className="btn" onClick={() => void moveTicket(me, t, 'done', {}, { undo: { status: t.status } })}>
             Mark done
           </button>
@@ -583,6 +630,47 @@ function ActivityItem({ a }: { a: Activity }) {
       break;
     case 'restored':
       text = <>{who} restored it</>;
+      break;
+    case 'review_submitted':
+      text = (
+        <>
+          {who} submitted drawings for board review (submission {a.to_value}): {a.body}
+        </>
+      );
+      break;
+    case 'review_passed':
+      text = (
+        <>
+          {who} passed <strong>{a.to_value}</strong> in board review (signature pending)
+          {a.body && <span className="tl-quote">{a.body}</span>}
+        </>
+      );
+      break;
+    case 'review_returned':
+      text = (
+        <>
+          {who} returned <strong>{a.to_value}</strong> for correction
+          {a.body && <span className="tl-quote">{a.body}</span>}
+        </>
+      );
+      break;
+    case 'review_comment':
+      text = (
+        <>
+          <strong>{who}</strong> on {a.to_value}
+          <span className="tl-bubble">{a.body}</span>
+        </>
+      );
+      break;
+    case 'review_handover':
+      text = <>{who} handed the print to {a.to_value} for signature</>;
+      break;
+    case 'review_signed':
+      text = (
+        <>
+          {who} recorded the physical signature of <strong>{a.to_value}</strong>
+        </>
+      );
       break;
     case 'imported':
       text = (

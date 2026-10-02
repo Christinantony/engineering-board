@@ -35,8 +35,11 @@ export const PRIORITIES = ['urgent', 'high', 'normal', 'low'] as const;
 export type Priority = (typeof PRIORITIES)[number];
 export const PRIORITY_RANK: Record<Priority, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
 
-export const ROLES = ['engineer', 'manager'] as const;
+export const ROLES = ['engineer', 'manager', 'reviewer'] as const;
 export type Role = (typeof ROLES)[number];
+export const ROLE_LABEL: Record<Role, string> = { engineer: 'Engineer', manager: 'Manager', reviewer: 'Reviewer' };
+/** Who may pass or return drawings in board review (never engineers). */
+export const canReview = (u: { role: Role; active: boolean }) => u.active && (u.role === 'manager' || u.role === 'reviewer');
 
 /**
  * Estimate buckets. `minutes` is the planning value stored in the database
@@ -174,4 +177,149 @@ export interface ApiError {
   message: string;
   details?: unknown;
   current?: unknown;
+}
+
+// ---------- Drawing review ----------
+
+export const DRAWING_STATES = ['awaiting', 'returned', 'passed', 'handed_over', 'signed', 'withdrawn'] as const;
+export type DrawingState = (typeof DRAWING_STATES)[number];
+
+/** Labels never call board review "approval": only the physical signature is. */
+export const DRAWING_STATE_LABEL: Record<DrawingState, string> = {
+  awaiting: 'Awaiting board review',
+  returned: 'Returned for correction',
+  passed: 'Board review passed — signature pending',
+  handed_over: 'Handed over for signature',
+  signed: 'Physically signed',
+  withdrawn: 'Withdrawn',
+};
+export const DRAWING_STATE_SHORT: Record<DrawingState, string> = {
+  awaiting: 'Awaiting review',
+  returned: 'Returned',
+  passed: 'Passed — sign pending',
+  handed_over: 'With reviewer to sign',
+  signed: 'Signed',
+  withdrawn: 'Withdrawn',
+};
+
+export interface ReviewFile {
+  sha256: string;
+  filename: string;
+  size: number;
+  pages: number;
+}
+
+export interface ReviewReference {
+  id: number;
+  filename: string;
+  sha256: string;
+  pages: number;
+  attached_by: number | null;
+  attached_at: string;
+  available: boolean;
+}
+
+export interface ReviewComment {
+  id: number;
+  drawing_id: number;
+  attempt_id: number | null;
+  user_id: number | null;
+  body: string;
+  created_at: string;
+  response: string | null;
+  response_by: number | null;
+  response_at: string | null;
+  resolved_by: number | null;
+  resolved_at: string | null;
+}
+
+export interface ReviewAttempt {
+  id: number;
+  number: number;
+  submission_number: number;
+  filename: string;
+  sha256: string;
+  notes: string;
+  submitted_by: number | null;
+  submitted_at: string;
+  outcome: 'returned' | 'passed' | 'superseded' | null;
+  decided_by: number | null;
+  decided_at: string | null;
+  decision_note: string | null;
+  /** False once an intermediate PDF has been removed after board review. */
+  available: boolean;
+  file_removed_at: string | null;
+}
+
+export interface ReviewDrawing {
+  id: number;
+  identifier: string;
+  kind: 'revision' | 'new';
+  state: DrawingState;
+  required: boolean;
+  ref_reference_id: number | null;
+  ref_page: number | null;
+  current_attempt_id: number | null;
+  passed_attempt_id: number | null;
+  passed_by: number | null;
+  passed_at: string | null;
+  handover_by: number | null;
+  handover_at: string | null;
+  signed_by: number | null;
+  signed_at: string | null;
+  cleanup: 'none' | 'pending' | 'done' | 'failed';
+  cleanup_detail: string | null;
+  version: number;
+  attempts: ReviewAttempt[];
+  comments: ReviewComment[];
+  open_comments: number;
+}
+
+export interface ReviewEvent {
+  id: number;
+  drawing_id: number | null;
+  attempt_id: number | null;
+  user_id: number | null;
+  at: string;
+  kind: string;
+  detail: string | null;
+}
+
+export interface ReviewSyncState {
+  state: 'ok' | 'pending' | 'failed' | 'no_folder';
+  detail: string | null;
+  updated_at: string | null;
+  folder: string;
+}
+
+export interface ReviewWorkspace {
+  ticket: Ticket;
+  submissions: number;
+  references: ReviewReference[];
+  drawings: ReviewDrawing[];
+  events: ReviewEvent[];
+  sync: ReviewSyncState;
+  /** Required drawings that still need a physical signature. */
+  signatures_pending: number;
+}
+
+export interface ReviewQueueRow {
+  ticket_id: number;
+  job_number: string;
+  title: string;
+  folder: string;
+  submissions: number;
+  submitted_by: number | null;
+  submitted_at: string;
+  drawings: number;
+  revised: number;
+  new_count: number;
+  awaiting: number;
+  returned: number;
+  passed: number;
+  handed_over: number;
+  signed: number;
+  open_comments: number;
+  /** Reviewers who passed drawings now handed over to them to sign. */
+  signers: number[];
 }

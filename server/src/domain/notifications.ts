@@ -7,14 +7,17 @@
 //   * a note added to a job you own or created           (owner, creator)
 //   * a job you created marked done                      (creator)
 //   * a job taken off you                                (you)
+//   * drawings submitted for board review                (manager, reviewers)
+//   * a drawing passed or returned, a review comment     (owner, creator)
+//   * a print you passed handed over for your signature  (that reviewer, once)
 // plus two standing reminders: your overdue jobs and your jobs due today.
 
-import type { Activity, User } from '@board/shared';
+import { canReview, type Activity, type User } from '@board/shared';
 import { all, get, run } from '../db/connection.ts';
 import { nowIso, type Ctx } from '../lib/core.ts';
 import { localDate } from '../lib/time.ts';
 
-export type NoticeKind = 'urgent' | 'assigned' | 'review' | 'waiting' | 'comment' | 'done' | 'unassigned';
+export type NoticeKind = 'urgent' | 'assigned' | 'review' | 'waiting' | 'comment' | 'done' | 'unassigned' | 'review_submitted' | 'review_passed' | 'review_returned' | 'review_comment' | 'signature';
 
 export interface Notice {
   id: number; // activity id
@@ -58,6 +61,17 @@ function classify(a: Row, me: User): { kind: NoticeKind; detail: string | null }
       return null;
     case 'comment':
       return mine || created ? { kind: 'comment', detail: a.body } : null;
+    case 'review_submitted':
+      return canReview(me) ? { kind: 'review_submitted', detail: a.body } : null;
+    case 'review_passed':
+      return mine || created ? { kind: 'review_passed', detail: a.to_value } : null;
+    case 'review_returned':
+      return mine || created ? { kind: 'review_returned', detail: `${a.to_value}: ${a.body ?? ''}` } : null;
+    case 'review_comment':
+      return mine || created || canReview(me) ? { kind: 'review_comment', detail: `${a.to_value}: ${a.body ?? ''}` } : null;
+    case 'review_handover':
+      // the reminder goes to the reviewer who passed the drawing, and only them
+      return a.to_value === me.name ? { kind: 'signature', detail: a.body } : null;
     default:
       return null;
   }
@@ -91,7 +105,7 @@ export function notifications(ctx: Ctx, me: User, limit = 40) {
      JOIN tickets t ON t.id = a.ticket_id
      LEFT JOIN users u ON u.id = a.user_id
      WHERE a.at >= ? AND (a.user_id IS NULL OR a.user_id <> ?)
-       AND a.kind IN ('created','priority','assigned','released','status','comment')
+       AND a.kind IN ('created','priority','assigned','released','status','comment','review_submitted','review_passed','review_returned','review_comment','review_handover')
        AND t.archived = 0
      ORDER BY a.id DESC
      LIMIT 1000`,
