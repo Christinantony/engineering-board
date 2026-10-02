@@ -20,6 +20,7 @@ _(none)_
 ## Notes for the next agent
 - **Where the project stands:** phases 1–9, 1.0.1 (reliability), 1.0.2 (themes) and 1.1.0 (drawing review) are on main. Branch `ccr-76842e6e-xbo8lh` proposes 1.2.0, password sign-in, for Christin's review.
 - **Releases:** `npm run package` writes `dist/EngineeringBoard-<version>.zip`. Bump `version` in `package.json` and `APP_VERSION` in `server/src/app.ts` together; `check:build` fails if they differ.
+- **README screenshots:** `assets/screenshots/` is written by `node scripts/screenshots.mjs` (build first; set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` if Playwright's own Chromium isn't installed). Re-run it after visible changes.
 - **Guides:** edit the Markdown in `docs/`; the build turns them into the pages at `/guides/` and in the zip. `check:build` fails on a broken link between guides.
 - **Windows scripts** (`scripts/windows/*.bat`) can't be run in CI. Keep echo lines that show `%~dp0` outside `( )` blocks and quoted: a folder path containing `)` or `&` breaks them otherwise.
 - **Setup:** `npm install` installs the build and test tools (TypeScript, tsx, esbuild, React, Playwright). They are devDependencies only; the running board needs nothing but `node.exe` 22.16+ (decision #1).

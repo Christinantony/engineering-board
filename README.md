@@ -6,6 +6,10 @@
 
 One shared board for every design job: who is on it, what it is waiting for, when it is due and how it ended. It runs on a single PC on the office network. Everyone else opens it in a web browser.
 
+![The board: six columns from Inbox to Done, with the demo jobs](assets/screenshots/board.png)
+
+*Every picture in this file is a real screenshot of version 1.2.0 running with its demo data, taken in Chromium by `scripts/screenshots.mjs`.*
+
 | | |
 |---|---|
 | **Runs on** | One host PC (Windows, or Linux), no admin rights needed |
@@ -47,6 +51,23 @@ Every page has a one-key shortcut. Press <kbd>?</kbd> anywhere for the full list
 | **A6** | **Reports** | <kbd>R</kbd> | Jobs completed per day, per engineer and per job type, plus how long jobs take. This and last week, this and last month, last 30 days. | You need numbers for a review meeting. |
 | **A7** | **Team activity** | name menu | Every change to every job, newest first. History cannot be edited or deleted. | You want to know who did what, and when. |
 | **A8** | **Drawing review** | <kbd>V</kbd> | Jobs with drawings in board review; a workspace per job with the signed reference and the submitted drawing side by side (independent page, zoom and rotation), revision notes, comments, pass or return, handover and signature. | You check drawings before they are printed and signed. |
+
+| | |
+|---|---|
+| ![Today: urgent, overdue, due today, unclaimed, being worked on, waiting, ready for review, finished](assets/screenshots/today.png) | ![Dashboard: six counts, team workload, jobs that need an owner, recent activity](assets/screenshots/dashboard.png) |
+| **A2 Today** | **A4 Dashboard** |
+| ![Workload: estimated hours per engineer against the 8-hour reference line](assets/screenshots/workload.png) | ![Reports: completed per day, per engineer and per job type](assets/screenshots/reports.png) |
+| **A5 Workload** | **A6 Reports** |
+| ![A job opened from the board, with every field in the side panel](assets/screenshots/job-panel.png) | ![My work: one engineer's open jobs in their own order](assets/screenshots/my-work.png) |
+| **A1 Board with a job open** | **A3 My work** |
+
+**A8 Drawing review.** The queue, and the workspace with the signed reference on the left and the submitted drawing on the right, each with its own page, zoom and rotation. The open comment blocks **Pass board review** until it is resolved.
+
+![Submitting drawings for board review: the signed reference scan, one single-page PDF per drawing, its number, type and change notes](assets/screenshots/review-submit.png)
+
+![Drawing review queue: counts, tabs, and a preview of the submission](assets/screenshots/review-queue.png)
+
+![Drawing review workspace: signed reference and submitted drawing side by side, revision notes, reviewer comments](assets/screenshots/review-workspace.png)
 
 ## B. The job record
 
@@ -105,6 +126,8 @@ Drawing review: engineers submit drawings, mark prints handed over and record si
 | **C7** | **Update prompt** | After the board is upgraded, open screens offer a reload instead of running old code against a new server. |
 | **C8** | **Complete lists** | Board and Workload load every matching page of jobs. If loading fails, a message offers **Try again** and the last complete list stays visible. |
 
+![The bell: an overdue reminder, two urgent jobs raised by the manager, and a job sent for review](assets/screenshots/notifications.png)
+
 ## D. Finding things
 
 | Item | Feature | Notes |
@@ -113,6 +136,8 @@ Drawing review: engineers submit drawings, mark prints handed over and record si
 | **D2** | **Filters** | On the board: person, priority, job type, tag, due date, created date. Remembered across reloads. |
 | **D3** | **Export to CSV** | What a search shows, ready for Excel. Opens correctly with accents and guards against formula injection. |
 | **D4** | **Full export** | **Admin → Export:** every job as CSV, or everything with full history as JSON. |
+
+![Search for "housing": matches any part of a word, with the same filters as the board and an Export to CSV link](assets/screenshots/search.png)
 
 ## E. Administration
 
@@ -130,6 +155,10 @@ Behind the admin PIN, unlocked per browser for 12 hours. The PIN starts as `1234
 | **E9** | **Passwords** | Everyone signs in with their own password, created at their first sign-in and changeable from the account menu. Admins reset a forgotten one (the person creates a new one next time). If everyone is locked out, an empty file named `RESET-PASSWORDS` next to `start.bat` clears them all on the next start. |
 | **E8** | **Demo data** | Twelve example jobs across every column, removable in one click without touching real jobs. |
 
+![The sign-in screen: pick your name, then enter or create your password; the theme can be chosen before signing in](assets/screenshots/sign-in.png)
+
+![Admin → Team: role, badge colour, admin menu, active, and password reset per person](assets/screenshots/admin.png)
+
 ## F. Appearance
 
 ### F1. Themes
@@ -144,6 +173,11 @@ Choose from the **Theme** selector at the top of the board, or on the name picke
 
 Text and badge contrast is checked for each theme, including counts, forms and dialogs.
 
+| | |
+|---|---|
+| ![The board in the Charcoal theme](assets/screenshots/board-charcoal.png) | ![The board in the Midnight theme](assets/screenshots/board-midnight.png) |
+| **Charcoal** | **Midnight** |
+
 ### F2. Keyboard
 
 The whole board works without a mouse: move between cards with the arrow keys, <kbd>Enter</kbd> to open, <kbd>C</kbd> to claim, <kbd>Shift</kbd>+arrows to move a card between and within columns, <kbd>N</kbd> for a new job, <kbd>Alt</kbd>+<kbd>↑</kbd> / <kbd>↓</kbd> to reorder My work. A skip link and named controls support screen readers.
@@ -151,6 +185,10 @@ The whole board works without a mouse: move between cards with the arrow keys, <
 ### F3. Phone and tablet
 
 Below 1180 px the navigation wraps onto its own row so nothing is cut off. On a phone the board columns scroll sideways. Long-press a card for the same menu as right-click.
+
+| | |
+|---|---|
+| ![The board on a 390 px wide phone: columns scroll sideways](assets/screenshots/phone-board.png) | ![Today on a phone](assets/screenshots/phone-today.png) |
 
 ## G. Editions and installation
 
@@ -239,6 +277,7 @@ npm run check:build    # packages, then checks the zip and runs its server with 
 npm run e2e            # browser tests (Playwright + Chromium; build first)
 npm run typecheck      # server and web
 npm run seed:demo      # add demo jobs  (…-- --clear to remove them)
+node scripts/screenshots.mjs   # the README screenshots, from a fresh board with demo data (build first)
 ```
 
 The web app is React 19 bundled by esbuild. Small purpose-built replacements for a router, query cache, drag and drop and dialogs live in `web/src/lib/`. The guides in `docs/` become web pages at build time and the release zip is written by a small script, both without extra packages.
@@ -257,5 +296,6 @@ server/src/
 server/test/     node:test suites against a real server and a real SQLite file
 e2e/             browser tests and the build and package check
 scripts/         build, package, lib (markdown, zip, guides), windows/, linux/
+assets/          README screenshots
 docs/            the guides, also built into the app
 ```
