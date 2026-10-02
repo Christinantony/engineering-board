@@ -7,7 +7,7 @@ Add a row when you start working, remove it when you finish.
 
 | Agent | Branch | Files / areas being touched | Started (IST) |
 |---|---|---|---|
-| _(none)_ | | | |
+| Claude | `claude/readme-catalogue` | `README.md` only (rewritten as a catalogue), `CHANGELOG.md`, this row | 2026-10-02 |
 
 ## Open questions
 Questions for Christin or another agent. Mark answered ones with the answer and date, and move them to "Resolved".
