@@ -7,7 +7,7 @@ import { all, get, migrate, openDb, run, sqlite, SCHEMA_VERSION, type Db } from 
 import { undoMigrationsAfter } from './helpers.ts';
 import { migrations } from '../src/db/migrations.ts';
 import { restoreFrom, verifyDatabaseFile, type BackupCtx } from '../src/domain/backup.ts';
-import { changePin, ensureAuthSettings, getSetting, readSession, sessionCookie, verifyPin } from '../src/domain/auth.ts';
+import { changePin, createPassword, ensureAuthSettings, getSetting, readSession, sessionCookie, verifyPin } from '../src/domain/auth.ts';
 import { EventHub } from '../src/lib/core.ts';
 
 function fixture() {
@@ -20,6 +20,7 @@ function fixture() {
       tz: 'Asia/Kolkata', now: () => new Date('2026-10-01T04:30:00Z'), events: new EventHub() };
     ensureAuthSettings(ctx);
     run(db, `INSERT INTO users(id,name,initials,color,created_at) VALUES (1,'Designer','D','#047857','2026-10-01')`);
+    createPassword(ctx, 1, `${name}-password`); // the running board's password must survive a restore
     run(db, `INSERT INTO tickets(id,job_number,title,created_by,created_at,updated_at) VALUES (1,'JOB-1001',?,1,'2026-10-01','2026-10-01')`, title);
     run(db, `INSERT INTO activity(ticket_id,user_id,at,kind,body) VALUES (1,1,'2026-10-01','comment','Preserve this comment')`);
     run(db, `INSERT INTO idempotency(key,ticket_id,created_at) VALUES ('retry',1,'2026-10-01')`);

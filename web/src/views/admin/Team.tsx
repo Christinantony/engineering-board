@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import type { User } from '@board/shared';
-import { patch, post } from '../../lib/api.ts';
+import { del, patch, post } from '../../lib/api.ts';
 import { invalidate, useQuery } from '../../lib/store.ts';
+import { ask } from '../../lib/dialogs.ts';
 import { toast } from '../../lib/toasts.ts';
 import { Badge, Spinner } from '../../components/bits.tsx';
 import { onAdminError } from './Admin.tsx';
@@ -36,6 +37,10 @@ export function TeamSection() {
         Engineers can claim and be assigned jobs; managers create, assign and comment. Reviewers (and managers) pass or return drawings in board review and sign the prints; reviewers don't create or change jobs. People who leave can be made inactive: their history stays, they
         disappear from pickers, and they can't sign in. Nobody is ever deleted.
       </p>
+      <p className="muted">
+        Everyone signs in with their own password, which they create the first time they sign in. Nobody else ever sees it. If someone forgets theirs, <strong>Reset</strong> clears it: they are signed out everywhere and create a new password the next time they sign
+        in, so tell them straight away.
+      </p>
       <table className="table admin-table">
         <thead>
           <tr>
@@ -45,6 +50,7 @@ export function TeamSection() {
             <th>Role</th>
             <th>Admin menu</th>
             <th>Active</th>
+            <th>Password</th>
           </tr>
         </thead>
         <tbody>
@@ -78,6 +84,23 @@ function UserRow({ u }: { u: User }) {
     } catch (err) {
       setName(u.name);
       setInitials(u.initials);
+      onAdminError(err);
+    }
+  };
+  const resetPassword = async () => {
+    const ok = await ask({
+      type: 'confirm',
+      title: `Reset ${u.name}'s password?`,
+      body: `${u.name} is signed out everywhere and creates a new password the next time they sign in. Until then anyone who picks their name could create it, so tell them straight away.`,
+      confirm: 'Reset password',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await del(`/api/admin/users/${u.id}/password`);
+      toast(`${u.name}'s password was reset. They create a new one at their next sign-in.`, { kind: 'success' });
+      refresh();
+    } catch (err) {
       onAdminError(err);
     }
   };
@@ -120,6 +143,16 @@ function UserRow({ u }: { u: User }) {
       </td>
       <td>
         <input type="checkbox" checked={u.active} aria-label={`${u.name} is active`} onChange={(e: any) => void save({ active: e.target.checked })} />
+      </td>
+      <td>
+        <span className="cell-password">
+          <span className={u.has_password ? '' : 'muted'}>{u.has_password ? 'Set' : 'Not created yet'}</span>
+          {u.has_password && (
+            <button type="button" className="btn btn-quiet btn-sm" onClick={() => void resetPassword()} aria-label={`Reset the password of ${u.name}`}>
+              Reset
+            </button>
+          )}
+        </span>
       </td>
     </tr>
   );

@@ -2,7 +2,7 @@
 
 ### The workboard for the mechanical design team
 
-*Catalogue edition, version 1.1.0*
+*Catalogue edition, version 1.2.0*
 
 One shared board for every design job: who is on it, what it is waiting for, when it is due and how it ended. It runs on a single PC on the office network. Everyone else opens it in a web browser.
 
@@ -116,17 +116,18 @@ Drawing review: engineers submit drawings, mark prints handed over and record si
 
 ## E. Administration
 
-Behind the admin PIN, unlocked per browser for 12 hours. The PIN starts as `1234`; change it on day one.
+Behind the admin PIN, unlocked per browser for 12 hours. The PIN starts as `1234`; change it on day one. The PIN is separate from the sign-in passwords (E9): it unlocks Admin for anyone signed in who knows it.
 
 | Item | Task | Notes |
 |---|---|---|
-| **E1** | **Team** | Add people, set engineer or manager, choose a badge colour, mark who sees the Admin menu, deactivate leavers. People are never deleted, so history keeps its authors. |
+| **E1** | **Team** | Add people, set engineer, manager or reviewer, choose a badge colour, mark who sees the Admin menu, deactivate leavers, reset a forgotten password. People are never deleted, so history keeps its authors. |
 | **E2** | **Job types and tags** | Reorder, retire and bring back job types. Rename tags; renaming to an existing tag merges them. |
 | **E3** | **Import from Excel** | Save as CSV UTF-8, choose the file, read the preview, then import. Column names are recognised automatically. Nothing is created until you confirm; rows with errors are skipped and explained; a backup is taken first; the whole file goes in or none of it; importing the same file twice is caught. |
 | **E4** | **Backups** | Automatic: daily, and before every import, restore and upgrade. Kept 30 days, newest 7 always. Each is a complete, verified SQLite file in `data\backups`. Point `backupDir` at a network share or OneDrive so a dead PC does not take them with it. |
 | **E5** | **Restore** | From the list, or from an uploaded `.db` file (64 MiB by default, adjustable). The file is checked and prepared first; if anything fails the original data is put back. The current data is backed up before every restore, so a restore can itself be undone. Nobody is signed out. |
 | **E6** | **Archive** | Hide jobs finished more than N days ago from lists and reports. Never deletes. |
 | **E7** | **Admin PIN** | Change it. If it is forgotten, put an empty file named `RESET-ADMIN-PIN` next to `start.bat` and restart. |
+| **E9** | **Passwords** | Everyone signs in with their own password, created at their first sign-in and changeable from the account menu. Admins reset a forgotten one (the person creates a new one next time). If everyone is locked out, an empty file named `RESET-PASSWORDS` next to `start.bat` clears them all on the next start. |
 | **E8** | **Demo data** | Twelve example jobs across every column, removable in one click without touching real jobs. |
 
 ## F. Appearance
@@ -164,7 +165,7 @@ Below 1180 px the navigation wraps onto its own row so nothing is cut off. On a 
 
 1. Unzip `EngineeringBoard-<version>.zip` to a folder you own, for example `C:\Users\<you>\EngineeringBoard`.
 2. Download Node.js 22 LTS as **Windows Binary (.zip), x64** from <https://nodejs.org/en/download>. Copy just `node.exe` next to `start.bat`.
-3. Double-click **`start.bat`** and keep its window open. Open <http://localhost:8080>, pick your name, and change the admin PIN.
+3. Double-click **`start.bat`** and keep its window open. Open <http://localhost:8080>, pick your name, create your password, and change the admin PIN.
 4. Ask IT to allow the port once: run `for-IT\allow-board-port.bat` as administrator, or give them [For IT](docs/FOR-IT.md). Then share the "For your team" address the window shows, such as `http://CHRISTIN-PC:8080`.
 5. Optional: run `autostart-on.bat` so the board starts whenever you sign in.
 
@@ -198,8 +199,8 @@ Copy `config.example.json` to `config.json` next to `start.bat`, edit it, restar
 | **Concurrency** | Version-checked edits, atomic claiming, idempotent creation. |
 | **Search** | SQLite full-text with trigram matching, so any three letters match. |
 | **Upgrades** | Schema version 6. A backup is taken before a new version changes the database. A board refuses to start on data written by a newer version. |
-| **Network** | LAN only; no outbound traffic. Name picker plus signed cookie; admin behind a hashed PIN. |
-| **Checked by** | 145 backend tests, 34 browser tests, 14 package checks, and a typecheck. |
+| **Network** | LAN only; no outbound traffic. Name picker plus a password (scrypt hash) and a signed cookie bound to it; admin behind a hashed PIN; five wrong passwords pause sign-in for 30 seconds. |
+| **Checked by** | 156 backend tests, 35 browser tests, 15 package checks, and a typecheck. |
 
 ## J. Documentation
 
@@ -217,6 +218,7 @@ Copy `config.example.json` to `config.json` next to `start.bat`, edit it, restar
 
 | Version | What it brought |
 |---|---|
+| **1.2.0** | Password sign-in for everyone, current and new: each person creates their own password at their first sign-in, changes it from the account menu, and an admin can reset a forgotten one. A `RESET-PASSWORDS` file on the host PC clears them all. Restores keep the current passwords. |
 | **1.1.0** | Drawing review: submit single-page drawings with the signed reference scan, compare them in two independent viewers, remember the matching reference page, comment, pass or return per drawing, print, hand over (with a reminder for the reviewer) and record the physical signature before a job can be Done. Project-folder copies, REVISION_LOG.md and clean-up of intermediate PDFs. New Reviewer role. |
 | **1.0.2** | Optional Charcoal and Midnight themes beside the original Light. |
 | **1.0.1** | Safer restore (prepared and checked before it replaces live data, with rollback), streamed uploads with a configurable limit, and complete Board and Workload lists with a visible retry. |
@@ -246,7 +248,7 @@ shared/src/      constants, API types, validators (used by server and web)
 web/src/         React app: views, components, lib (api, store, router, theme…)
 server/src/
   app.ts         routes, auth wrappers, HTTP server
-  index.ts       entry point: config, startup banner, PIN reset, clean shutdown
+  index.ts       entry point: config, startup banner, PIN and password resets, clean shutdown
   config.ts      config.json and environment variables, with plain-English errors
   http/          router, bodies, cookies, static files, error mapping
   db/            connection, transactions, migrations, seed data

@@ -6,13 +6,15 @@ Press <kbd>?</kbd> on any page for the keyboard shortcuts.
 
 ## Getting started
 
-The first time, pick your name. The browser remembers you. On a shared PC, use **your name (top right) → Switch user**.
+Pick your name, then enter your password. The browser remembers you, so you won't be asked again on this computer. On a shared PC, use **your name (top right) → Sign out** when you leave.
+
+**Your first sign-in:** you don't have a password yet, so the board asks you to create one (at least 6 characters; a short phrase with spaces is fine). Only you should know it: nobody else, not even the admin, can see it. To change it later, use **your name → Change password**; other browsers signed in as you are asked to sign in again. If you forget it, ask whoever looks after the board to reset it under Admin → Team, then sign in and create a new one.
 
 Engineers and the manager can create jobs, edit them and comment. **Engineers** claim and do jobs. The **manager** can't claim, but can assign jobs to an engineer. **Reviewers** check drawings in [drawing review](#drawing-review): they can see everything and comment, but don't create or change jobs. Nothing is ever deleted: every change is kept in each job's history.
 
 ## Themes
 
-Use **Theme** at the top of the board (or on the name picker) to choose **Light**, **Charcoal** or **Midnight**. Light is the original appearance and the default. Charcoal uses neutral dark greys with blue controls; Midnight uses a near-black background with teal controls.
+Use **Theme** at the top of the board (or on the sign-in screen) to choose **Light**, **Charcoal** or **Midnight**. Light is the original appearance and the default. Charcoal uses neutral dark greys with blue controls; Midnight uses a near-black background with teal controls.
 
 Your choice applies to every app page, job panel, form, menu and dialog. It is saved in this browser for this board address, including after a reload or switching users. Other browsers can choose their own theme. If browser storage is disabled, you can still change themes for the current page, but the choice may not survive a reload.
 

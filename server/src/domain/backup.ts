@@ -18,7 +18,7 @@
 
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, statSync, copyFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import { get, migrate, openDb, run, sqlite, type Db } from '../db/connection.ts';
+import { all, get, migrate, openDb, run, sqlite, type Db } from '../db/connection.ts';
 import { migrations } from '../db/migrations.ts';
 import { HttpError, badRequest, type Ctx } from '../lib/core.ts';
 import { localDate } from '../lib/time.ts';
@@ -200,8 +200,10 @@ export function verifyDatabaseFile(path: string): { tickets: number; activity: n
  * Validate, migrate and initialize a private candidate before touching live
  * data. Keep the original file until activation succeeds; any activation
  * failure restores both that file and the running connection.
- * Sessions and the admin PIN of the running board are kept, so nobody is
- * signed out and the person restoring keeps admin access.
+ * Sessions, passwords and the admin PIN of the running board are kept, so
+ * nobody is signed out and the person restoring keeps admin access. (Passwords
+ * are credentials, not board data: a backup from before someone changed theirs,
+ * or from before passwords existed, must not lock them out.)
  */
 export function restoreFrom(ctx: BackupCtx, sourcePath: string): { tickets: number; safety_backup: string; review_files_missing: number } {
   verifyDatabaseFile(sourcePath);
@@ -210,6 +212,7 @@ export function restoreFrom(ctx: BackupCtx, sourcePath: string): { tickets: numb
     admin_pin: getSetting(ctx, 'admin_pin')!,
     admin_pin_is_default: getSetting(ctx, 'admin_pin_is_default') ?? '1',
   };
+  const keepPasswords = all<{ id: number; password_hash: string }>(ctx.db, 'SELECT id, password_hash FROM users WHERE password_hash IS NOT NULL');
 
   const stagingDir = mkdtempSync(`${ctx.dbPath}.restore-`);
   const staged = join(stagingDir, 'candidate.db');
@@ -229,6 +232,7 @@ export function restoreFrom(ctx: BackupCtx, sourcePath: string): { tickets: numb
       const stagingCtx = { ...ctx, db: candidate };
       ensureAuthSettings(stagingCtx);
       for (const [k, v] of Object.entries(keep)) setSetting(stagingCtx, k, v);
+      for (const p of keepPasswords) run(candidate, 'UPDATE users SET password_hash = ? WHERE id = ?', p.password_hash, p.id);
       run(candidate, 'DELETE FROM idempotency');
       rebuildIndex(stagingCtx);
       verifyDatabaseFile(staged);
@@ -259,6 +263,10 @@ export function restoreFrom(ctx: BackupCtx, sourcePath: string): { tickets: numb
       // Read authentication settings through the activated connection too.
       for (const [key, value] of Object.entries(keep)) {
         if (getSetting(ctx, key) !== value) throw new Error(`Restored ${key} did not match the running board`);
+      }
+      for (const p of keepPasswords) {
+        const row = get<{ password_hash: string | null }>(ctx.db, 'SELECT password_hash FROM users WHERE id = ?', p.id);
+        if (row && row.password_hash !== p.password_hash) throw new Error(`Restored password of user ${p.id} did not match the running board`);
       }
       // put back review PDFs the restored data needs, from the backup store
       const files = restoreReviewFiles(ctx, ctx.backupDir);

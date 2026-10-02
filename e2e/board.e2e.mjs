@@ -17,6 +17,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_PATH ?? 'playwright');
 const PORT = 18093;
 const BASE = `http://127.0.0.1:${PORT}`;
 let server, dir, browser;
+/** Every seeded person creates this password before the tests (as they would at a first sign-in). */
+const PASSWORD = 'board-e2e-1';
 
 async function api(method, path, body, cookie) {
   const r = await fetch(BASE + path, {
@@ -50,7 +52,9 @@ async function stopServer() {
 before(async () => {
   dir = mkdtempSync(join(tmpdir(), 'eb-e2e-'));
   await startServer();
-  const s = await api('POST', '/api/session', { user_id: 1 });
+  // first sign-in for each seeded person: create the password
+  for (const user_id of [1, 2, 3, 4]) assert.equal((await api('POST', '/api/session/password', { user_id, password: PASSWORD })).r.status, 200);
+  const s = await api('POST', '/api/session', { user_id: 1, password: PASSWORD });
   const u = await api('POST', '/api/admin/unlock', { pin: '1234' }, s.cookie);
   await api('POST', '/api/admin/demo', {}, `${s.cookie}; ${u.cookie}`);
   browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH });
@@ -94,10 +98,17 @@ async function freshPage(options = {}, init) {
   return trackedPage(ctx);
 }
 
+/** Pick a name on the sign-in screen and enter the password. */
+async function signIn(p, name, password = PASSWORD) {
+  await p.click(`.who-option:has-text("${name}")`);
+  await p.fill('input[name=password]', password);
+  await p.press('input[name=password]', 'Enter');
+}
+
 async function login(name) {
   const p = await freshPage();
   await p.goto(BASE + '/');
-  await p.click(`.who-option:has-text("${name}")`);
+  await signIn(p, name);
   await p.waitForSelector('.card');
   return p;
 }
@@ -505,7 +516,7 @@ test('the host PC going away and coming back: people are told, then it carries o
     await startServer();
   }
   // a job created while Allen's screen was reconnecting still shows up
-  const s = await api('POST', '/api/session', { user_id: 2 });
+  const s = await api('POST', '/api/session', { user_id: 2, password: PASSWORD });
   await api('POST', '/api/tickets', { title: 'Made after the restart' }, s.cookie);
   await p.waitForSelector('.banner-bad', { state: 'detached', timeout: 20000 });
   await p.waitForSelector('.card:has-text("Made after the restart")', { timeout: 15000 });
@@ -533,7 +544,7 @@ test('after the board is upgraded on the host, open screens offer a reload', asy
     }),
   );
   await p.goto(BASE + '/');
-  await p.click('.who-option:has-text("Paul")');
+  await signIn(p, 'Paul');
   await p.waitForSelector('.card');
   await p.waitForSelector('.banner-info', { timeout: 20000 });
   assert.match(await p.textContent('.banner-info'), /updated on the server/);
@@ -545,7 +556,7 @@ test('after the board is upgraded on the host, open screens offer a reload', asy
 test('large board and workload lists show every job; later-page failures stay visible and retry', async () => {
   // Seed directly while stopped: thousands of API creates would test creation
   // throughput instead of the pagination boundary and make the suite slow.
-  const s = await api('POST', '/api/session', { user_id: 2 });
+  const s = await api('POST', '/api/session', { user_id: 2, password: PASSWORD });
   const users = await (await api('GET', '/api/users', undefined, s.cookie)).r.json();
   const paul = users.users.find((u) => u.name === 'Paul').id;
   const { DatabaseSync } = process.getBuiltinModule('node:sqlite');
@@ -674,7 +685,7 @@ test('theme picker retains the existing light default and preferences survive re
   await themePicker(p).selectOption({ label: 'Charcoal' });
   await expectTheme(p, 'charcoal');
   await readableDarkSurface(p, '.who-card');
-  await p.click('.who-option:has-text("Christin")');
+  await signIn(p, 'Christin');
   await p.waitForSelector('.card');
   await expectTheme(p, 'charcoal');
   await themePicker(p).selectOption({ label: 'Midnight' });
@@ -684,10 +695,10 @@ test('theme picker retains the existing light default and preferences survive re
   await p.waitForSelector('.card');
   await expectTheme(p, 'midnight');
   await p.click('summary[aria-label="Account"]');
-  await p.click('button:has-text("Switch user")');
+  await p.click('button:has-text("Sign out")');
   await p.waitForSelector('.who-option');
   await expectTheme(p, 'midnight');
-  await p.click('.who-option:has-text("Paul")');
+  await signIn(p, 'Paul');
   await p.waitForSelector('.card');
   await expectTheme(p, 'midnight');
   await themePicker(p).selectOption({ label: 'Light' });
@@ -757,7 +768,7 @@ test('invalid or inaccessible storage falls back to light without preventing the
     await expectTheme(blocked, 'light');
     await themePicker(blocked).selectOption('midnight');
     await expectTheme(blocked, 'midnight');
-    await blocked.click('.who-option:has-text("Allen")');
+    await signIn(blocked, 'Allen');
     await blocked.waitForSelector('.card');
     await expectTheme(blocked, 'midnight');
     await blocked.reload();
@@ -828,3 +839,77 @@ for (const theme of ['charcoal', 'midnight']) {
     await p.keyboard.press('Escape');
   });
 }
+
+test('password sign-in: a new person creates theirs, a wrong one is refused, changing it signs out other browsers, an admin resets it', async () => {
+  // an admin adds Nila; she has no password until she creates one
+  const s = await api('POST', '/api/session', { user_id: 1, password: PASSWORD });
+  const u = await api('POST', '/api/admin/unlock', { pin: '1234' }, s.cookie);
+  const made = await api('POST', '/api/admin/users', { name: 'Nila Thomas', role: 'engineer' }, `${s.cookie}; ${u.cookie}`);
+  assert.equal(made.r.status, 201);
+  const nilaId = (await made.r.json()).user.id;
+
+  const p = await freshPage();
+  await p.goto(BASE + '/');
+  await p.click('.who-option:has-text("Nila")');
+  await p.waitForSelector('text=create one now');
+  const submit = p.locator('button[type=submit]');
+  assert.equal(await submit.isDisabled(), true, 'nothing typed yet');
+  await p.fill('input[name=password]', 'nilas-phrase');
+  await p.fill('input[name=password_again]', 'mayas-phrasx');
+  await p.waitForSelector('.form-error:has-text("don\'t match")');
+  assert.equal(await submit.isDisabled(), true, 'mismatch blocks the button');
+  await p.fill('input[name=password_again]', 'nilas-phrase');
+  await submit.click();
+  await p.waitForSelector('.card');
+  assert.ok((await p.textContent('.me-name')).includes('Nila'), 'signed in as Nila');
+
+  // a second browser: wrong password, then the right one
+  const q = await freshPage();
+  await q.goto(BASE + '/');
+  await q.click('.who-option:has-text("Nila")');
+  await q.waitForSelector('text=Enter your password');
+  assert.equal(await q.locator('input[name=password_again]').count(), 0, 'no confirm field once a password exists');
+  await q.fill('input[name=password]', 'not-this-one');
+  await q.press('input[name=password]', 'Enter');
+  await q.waitForSelector('.form-error:has-text("isn\'t right")');
+  assert.equal(await q.locator('.card').count(), 0, 'still on the sign-in screen');
+  await q.fill('input[name=password]', 'nilas-phrase');
+  await q.press('input[name=password]', 'Enter');
+  await q.waitForSelector('.card');
+
+  // changing the password from the account menu: this browser stays in, the other is signed out
+  await p.click('summary[aria-label="Account"]');
+  await p.click('button:has-text("Change password")');
+  await p.waitForSelector('.dialog');
+  await p.fill('#pw-current', 'wrong-current');
+  await p.fill('#pw-next', 'new-phrase-2026');
+  await p.fill('#pw-again', 'new-phrase-2026');
+  await p.click('.dialog button:has-text("Change password")');
+  await p.waitForSelector('.dialog .form-error:has-text("isn\'t right")');
+  await p.fill('#pw-current', 'nilas-phrase');
+  await p.click('.dialog button:has-text("Change password")');
+  await p.waitForSelector('.toast:has-text("password has been changed")');
+  await p.reload();
+  await p.waitForSelector('.card');
+  await q.reload();
+  await q.waitForSelector('.who-option', { timeout: 5000 });
+
+  // an admin resets it: Nila is signed out and creates a new password next time
+  const a = await login('Christin');
+  await a.goto(BASE + '/admin?s=team');
+  await a.fill('input[aria-label="Admin PIN"]', '1234');
+  await a.press('input[aria-label="Admin PIN"]', 'Enter');
+  await a.waitForSelector('.admin-table');
+  const row = a.locator('tr:has(input[aria-label="Name of Nila Thomas"])');
+  assert.equal((await row.textContent()).includes('Set'), true);
+  await row.locator('button[aria-label="Reset the password of Nila Thomas"]').click();
+  await a.click('.dialog button:has-text("Reset password")');
+  await a.waitForSelector('.toast:has-text("password was reset")');
+  await a.waitForSelector('tr:has(input[aria-label="Name of Nila Thomas"]):has-text("Not created yet")');
+  await p.reload();
+  await p.waitForSelector('.who-option', { timeout: 5000 });
+  await p.click('.who-option:has-text("Nila")');
+  await p.waitForSelector('text=create one now');
+  // tidy: make Nila inactive so the other tests' pickers are unchanged
+  await api('PATCH', `/api/admin/users/${nilaId}`, { active: false }, `${s.cookie}; ${u.cookie}`);
+});

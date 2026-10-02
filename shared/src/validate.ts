@@ -246,6 +246,13 @@ export const updateUserSchema = v.object({
   active: v.optional(v.bool()),
 });
 
+/** Sign-in passwords: at least 6 characters, spaces allowed (a phrase is fine), not only spaces. */
+export const PASSWORD_MIN = 6;
+export const passwordField = v.string({ min: PASSWORD_MIN, max: 100, trim: false, pattern: /\S/, patternMessage: 'must not be only spaces' });
+export const signInSchema = v.object({ user_id: v.int({ min: 1 }), password: v.string({ max: 100, trim: false }) });
+export const createPasswordSchema = v.object({ user_id: v.int({ min: 1 }), password: passwordField });
+export const changePasswordSchema = v.object({ current_password: v.string({ max: 100, trim: false }), new_password: passwordField });
+
 export const jobTypeSchema = v.object({
   name: v.string({ min: 1, max: 60 }),
   sort_order: v.optional(v.int({ min: 0, max: 10_000 })),

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ROLE_LABEL, type JobType, type User } from '@board/shared';
+import { PASSWORD_MIN, ROLE_LABEL, type JobType, type User } from '@board/shared';
 import { AppContext, type AppState, type Meta } from './context.ts';
 import { del, post, setUnauthenticatedHandler } from './lib/api.ts';
 import { setTimeZone } from './lib/format.ts';
 import { navigate, setJob, useLocation } from './lib/router.ts';
 import { invalidate, startLive, stopLive, useLiveState, useQuery } from './lib/store.ts';
-import { toastError } from './lib/toasts.ts';
+import { toast, toastError } from './lib/toasts.ts';
 import { Badge, ErrorBox, Spinner } from './components/bits.tsx';
 import { DialogHost, Toasts } from './components/Overlays.tsx';
 import { QuickCreate } from './components/QuickCreate.tsx';
@@ -72,39 +72,132 @@ export function App() {
   return <Shell me={session.data.user} meta={meta.data} />;
 }
 
+/** Sign-in: pick your name, then enter your password (or create it the first time). */
 function WhoAreYou() {
   const users = useQuery<{ users: User[] }>('/api/users');
-  const [busy, setBusy] = useState(false);
-  const pick = async (u: User) => {
-    setBusy(true);
-    try {
-      await post('/api/session', { user_id: u.id });
-      invalidate();
-    } catch (e) {
-      toastError(e);
-      setBusy(false);
-    }
-  };
+  const [whoId, setWhoId] = useState<number | null>(null);
+  // always the fresh copy, so a password created or reset elsewhere shows the right form
+  const who = users.data?.users.find((u) => u.id === whoId) ?? null;
   return (
     <div className="center-screen who">
       <div className="who-card">
         <h1 className="brand-big">Engineering Board</h1>
         <ThemePicker />
-        <p className="muted">Who's at this computer? The board remembers you on this browser.</p>
-        {users.error && <ErrorBox message={users.error.message} retry={users.refresh} />}
-        {!users.data && !users.error && <Spinner />}
-        <div className="who-grid">
-          {users.data?.users.map((u) => (
-            <button key={u.id} className="who-option" disabled={busy} onClick={() => void pick(u)}>
-              <Badge user={u} size="lg" />
-              <span className="who-name">{u.name}</span>
-              <span className="muted who-role">{ROLE_LABEL[u.role]}</span>
-            </button>
-          ))}
-        </div>
+        {who ? (
+          <SignIn user={who} back={() => setWhoId(null)} />
+        ) : (
+          <>
+            <p className="muted">Who's at this computer? Pick your name, then enter your password. The board remembers you on this browser.</p>
+            {users.error && <ErrorBox message={users.error.message} retry={users.refresh} />}
+            {!users.data && !users.error && <Spinner />}
+            <div className="who-grid">
+              {users.data?.users.map((u) => (
+                <button key={u.id} className="who-option" onClick={() => setWhoId(u.id)}>
+                  <Badge user={u} size="lg" />
+                  <span className="who-name">{u.name}</span>
+                  <span className="muted who-role">{ROLE_LABEL[u.role]}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
       </div>
       <Toasts />
     </div>
+  );
+}
+
+function SignIn({ user, back }: { user: User; back: () => void }) {
+  const creating = !user.has_password;
+  const [password, setPassword] = useState('');
+  const [again, setAgain] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const mismatch = creating && again.length > 0 && password !== again;
+  const ok = creating ? password.length >= PASSWORD_MIN && password.trim().length > 0 && password === again : password.length > 0;
+  const submit = async (e: any) => {
+    e.preventDefault();
+    if (!ok || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await post(creating ? '/api/session/password' : '/api/session', { user_id: user.id, password });
+      invalidate();
+    } catch (err: any) {
+      if (err?.code === 'password_not_set' || err?.code === 'password_already_set') {
+        // changed under us (an admin reset, or a first sign-in from two browsers): show the right form
+        setPassword('');
+        setAgain('');
+        setError(err.message);
+        invalidate('/api/users');
+      } else if (err?.code === 'wrong_password' || err?.code === 'too_many_attempts' || err?.status === 400) {
+        setError(err.message);
+      } else toastError(err);
+      setBusy(false);
+    }
+  };
+  return (
+    <form className="signin" onSubmit={submit}>
+      <div className="signin-who">
+        <Badge user={user} size="lg" />
+        <div>
+          <div className="who-name">{user.name}</div>
+          <div className="muted who-role">{ROLE_LABEL[user.role]}</div>
+        </div>
+        <button type="button" className="link-btn signin-back" onClick={back}>
+          Not you?
+        </button>
+      </div>
+      {creating ? (
+        <p className="muted">
+          Welcome, {user.name.split(' ')[0]}. You don't have a password yet: create one now (at least {PASSWORD_MIN} characters; a short phrase is fine). Only you should know it.
+        </p>
+      ) : (
+        <p className="muted">Enter your password to sign in.</p>
+      )}
+      <label className="field-label" htmlFor="signin-password">
+        {creating ? 'New password' : 'Password'}
+      </label>
+      <input
+        id="signin-password"
+        name="password"
+        className="field-input"
+        type="password"
+        autoComplete={creating ? 'new-password' : 'current-password'}
+        autoFocus
+        value={password}
+        aria-invalid={!!error}
+        onChange={(e: any) => setPassword(e.target.value)}
+      />
+      {creating && (
+        <>
+          <label className="field-label" htmlFor="signin-again">
+            New password again
+          </label>
+          <input
+            id="signin-again"
+            name="password_again"
+            className="field-input"
+            type="password"
+            autoComplete="new-password"
+            value={again}
+            aria-invalid={mismatch}
+            onChange={(e: any) => setAgain(e.target.value)}
+          />
+          {mismatch && <p className="form-error">The two passwords don't match.</p>}
+        </>
+      )}
+      {error && <p className="form-error" role="alert">{error}</p>}
+      {!creating && <p className="muted small">Forgotten it? Ask whoever looks after the board to reset it under Admin → Team.</p>}
+      <div className="dialog-buttons">
+        <button type="button" className="btn btn-quiet" onClick={back}>
+          Back
+        </button>
+        <button type="submit" className="btn btn-primary" disabled={!ok || busy}>
+          {creating ? 'Create password and sign in' : 'Sign in'}
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -181,6 +274,9 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
       invalidate();
     }
   };
+  const changePassword = async () => {
+    if (await ask({ type: 'password' })) toast('Your password has been changed.', { kind: 'success' });
+  };
 
   return (
     <AppContext.Provider value={state}>
@@ -248,8 +344,11 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
               <a className="btn btn-quiet" href="/guides/user-guide.html" target="_blank" rel="noopener">
                 User guide
               </a>
+              <button className="btn btn-quiet" onClick={() => void changePassword()}>
+                Change password
+              </button>
               <button className="btn btn-quiet" onClick={() => void signOut()}>
-                Switch user
+                Sign out
               </button>
             </div>
           </details>

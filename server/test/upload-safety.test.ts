@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { createApp, type App } from '../src/app.ts';
-import { Client } from './helpers.ts';
+import { Client, signIn } from './helpers.ts';
 import { streamUpload, type Request } from '../src/http/http.ts';
 
 const LIMIT = 1048576;
@@ -63,8 +63,8 @@ describe('authorized streamed restore uploads', () => {
     app = createApp({ dbPath: join(dir, 'board.db'), restoreUploadMaxMB: 1 });
     base = `http://127.0.0.1:${await app.listen(0, '127.0.0.1')}`;
     admin = new Client(base); locked = new Client(base);
-    await admin.post('/api/session', { user_id: 1 });
-    await locked.post('/api/session', { user_id: 2 });
+    await signIn(admin, 1);
+    await signIn(locked, 2);
     await admin.post('/api/admin/unlock', { pin: '1234' });
     await admin.create({ title: 'Live data survives bad uploads' });
   });

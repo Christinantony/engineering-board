@@ -60,7 +60,7 @@ EngineeringBoard\
 ## 2. First run
 
 1. Open <http://localhost:8080> on the host PC.
-2. Pick your name. The team (Christin, Paul, Allen and Jeffin as manager) is already set up. The browser remembers who you are; **Switch user** under your name changes it.
+2. Pick your name and create your password (at least 6 characters). The team (Christin, Paul, Allen and Jeffin as manager) is already set up; each person creates their own password the first time they sign in. The browser remembers who you are; **Sign out** under your name forgets it.
 3. **Change the admin PIN.** It starts as `1234` and a banner reminds you until it is changed. Go to **your name → Admin**, unlock with `1234`, then **Admin PIN**.
 4. Optional: in **Admin → Demo data**, add twelve example jobs to try things out, then remove them in one click. Removing them never touches real jobs.
 5. Optional: bring in your existing job list with **Admin → Import from Excel**. See the [Admin guide](ADMIN-GUIDE.md#import-jobs-from-excel).

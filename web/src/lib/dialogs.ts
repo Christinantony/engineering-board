@@ -9,6 +9,7 @@ export type DialogSpec =
   | { type: 'confirm'; title: string; body: string; confirm: string; danger?: boolean }
   | { type: 'conflict'; field: string; jobNumber: string; mine: string; theirs: string; canCombine: boolean }
   | { type: 'text'; title: string; body: string; label: string; confirm: string; required?: boolean; danger?: boolean }
+  | { type: 'password' }
   | { type: 'help' };
 
 export type DialogAnswer<S extends DialogSpec> = S extends { type: 'reason' }

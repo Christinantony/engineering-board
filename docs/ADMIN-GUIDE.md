@@ -6,9 +6,10 @@ Open **your name (top right) → Admin** and enter the admin PIN. The Admin area
 
 ## Team
 
-**Admin → Team** lists everyone who can pick their name.
+**Admin → Team** lists everyone who can sign in.
 
 - **Add a person** with a name, initials and badge colour, as an engineer, a manager or a reviewer. Engineers claim and do jobs; managers create, edit, assign and comment but can't claim. **Reviewers** (and the manager) pass or return drawings in board review and sign the prints; reviewers can see everything and comment, but can't create, claim or change jobs. Engineers can't review drawings. Someone with open jobs must have them reassigned before they stop being an engineer.
+- **Password**: everyone signs in with their own password, which they create the first time they sign in (**Not created yet** until then). Nobody else can see or set it. If someone forgets theirs, **Reset** clears it: they are signed out everywhere and create a new password the next time they sign in. Until they do, anyone on the network who picks their name could create it, so tell them straight away. If *everyone* is locked out, see [Troubleshooting](TROUBLESHOOTING.md#forgotten-passwords).
 - **Admin menu** (the tick box) shows the Admin entry to people who look after the board. It grants nothing by itself: the PIN does.
 - **Active**: untick it for someone who leaves. Their name disappears from the pickers but stays on every job and in the history. People can't be deleted, so history never loses its author. Their open jobs keep them as owner until you reassign them; the Today and Workload pages make those easy to spot.
 
@@ -62,7 +63,7 @@ Backups older than 30 days are deleted, but the newest 7 are always kept, so a l
 
 ## Restore
 
-**From the list:** **Admin → Backups and restore**, then **Restore…** next to a backup. The board goes back to exactly how it was when that backup was taken. A backup of the current data is taken first. Everyone's screens refresh; nobody is signed out, and the current admin PIN stays.
+**From the list:** **Admin → Backups and restore**, then **Restore…** next to a backup. The board goes back to exactly how it was when that backup was taken. A backup of the current data is taken first. Everyone's screens refresh; nobody is signed out, and the current passwords and admin PIN stay (they are credentials, not board data, so an older backup never puts an old password back).
 
 **From a file:** **Restore from a file…** and choose a `.db` backup, for example one kept on a network share. The file is checked first: a damaged file, something that isn't a board backup, or a backup from a newer version of the board is refused with a message, and nothing changes.
 
@@ -78,7 +79,7 @@ Done jobs already leave the board after 7 days. **Admin → Archive** also hides
 
 ## Admin PIN
 
-**Admin → Admin PIN**: at least 4 characters, no spaces. Only people who should be able to change the team or restore old data need it. If it's forgotten, see [Troubleshooting](TROUBLESHOOTING.md#forgotten-admin-pin).
+**Admin → Admin PIN**: at least 4 characters, no spaces. Only people who should be able to change the team or restore old data need it. It is separate from people's sign-in passwords: the PIN unlocks the Admin area for anyone signed in who knows it. If it's forgotten, see [Troubleshooting](TROUBLESHOOTING.md#forgotten-admin-pin).
 
 ## Demo data
 

@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:http';
 import { STATUSES, PRIORITIES, ESTIMATE_BUCKETS, STATUS_LABEL, type User } from '@board/shared';
-import { v } from '@board/shared';
+import { v, signInSchema, createPasswordSchema, changePasswordSchema } from '@board/shared';
 import { openDb, migrate, pendingMigrations, run, all, tx } from './db/connection.ts';
 import { createReadStream } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -27,6 +27,12 @@ import {
   ADMIN_TTL_SECONDS,
   adminCookie,
   changePin,
+  checkPassword,
+  clearAllPasswords,
+  clearPassword,
+  createPassword,
+  hasPassword,
+  setPassword,
   ensureAuthSettings,
   resetPin,
   pinIsDefault,
@@ -35,7 +41,7 @@ import {
   sessionCookie,
   verifyPin,
 } from './domain/auth.ts';
-import { createUser, getUser, listUsers, updateUser } from './domain/users.ts';
+import { createUser, getUser, listUsers, requireUser, updateUser } from './domain/users.ts';
 import { createJobType, listJobTypes, updateJobType } from './domain/jobTypes.ts';
 import {
   addComment,
@@ -97,7 +103,7 @@ import { jobsNeedingSync, markSyncPending, revisionLog, settleSyncs, syncProject
 /** Default maximum PDF upload for drawing review (merged signed scans can be large). */
 export const DEFAULT_REVIEW_UPLOAD_MAX_MB = 200;
 
-export const APP_VERSION = '1.1.0';
+export const APP_VERSION = '1.2.0';
 
 export interface AppOptions {
   dbPath: string;
@@ -109,6 +115,8 @@ export interface AppOptions {
   log?: boolean;
   /** Reset the admin PIN to the default on start (the RESET-ADMIN-PIN file on the host PC). */
   resetAdminPin?: boolean;
+  /** Clear everyone's password on start (the RESET-PASSWORDS file on the host PC); each person creates a new one at sign-in. */
+  resetPasswords?: boolean;
   /** Where backups go (default: a "backups" folder next to the database). */
   backupDir?: string;
   backupKeepDays?: number;
@@ -165,6 +173,7 @@ export function createApp(opts: AppOptions): App {
     migrate(ctx.db);
     ensureAuthSettings(ctx);
     if (opts.resetAdminPin) resetPin(ctx);
+    if (opts.resetPasswords) clearAllPasswords(ctx);
     seedBase(ctx);
   } catch (e) {
     ctx.db.close(); // don't hold the file open (and locked on Windows) after a failed start
@@ -233,12 +242,12 @@ export function createApp(opts: AppOptions): App {
   const authed = (method: string, path: string, h: (req: Request, user: User) => unknown) =>
     router.add(method, path, (req) => {
       const user = currentUser(req);
-      if (!user) throw new HttpError(401, 'unauthenticated', 'Please choose who you are first.');
+      if (!user) throw new HttpError(401, 'unauthenticated', 'Please sign in first.');
       return h(req, user);
     });
   function requireAdmin(req: Pick<Request, 'cookies'>): User {
     const user = currentUser(req);
-    if (!user) throw new HttpError(401, 'unauthenticated', 'Please choose who you are first.');
+    if (!user) throw new HttpError(401, 'unauthenticated', 'Please sign in first.');
     if (!readAdmin(ctx, req.cookies[ADMIN_COOKIE], user.id))
       throw new HttpError(403, 'admin_locked', 'Unlock the admin area with the PIN first.');
     return user;
@@ -267,15 +276,40 @@ export function createApp(opts: AppOptions): App {
   }));
   pub('GET', '/api/users', (req) => ({ users: listUsers(ctx, req.query.get('all') === '1') }));
   pub('GET', '/api/session', (req) => ({ user: currentUser(req) }));
-  pub('POST', '/api/session', (req) => {
-    const { user_id } = v.object({ user_id: v.int({ min: 1 }) })(req.body);
-    const u = getUser(ctx, user_id);
-    if (!u || !u.active) throw new HttpError(400, 'bad_user', 'That user is not available.');
+  const signedIn = (userId: number) => {
+    const u = getUser(ctx, userId)!;
     return new Reply(200, { user: u }, { 'Set-Cookie': cookie(SESSION_COOKIE, sessionCookie(ctx, u.id), { maxAge: ONE_YEAR }) });
+  };
+  const availableUser = (userId: number): User => {
+    const u = getUser(ctx, userId);
+    if (!u || !u.active) throw new HttpError(400, 'bad_user', 'That user is not available.');
+    return u;
+  };
+  // Sign in with a password (decision #28). Someone without one yet gets 409 and creates it below.
+  pub('POST', '/api/session', (req) => {
+    const { user_id, password } = signInSchema(req.body);
+    const u = availableUser(user_id);
+    if (!u.has_password) throw new HttpError(409, 'password_not_set', `${u.name} has no password yet. Create one to sign in.`);
+    checkPassword(ctx, u.id, password);
+    return signedIn(u.id);
+  });
+  // First sign-in (or the first after an admin reset): create the password, then sign in.
+  pub('POST', '/api/session/password', (req) => {
+    const { user_id, password } = createPasswordSchema(req.body);
+    const u = availableUser(user_id);
+    createPassword(ctx, u.id, password);
+    return signedIn(u.id);
   });
   pub('DELETE', '/api/session', () =>
     new Reply(200, { ok: true }, { 'Set-Cookie': [cookie(SESSION_COOKIE, '', { maxAge: 0 }), cookie(ADMIN_COOKIE, '', { maxAge: 0 })] }),
   );
+  // Change your own password. Other browsers signed in as you are signed out; this one gets a new cookie.
+  authed('POST', '/api/me/password', (req, user) => {
+    const { current_password, new_password } = changePasswordSchema(req.body);
+    checkPassword(ctx, user.id, current_password);
+    setPassword(ctx, user.id, new_password);
+    return signedIn(user.id);
+  });
 
   // ---- reference data ----
   authed('GET', '/api/job-types', () => ({ job_types: listJobTypes(ctx) }));
@@ -467,6 +501,13 @@ export function createApp(opts: AppOptions): App {
   admin('GET', '/api/admin/users', () => ({ users: listUsers(ctx, true) }));
   admin('POST', '/api/admin/users', (req) => new Reply(201, { user: createUser(ctx, req.body ?? {}) }));
   admin('PATCH', '/api/admin/users/:id', (req) => ({ user: updateUser(ctx, id(req), req.body ?? {}) }));
+  // Forgotten password: clear it. The person creates a new one at their next sign-in.
+  admin('DELETE', '/api/admin/users/:id/password', (req) => {
+    const u = requireUser(ctx, id(req));
+    if (!hasPassword(ctx, u.id)) throw new HttpError(409, 'password_not_set', `${u.name} has no password to reset.`);
+    clearPassword(ctx, u.id);
+    return { user: getUser(ctx, u.id) };
+  });
   admin('POST', '/api/admin/job-types', (req) => new Reply(201, { job_type: createJobType(ctx, req.body ?? {}) }));
   admin('PATCH', '/api/admin/job-types/:id', (req) => ({ job_type: updateJobType(ctx, id(req), req.body ?? {}) }));
   admin('POST', '/api/admin/demo', () => {
@@ -561,7 +602,7 @@ export function createApp(opts: AppOptions): App {
         await streamUpload(req, dirname(ctx.dbPath), uploadMaxBytes);
       } else if (req.path === '/api/review/uploads' && req.method === 'POST') {
         const who = currentUser(req); // before reading any bytes
-        if (!who) throw new HttpError(401, 'unauthenticated', 'Please choose who you are first.');
+        if (!who) throw new HttpError(401, 'unauthenticated', 'Please sign in first.');
         if (who.role !== 'engineer') throw forbidden('Only engineers attach drawings and signed scans for board review.');
         checkUploadHeaders(req, reviewMaxBytes, 'a PDF file');
         if (raw.headers.expect?.toLowerCase() === '100-continue') res.writeContinue();

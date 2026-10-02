@@ -3877,3 +3877,47 @@ button.rv-stat:hover {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---------- sign-in with a password (1.2.0) ---------- */
+.signin {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+  max-width: 440px;
+}
+.signin-who {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+}
+.signin-who .who-name {
+  font-weight: 600;
+}
+.signin-back {
+  margin-left: auto;
+}
+.signin .field-label {
+  margin-top: 6px;
+}
+.signin .dialog-buttons {
+  margin-top: 10px;
+}
+.password-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.password-form .form-error {
+  margin-bottom: 4px;
+}
+.cell-password {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}

@@ -301,7 +301,7 @@ describe('release zip', () => {
 
     let p = await start(root).ready;
     running.push(p);
-    const s = cookieOf(await post('/api/session', { user_id: 1 }));
+    const s = cookieOf(await post('/api/session/password', { user_id: 1, password: 'check-pass-1' }));
     const a = cookieOf(await post('/api/admin/unlock', { pin: '1234' }, s));
     assert.equal((await post('/api/admin/pin', { new_pin: 'forgotten-9' }, `${s}; ${a}`)).status, 200);
     await running.pop().stop();
@@ -312,6 +312,33 @@ describe('release zip', () => {
     assert.match(p.out, /admin PIN has been reset to 1234/);
     assert.ok(!existsSync(join(root, 'RESET-ADMIN-PIN.txt')), 'the file is removed so it only works once');
     assert.equal((await post('/api/admin/unlock', { pin: '1234' }, s)).status, 200);
+    await running.pop().stop();
+  });
+
+  it('a RESET-PASSWORDS file next to start.bat clears every password once; people create new ones', async () => {
+    writeFileSync(join(root, 'config.json'), JSON.stringify({ port, host: '127.0.0.1' }));
+    const base = `http://127.0.0.1:${port}`;
+    const cookieOf = (r) => r.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ');
+    const post = (path, body, cookie) => fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/json', cookie }, body: JSON.stringify(body) });
+    const get = (path, cookie) => fetch(base + path, { headers: { cookie } });
+
+    let p = await start(root).ready;
+    running.push(p);
+    // the password from the previous check still works, and the session survives a restart
+    const r = await post('/api/session', { user_id: 1, password: 'check-pass-1' });
+    assert.equal(r.status, 200);
+    const s = cookieOf(r);
+    assert.equal((await get('/api/tickets', s)).status, 200);
+    await running.pop().stop();
+
+    writeFileSync(join(root, 'RESET-PASSWORDS'), '');
+    p = await start(root).ready;
+    running.push(p);
+    assert.match(p.out, /All passwords have been reset/);
+    assert.ok(!existsSync(join(root, 'RESET-PASSWORDS')), 'the file is removed so it only works once');
+    assert.equal((await get('/api/tickets', s)).status, 401, 'old sessions are signed out');
+    assert.equal((await post('/api/session', { user_id: 1, password: 'check-pass-1' })).status, 409, 'the old password is gone');
+    assert.equal((await post('/api/session/password', { user_id: 1, password: 'check-pass-2' })).status, 200, 'a new one is created at sign-in');
     await running.pop().stop();
   });
 });

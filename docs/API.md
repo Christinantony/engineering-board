@@ -14,6 +14,10 @@ Errors look like this:
 | 400 `reason_required` | Moving to waiting or blocked needs a "Waiting for" reason. |
 | 401 | Nobody is signed in on this browser. |
 | 403 | Not allowed. Examples: a manager claiming, or the admin area is locked. |
+| 403 `wrong_password` | The password doesn't match (sign-in, or the current password when changing it). |
+| 409 `password_not_set` | This person has no password yet: create it with `POST /api/session/password`. |
+| 409 `password_already_set` | A password already exists for this person; sign in with it instead. |
+| 429 `too_many_attempts` | Five wrong passwords in a row: sign-in for that person pauses for 30 seconds (`retry_after_seconds`). The right password is refused too while paused. |
 | 409 `conflict` | Someone else got there first. `current` holds the fresh ticket. |
 | 409 `needs_assignee` | The manager moved an unassigned job to a working column. |
 | 413 `too_large` | The body is over the limit: 20 MiB for JSON and CSV; restore uploads default to 64 MiB, configurable through `restoreUploadMaxMB` / `EB_RESTORE_UPLOAD_MAX_MB` (1–1024 MiB). |
@@ -25,12 +29,16 @@ Errors look like this:
 | 410 `removed` | An intermediate review PDF was removed after its drawing passed board review. |
 | 503 `busy` | The database is busy. Retry. |
 
-## Session ("who are you?")
+## Session (sign in)
+
+Everyone signs in with their own password (decision #28). A new person, or one whose password an admin has reset, has none yet (`has_password: false` in the user list) and creates it at their first sign-in. Passwords are 6 to 100 characters, spaces allowed, stored as salted scrypt hashes.
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/api/users` | Active users, for the picker. Add `?all=1` to include inactive users. |
-| GET/POST/DELETE | `/api/session` | POST `{user_id}` sets a signed cookie (1 year). |
+| GET | `/api/users` | Active users, for the picker, each with `has_password`. Add `?all=1` to include inactive users. |
+| GET/POST/DELETE | `/api/session` | POST `{user_id, password}` sets a signed cookie (1 year). The cookie is bound to the current password: changing or resetting it signs that person out everywhere. Cookies from versions before 1.2.0 are no longer accepted. |
+| POST | `/api/session/password` | `{user_id, password}`: create the first password (409 if one exists) and sign in. |
+| POST | `/api/me/password` | `{current_password, new_password}`: change your own password. This browser gets a new cookie; other browsers are signed out. |
 | GET | `/api/meta` | Version, time zone, today's date, statuses, estimate buckets, and whether the default PIN is still set. |
 | GET | `/api/health` | Liveness check. |
 
@@ -121,6 +129,7 @@ Every mutating review route returns the updated workspace. After it commits, the
 | POST | `/api/admin/unlock` `{pin}` and `/api/admin/lock`. Unlocks for 12 hours. |
 | POST | `/api/admin/pin` `{new_pin}` |
 | GET/POST | `/api/admin/users`; PATCH `/api/admin/users/:id` `{name?, initials?, color?, role?, is_admin?, active?}`. `role` is `engineer`, `manager` or `reviewer`. |
+| DELETE | `/api/admin/users/:id/password`: reset a forgotten password. The person is signed out everywhere and creates a new one at their next sign-in (409 if they have none). |
 | POST | `/api/admin/job-types`; PATCH `/api/admin/job-types/:id` |
 | POST/DELETE | `/api/admin/demo`: load or clear the demo jobs |
 | GET | `/api/admin/info`: database size and counts, backup folder, list of backups |
