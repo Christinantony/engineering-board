@@ -83,3 +83,10 @@
 - **Decisions affected:** none. No runtime dependency, database schema, authentication or workflow change; the version bump preserves the existing upgrade/reload handshake.
 - **Validation:** Node 22.16.0: typecheck, all 120 backend tests, build, all 14 package checks and all 31 browser tests passed. Separate CSS/test agents and an independent reviewer checked startup/CSP, preferences across reload/user switching/tabs, corrupt or blocked storage, dark operational/admin screens, forms/panels/dialogs, keyboard selection and phone/desktop layouts. Original Light CSS values were independently verified unchanged. Review found low-contrast urgent/quiet dark count badges and native form placeholders; these were fixed and covered by browser contrast checks. Count checks reproduced the old failure and passed the corrected CSS; dark placeholders now exceed 7:1 contrast. Browser tests ran real Chromium 153 without skips.
 - **Follow-ups / open issues:** none in the requested theme scope. Existing real-Windows launcher/LAN testing, lockfile and CI remain separate follow-ups; no Windows launcher changes were made.
+
+### 2026-10-02 11:15 IST | Claude | branch: claude/readme-catalogue
+- **What:** Rewrote `README.md` as a catalogue of the board, version 1.0.2: an at-a-glance sheet, an index, and lettered sections with item codes (pages, the job record, working together, finding things, administration, appearance, editions and installation, specifications, documentation, release history, working on the code). It now covers the 1.0.1 restore and complete-list changes and the 1.0.2 themes, and keeps the install steps, settings table and developer commands.
+- **Why:** Christin asked for a scan of what the other agents changed, and a README that reads like a catalogue for the engineering board.
+- **Files:** `README.md`, `HANDOFF.md`, `CHANGELOG.md`
+- **Decisions affected:** none. Documentation only; no code, tests or version change.
+- **Follow-ups / open issues:** The README quotes 120 backend tests, 31 browser tests and 14 package checks (checked against `npm test` and `HANDOFF.md` on 2026-10-02). Update the counts when they change.
