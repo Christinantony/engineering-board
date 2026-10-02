@@ -6,7 +6,7 @@ An internal workboard for the mechanical design team: a Kanban board, lightweigh
 - **Nothing is ever lost.** Jobs can't be deleted (only archived), every change is in an append-only history, and the board backs itself up every day and before anything risky.
 - **Built for a small team working at the same time:** live updates, safe simultaneous claiming, and field-by-field merging when two people edit one job.
 
-> **Version 1.0.1.** All nine phases of the plan are complete.
+> **Version 1.0.2.** All nine phases of the plan are complete. Choose Light, Charcoal or Midnight from the Theme selector; your browser remembers the choice.
 
 ## Install on Windows (5 minutes)
 

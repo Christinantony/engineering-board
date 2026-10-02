@@ -10,6 +10,12 @@ The first time, pick your name. The browser remembers you. On a shared PC, use *
 
 Everyone can create jobs, edit them and comment. **Engineers** claim and do jobs. The **manager** can't claim, but can assign jobs to an engineer. Nothing is ever deleted: every change is kept in each job's history.
 
+## Themes
+
+Use **Theme** at the top of the board (or on the name picker) to choose **Light**, **Charcoal** or **Midnight**. Light is the original appearance and the default. Charcoal uses neutral dark greys with blue controls; Midnight uses a near-black background with teal controls.
+
+Your choice applies to every app page, job panel, form, menu and dialog. It is saved in this browser for this board address, including after a reload or switching users. Other browsers can choose their own theme. If browser storage is disabled, you can still change themes for the current page, but the choice may not survive a reload.
+
 ## The board
 
 The board shows every open job in columns, left to right:

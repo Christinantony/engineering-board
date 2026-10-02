@@ -77,15 +77,25 @@ afterEach(async () => {
   assert.deepEqual(problems, [], 'no errors in the browser');
 });
 
-async function login(name) {
-  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 } });
-  open.push(ctx);
+async function trackedPage(ctx) {
   const p = await ctx.newPage();
   p.errors = [];
   p.consoleErrors = [];
   p.on('pageerror', (e) => p.errors.push(e.message));
   p.on('console', (m) => m.type() === 'error' && p.consoleErrors.push(m.text()));
   pages.push(p);
+  return p;
+}
+
+async function freshPage(options = {}, init) {
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 950 }, ...options });
+  open.push(ctx);
+  if (init) await ctx.addInitScript(init);
+  return trackedPage(ctx);
+}
+
+async function login(name) {
+  const p = await freshPage();
   await p.goto(BASE + '/');
   await p.click(`.who-option:has-text("${name}")`);
   await p.waitForSelector('.card');
@@ -620,3 +630,201 @@ test('large board and workload lists show every job; later-page failures stay vi
     await startServer();
   }
 });
+
+// ---------------- Optional themes: browser preference and whole-board appearance ----------------
+
+const THEME_KEY = 'engineering-board-theme';
+const themePicker = (p) => p.getByRole('combobox', { name: 'Theme', exact: true });
+async function expectTheme(p, theme) {
+  await p.waitForFunction((t) => document.documentElement.dataset.theme === t, theme);
+  assert.equal(await themePicker(p).inputValue(), theme);
+}
+
+// Use the rendered foreground/background rather than CSS token names: this
+// catches a white input or hardcoded pale badge in an otherwise dark screen.
+async function readableDarkSurface(p, selector, minContrast = 4.5, pseudo = null) {
+  const locator = typeof selector === 'string' ? p.locator(selector).first() : selector;
+  const colors = await locator.evaluate((el, pseudo) => {
+    const rgba = (s) => s.match(/[\d.]+/g).map(Number);
+    const blend = (fg, bg) => fg.slice(0, 3).map((v, i) => v * (fg[3] ?? 1) + bg[i] * (1 - (fg[3] ?? 1)));
+    const ancestors = [];
+    for (let node = el; node; node = node.parentElement) ancestors.push(node);
+    let bg = [255, 255, 255];
+    for (const node of ancestors.reverse()) bg = blend(rgba(getComputedStyle(node).backgroundColor), bg);
+    const style = getComputedStyle(el, pseudo);
+    const foreground = rgba(style.color);
+    foreground[3] = (foreground[3] ?? 1) * Number(style.opacity);
+    const fg = blend(foreground, bg);
+    const luminance = (rgb) => rgb.map((v) => v / 255).map((v) => v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)
+      .reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+    const a = luminance(fg), b = luminance(bg);
+    return { fg, bg, backgroundLuminance: b, contrast: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) };
+  }, pseudo);
+  assert.ok(colors.backgroundLuminance < 0.25, `${selector} has a dark surface: ${JSON.stringify(colors)}`);
+  assert.ok(colors.contrast >= minContrast, `${selector} remains readable (${colors.contrast.toFixed(2)}:1)`);
+}
+
+test('theme picker retains the existing light default and preferences survive reload and user switches', async () => {
+  const p = await freshPage({ colorScheme: 'dark' });
+  await p.goto(BASE);
+  await p.waitForSelector('.who-option');
+  await expectTheme(p, 'light'); // optional themes never override the existing default
+  assert.deepEqual(await themePicker(p).locator('option').allTextContents(), ['Light', 'Charcoal', 'Midnight']);
+  const lightBackground = await p.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  await themePicker(p).selectOption({ label: 'Charcoal' });
+  await expectTheme(p, 'charcoal');
+  await readableDarkSurface(p, '.who-card');
+  await p.click('.who-option:has-text("Christin")');
+  await p.waitForSelector('.card');
+  await expectTheme(p, 'charcoal');
+  await themePicker(p).selectOption({ label: 'Midnight' });
+  await expectTheme(p, 'midnight');
+  assert.equal(await p.evaluate((key) => localStorage.getItem(key), THEME_KEY), 'midnight');
+  await p.reload();
+  await p.waitForSelector('.card');
+  await expectTheme(p, 'midnight');
+  await p.click('summary[aria-label="Account"]');
+  await p.click('button:has-text("Switch user")');
+  await p.waitForSelector('.who-option');
+  await expectTheme(p, 'midnight');
+  await p.click('.who-option:has-text("Paul")');
+  await p.waitForSelector('.card');
+  await expectTheme(p, 'midnight');
+  await themePicker(p).selectOption({ label: 'Light' });
+  await expectTheme(p, 'light');
+  assert.equal(await p.evaluate(() => getComputedStyle(document.body).backgroundColor), lightBackground);
+  const otherBrowser = await freshPage();
+  await otherBrowser.goto(BASE);
+  await otherBrowser.waitForSelector('.who-option');
+  await expectTheme(otherBrowser, 'light');
+});
+
+test('saved dark preference is applied before the main application bundle loads', async () => {
+  for (const theme of ['charcoal', 'midnight']) {
+    const p = await freshPage();
+    // Seed on the same origin before the navigation whose first paint is being inspected.
+    await p.context().clearCookies();
+    await p.goto(BASE);
+    await p.evaluate(([key, value]) => localStorage.setItem(key, value), [THEME_KEY, theme]);
+    let release;
+    const held = new Promise((resolve) => { release = resolve; });
+    await p.route('**/assets/app.js?*', async (route) => { await held; await route.continue(); });
+    try {
+      await p.goto(BASE, { waitUntil: 'commit' });
+      await p.waitForFunction(() => document.body && [...document.styleSheets].some((s) => s.href?.includes('/assets/app.css')));
+      await p.waitForFunction((t) => document.documentElement.dataset.theme === t, theme);
+      assert.equal(await p.locator('.who-option').count(), 0, 'application bundle is still held');
+      await readableDarkSurface(p, 'body');
+    } finally { release(); }
+    await p.waitForSelector('.who-option');
+    await expectTheme(p, theme);
+  }
+});
+
+test('changing a theme updates other tabs without changing another browser preference', async () => {
+  const a = await freshPage();
+  await a.goto(BASE);
+  await a.waitForSelector('.who-option');
+  const b = await trackedPage(a.context());
+  await b.goto(BASE);
+  await b.waitForSelector('.who-option');
+  const separate = await freshPage();
+  await separate.goto(BASE);
+  await separate.waitForSelector('.who-option');
+  await themePicker(a).selectOption('midnight');
+  await expectTheme(b, 'midnight');
+  await expectTheme(separate, 'light');
+  await b.evaluate((key) => localStorage.removeItem(key), THEME_KEY);
+  await expectTheme(a, 'light');
+});
+
+test('invalid or inaccessible storage falls back to light without preventing theme changes', async () => {
+  const invalid = await freshPage({}, () => localStorage.setItem('engineering-board-theme', 'unrecognised-theme'));
+  await invalid.goto(BASE);
+  await invalid.waitForSelector('.who-option');
+  await expectTheme(invalid, 'light');
+  await themePicker(invalid).selectOption('charcoal');
+  await expectTheme(invalid, 'charcoal');
+  for (const mode of ['methods', 'property']) {
+    const blocked = await freshPage({}, mode === 'methods' ? () => {
+      Storage.prototype.getItem = () => { throw new DOMException('Storage blocked', 'SecurityError'); };
+      Storage.prototype.setItem = () => { throw new DOMException('Storage blocked', 'SecurityError'); };
+    } : () => {
+      Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('Storage blocked', 'SecurityError'); } });
+    });
+    await blocked.goto(BASE);
+    await blocked.waitForSelector('.who-option');
+    await expectTheme(blocked, 'light');
+    await themePicker(blocked).selectOption('midnight');
+    await expectTheme(blocked, 'midnight');
+    await blocked.click('.who-option:has-text("Allen")');
+    await blocked.waitForSelector('.card');
+    await expectTheme(blocked, 'midnight');
+    await blocked.reload();
+    await blocked.waitForSelector('.card');
+    await expectTheme(blocked, 'light');
+  }
+});
+
+for (const theme of ['charcoal', 'midnight']) {
+  test(`${theme} covers board, views, inputs, job panel, dialogs and mobile controls`, async () => {
+    const p = await login('Christin');
+    await themePicker(p).selectOption(theme);
+    await expectTheme(p, theme);
+    await readableDarkSurface(p, '.card-title');
+    await readableDarkSurface(p, '.card-meta');
+    await readableDarkSurface(p, '.topbar .brand');
+    const routes = [
+      ['/today', '.vsection-head h2'], ['/my-work', '.vsection-head h2'], ['/dashboard', '.tally-item'],
+      ['/workload', '.wl-row'], ['/reports', '.table'], ['/search?q=pump', 'input[aria-label="Search text"]'], ['/activity', '.feed-item'],
+      ['/admin', 'input[aria-label="Admin PIN"]'],
+    ];
+    for (const [path, ready] of routes) {
+      await p.goto(BASE + path);
+      await p.waitForSelector(ready);
+      await expectTheme(p, theme);
+      await readableDarkSurface(p, 'body');
+      await readableDarkSurface(p, ready);
+      const counts = p.locator('.vsection-count');
+      for (let i = 0; i < await counts.count(); i++) await readableDarkSurface(p, counts.nth(i));
+    }
+    await readableDarkSurface(p, 'input[aria-label="Admin PIN"]');
+    await p.goto(BASE + '/board?job=1');
+    await p.waitForSelector('.panel-title');
+    await readableDarkSurface(p, '.panel-title');
+    await readableDarkSurface(p, '.status-pill');
+    await readableDarkSurface(p, 'textarea[aria-label="Add a comment"]');
+    assert.equal(await p.inputValue('input[aria-label="Reference"]'), '', 'empty reference shows its placeholder');
+    await readableDarkSurface(p, 'input[aria-label="Reference"]', 4.5, '::placeholder');
+    await p.getByRole('button', { name: 'Close (Esc)', exact: true }).click();
+    await p.click('.new-job');
+    await p.waitForSelector('#qc-title');
+    await readableDarkSurface(p, '#qc-title');
+    assert.equal(await p.inputValue('#qc-title'), '');
+    await readableDarkSurface(p, '#qc-title', 4.5, '::placeholder');
+    const details = '.quick-create textarea[aria-label="Description"]';
+    assert.equal(await p.inputValue(details), '');
+    await readableDarkSurface(p, details, 4.5, '::placeholder');
+    await readableDarkSurface(p, '.quick-create');
+    await p.keyboard.press('Escape');
+    await p.click('button[aria-label="Keyboard shortcuts"]');
+    await p.waitForSelector('.help');
+    await readableDarkSurface(p, '.dialog-title');
+    await readableDarkSurface(p, '.help kbd');
+    await p.keyboard.press('Escape');
+    await p.setViewportSize({ width: 390, height: 844 });
+    const picker = themePicker(p);
+    await picker.scrollIntoViewIfNeeded();
+    const bounds = await picker.boundingBox();
+    assert.ok(bounds && bounds.x >= 0 && bounds.x + bounds.width <= 391, 'theme selector fits the mobile viewport');
+    await picker.selectOption('light');
+    await expectTheme(p, 'light');
+    await picker.selectOption(theme);
+    await expectTheme(p, theme);
+    await p.click('.new-job');
+    await p.waitForSelector('#qc-title');
+    await p.fill('#qc-title', `Mobile ${theme} draft`);
+    assert.equal(await p.inputValue('#qc-title'), `Mobile ${theme} draft`);
+    await p.keyboard.press('Escape');
+  });
+}

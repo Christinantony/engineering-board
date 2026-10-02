@@ -70,7 +70,7 @@ import {
 import { archiveOld, commitImport, deleteTag, exportCsv, exportJson, importTemplate, listTags, previewImport, renameTag } from './domain/transfer.ts';
 import { rmSync } from 'node:fs';
 
-export const APP_VERSION = '1.0.1';
+export const APP_VERSION = '1.0.2';
 
 export interface AppOptions {
   dbPath: string;
