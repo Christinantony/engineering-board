@@ -7,7 +7,7 @@ Add a row when you start working, remove it when you finish.
 
 | Agent | Branch | Files / areas being touched | Started (IST) |
 |---|---|---|---|
-| _(none)_ | | | |
+| ChatGPT + theme implementation/validation agents | chatgpt/board-themes | web/src/styles.css, web/src/App.tsx, web/src/main.tsx, web/src/lib/theme.ts, web/src/components/ThemePicker.tsx, web/index.html, scripts/build.mjs, e2e/board.e2e.mjs, package.json, server/src/app.ts, docs/USER-GUIDE.md, README.md, HANDOFF.md, CHANGELOG.md | 2026-10-02 10:23 IST |
 
 ## Open questions
 Questions for Christin or another agent. Mark answered ones with the answer and date, and move them to "Resolved".
