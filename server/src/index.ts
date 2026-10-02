@@ -22,8 +22,11 @@ async function main() {
   // 1234 on the next start. Only someone who can reach the host PC's folder can do this.
   // (Windows hides extensions, so Notepad's RESET-ADMIN-PIN.txt counts too.)
   const resetFiles = ['RESET-ADMIN-PIN', 'RESET-ADMIN-PIN.txt'].map((n) => join(appRoot, n)).filter((p) => existsSync(p));
+  // Everyone locked out: a RESET-PASSWORDS file clears every password; each person creates a new one at sign-in.
+  const resetPasswordFiles = ['RESET-PASSWORDS', 'RESET-PASSWORDS.txt'].map((n) => join(appRoot, n)).filter((p) => existsSync(p));
   const app = createApp({ dbPath: join(cfg.dataDir, 'board.db'), tz: cfg.timezone, webRoot,
     resetAdminPin: resetFiles.length > 0,
+    resetPasswords: resetPasswordFiles.length > 0,
     workday: { hoursPerDay: cfg.hoursPerDay, workingDays: cfg.workingDays },
     log: process.env.EB_LOG === '1',
     backupDir: cfg.backupDir,
@@ -34,8 +37,9 @@ async function main() {
     reviewMaintenance: true,
   });
 
-  for (const f of resetFiles) rmSync(f, { force: true });
+  for (const f of [...resetFiles, ...resetPasswordFiles]) rmSync(f, { force: true });
   if (resetFiles.length) console.log('\n  The admin PIN has been reset to 1234. Change it now in Admin, Admin PIN.');
+  if (resetPasswordFiles.length) console.log('\n  All passwords have been reset. Everyone creates a new password the next time they sign in.');
 
   let port: number;
   try {

@@ -62,8 +62,9 @@ FIRST TIME
     Get it from https://nodejs.org/en/download : "Windows Binary (.zip)", x64,
     version 22 LTS. You only need node.exe from inside that zip.
  2. Double-click start.bat and keep the window open (minimising is fine).
- 3. Open http://localhost:8080 in your browser, pick your name, and change the
-    admin PIN (it starts as 1234) in Admin, Admin PIN.
+ 3. Open http://localhost:8080 in your browser, pick your name, create your
+    password, and change the admin PIN (it starts as 1234) in Admin, Admin PIN.
+    Everyone creates their own password the first time they sign in.
  4. For colleagues to connect, IT must allow the port once: send them
     for-IT\\FOR-IT.html, or ask them to run for-IT\\allow-board-port.bat as
     administrator. Then give everyone the "For your team" address the board's

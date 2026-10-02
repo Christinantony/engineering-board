@@ -1,9 +1,11 @@
-// Dialog host (reason / assign / confirm) and the toast stack.
+// Dialog host (reason / assign / confirm / password) and the toast stack.
 
 import { useEffect, useRef, useState } from 'react';
+import { PASSWORD_MIN } from '@board/shared';
 import { useApp } from '../context.ts';
+import { post } from '../lib/api.ts';
 import { useDialog } from '../lib/dialogs.ts';
-import { dismiss, useToasts } from '../lib/toasts.ts';
+import { dismiss, toastError, useToasts } from '../lib/toasts.ts';
 import { Badge } from './bits.tsx';
 import { useFocusTrap } from '../lib/focus.ts';
 import { SHORTCUTS } from '../lib/shortcuts.ts';
@@ -36,6 +38,7 @@ function DialogFrame({ d }: { d: NonNullable<ReturnType<typeof useDialog>> }) {
         {d.spec.type === 'assign' && <AssignDialog spec={d.spec} done={d.resolve} />}
         {d.spec.type === 'confirm' && <ConfirmDialog spec={d.spec} done={d.resolve} />}
         {d.spec.type === 'text' && <TextDialog spec={d.spec} done={d.resolve} />}
+        {d.spec.type === 'password' && <PasswordDialog done={d.resolve} />}
         {d.spec.type === 'conflict' && <ConflictDialog spec={d.spec} done={d.resolve} />}
       </div>
     </div>
@@ -177,6 +180,53 @@ function TextDialog({ spec, done }: { spec: any; done: (v: any) => void }) {
         </button>
         <button type="submit" className={`btn ${spec.danger ? 'btn-danger' : 'btn-primary'}`} disabled={!ok}>
           {spec.confirm}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/** Change your own password. Saves from here, so a wrong current password is shown in place. */
+function PasswordDialog({ done }: { done: (v: any) => void }) {
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [again, setAgain] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [wrong, setWrong] = useState(false);
+  const mismatch = again.length > 0 && next !== again;
+  const ok = current.length > 0 && next.length >= PASSWORD_MIN && next.trim().length > 0 && next === again;
+  const save = async (e: any) => {
+    e.preventDefault();
+    if (!ok || busy) return;
+    setBusy(true);
+    setWrong(false);
+    try {
+      await post('/api/me/password', { current_password: current, new_password: next });
+      done(true);
+    } catch (err: any) {
+      if (err?.code === 'wrong_password') setWrong(true);
+      else toastError(err);
+      setBusy(false);
+    }
+  };
+  return (
+    <form onSubmit={save} className="password-form">
+      <h2 className="dialog-title" id="dialog-title">Change your password</h2>
+      <p className="dialog-sub">Other browsers signed in as you will be asked to sign in again.</p>
+      <label className="field-label" htmlFor="pw-current">Current password</label>
+      <input id="pw-current" className="field-input" type="password" autoComplete="current-password" autoFocus value={current} aria-invalid={wrong} onChange={(e: any) => setCurrent(e.target.value)} />
+      {wrong && <p className="form-error">That password isn't right.</p>}
+      <label className="field-label" htmlFor="pw-next">New password (at least {PASSWORD_MIN} characters)</label>
+      <input id="pw-next" className="field-input" type="password" autoComplete="new-password" value={next} onChange={(e: any) => setNext(e.target.value)} />
+      <label className="field-label" htmlFor="pw-again">New password again</label>
+      <input id="pw-again" className="field-input" type="password" autoComplete="new-password" value={again} aria-invalid={mismatch} onChange={(e: any) => setAgain(e.target.value)} />
+      {mismatch && <p className="form-error">The two passwords don't match.</p>}
+      <div className="dialog-buttons">
+        <button type="button" className="btn btn-quiet" onClick={() => done(null)}>
+          Cancel
+        </button>
+        <button type="submit" className="btn btn-primary" disabled={!ok || busy}>
+          Change password
         </button>
       </div>
     </form>

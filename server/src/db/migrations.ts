@@ -371,4 +371,14 @@ CREATE TABLE review_sync (
 );
 `,
   },
+  {
+    id: 7,
+    name: 'passwords',
+    sql: /* sql */ `
+-- Everyone signs in with a password. It is stored as a salted scrypt hash, like
+-- the admin PIN. NULL means the person has not created one yet: existing team
+-- members (and people added later) create theirs the first time they sign in.
+ALTER TABLE users ADD COLUMN password_hash TEXT;
+`,
+  },
 ];

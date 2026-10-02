@@ -15,6 +15,7 @@ interface UserRow {
   role: Role;
   is_admin: number;
   active: number;
+  password_hash: string | null;
 }
 
 const toUser = (r: UserRow): User => ({
@@ -25,6 +26,7 @@ const toUser = (r: UserRow): User => ({
   role: r.role,
   is_admin: bool(r.is_admin),
   active: bool(r.active),
+  has_password: r.password_hash != null,
 });
 
 export function deriveInitials(name: string): string {

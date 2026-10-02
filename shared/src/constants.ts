@@ -97,6 +97,8 @@ export interface User {
   role: Role;
   is_admin: boolean;
   active: boolean;
+  /** False until the person has created their password (first sign-in, or after an admin reset). */
+  has_password: boolean;
 }
 
 export interface JobType {

@@ -35,7 +35,11 @@ Work through these in order. "Host" is the PC running the board.
 | "Someone else changed this" | Another person saved first; their version is shown. Redo your change if it's still needed. |
 | A job seems to have vanished | Done jobs leave the board after 7 days, and archived jobs leave every list. Use Search with "Include archived jobs". Nothing is ever deleted. |
 | Pages are blank or look broken after an update | Press <kbd>Ctrl</kbd>+<kbd>F5</kbd> to reload without the browser's cache. |
-| The wrong name is shown | **Your name → Switch user**. |
+| The wrong name is shown | **Your name → Sign out**, then sign in as yourself. |
+| "That password isn't right" | Passwords are case-sensitive. Forgotten it? Whoever looks after the board resets it under **Admin → Team**; you then create a new one when you sign in. |
+| "Too many wrong passwords" | After five wrong tries sign-in for that name pauses for 30 seconds. Wait, then try again. |
+| "has no password yet" or the board asks you to create a password | You haven't signed in since passwords were added, or an admin reset yours. Create a new password; the board signs you in with it. |
+| Asked to sign in again out of the blue | Your password was changed in another browser, an admin reset it, or the board was updated to 1.2.0 (everyone signs in with a password from then on). |
 | Admin keeps asking for the PIN | It stays unlocked for 12 hours per browser. Private/incognito windows forget it when closed. |
 | "… has 2 pages. Each drawing … must be a single-page PDF" | Drawing review takes one sheet per PDF. Export each sheet of the drawing to its own PDF, named with its part number. |
 | "This PDF is encrypted or password-protected" | Save or export it again without security settings (in the scanner software or the PDF printer), then attach it again. |
@@ -46,6 +50,12 @@ Work through these in order. "Host" is the PC running the board.
 ## Forgotten admin PIN
 
 On the host PC, in the board folder (next to `start.bat`), create an empty file called **`RESET-ADMIN-PIN`** (a `RESET-ADMIN-PIN.txt` made with Notepad works too). Restart the board. The PIN is back to `1234`, the window says so, and the file is removed. Change the PIN straight away. Nothing else changes.
+
+## Forgotten passwords
+
+**One person:** anyone signed in who knows the admin PIN opens **Admin → Team** and presses **Reset** next to their name. They create a new password at their next sign-in.
+
+**Everyone, or the only people who know the PIN:** on the host PC, in the board folder (next to `start.bat`), create an empty file called **`RESET-PASSWORDS`** (`RESET-PASSWORDS.txt` works too). Restart the board. Every password is cleared, the window says so, and the file is removed. Everyone is signed out and creates a new password the next time they sign in, so tell the team first. Jobs, history and the admin PIN are untouched.
 
 ## Data worries
 

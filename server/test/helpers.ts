@@ -19,6 +19,9 @@ export class Clock {
   }
 }
 
+/** The password every test user signs in with (created at their first sign-in, as on a real board). */
+export const TEST_PASSWORD = 'board-test-1';
+
 export interface Harness {
   app: App;
   base: string;
@@ -74,6 +77,14 @@ export class Client {
   }
 }
 
+/** Sign in as a user id, creating the test password first if that person has none yet. */
+export async function signIn(c: Client, userId: number, password = TEST_PASSWORD) {
+  let r = await c.post('/api/session', { user_id: userId, password });
+  if (r.status === 409 && r.body?.error === 'password_not_set') r = await c.post('/api/session/password', { user_id: userId, password });
+  if (r.status !== 200) throw new Error(`login failed: ${r.status} ${JSON.stringify(r.body)}`);
+  return r;
+}
+
 export async function startHarness(clock = new Clock()): Promise<Harness> {
   const dir = mkdtempSync(join(tmpdir(), 'eb-test-'));
   const dbPath = join(dir, 'board.db');
@@ -88,8 +99,7 @@ export async function startHarness(clock = new Clock()): Promise<Harness> {
       const users = (await c.get('/api/users')).body.users as { id: number; name: string }[];
       const u = users.find((x) => x.name === name);
       if (!u) throw new Error(`no user ${name}`);
-      const r = await c.post('/api/session', { user_id: u.id });
-      if (r.status !== 200) throw new Error('login failed');
+      await signIn(c, u.id);
       return c;
     },
     async restart() {
@@ -137,6 +147,7 @@ export const UNDO: Record<number, string> = {
   6: `DROP TABLE review_sync; DROP TABLE project_files; DROP TABLE review_events; DROP TABLE review_comments;
       DROP TABLE review_attempts; DROP TABLE review_drawings; DROP TABLE review_submissions;
       DROP TABLE review_references; DROP TABLE review_files;`,
+  7: 'ALTER TABLE users DROP COLUMN password_hash;',
 };
 
 /** Take a database back to schema `to`, as the version that wrote it would have left it. */

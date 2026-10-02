@@ -19,6 +19,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_PATH ?? 'playwright');
 const PORT = 18094;
 const BASE = `http://127.0.0.1:${PORT}`;
 let server, dir, browser;
+const PASSWORD = 'board-e2e-1';
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 
 async function api(method, path, body, cookie) {
@@ -43,10 +44,12 @@ before(async () => {
     } catch {}
     await new Promise((r) => setTimeout(r, 100));
   }
-  const s = await api('POST', '/api/session', { user_id: 1 });
+  for (const user_id of [1, 2, 3, 4]) assert.equal((await api('POST', '/api/session/password', { user_id, password: PASSWORD })).r.status, 200);
+  const s = await api('POST', '/api/session', { user_id: 1, password: PASSWORD });
   const u = await api('POST', '/api/admin/unlock', { pin: '1234' }, s.cookie);
   const r = await api('POST', '/api/admin/users', { name: 'Ebin', role: 'reviewer' }, `${s.cookie}; ${u.cookie}`);
   assert.equal(r.r.status, 201);
+  assert.equal((await api('POST', '/api/session/password', { user_id: r.body.user.id, password: PASSWORD })).r.status, 200);
   browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH });
 });
 
@@ -80,6 +83,8 @@ async function login(name, theme) {
   pages.push(p);
   await p.goto(BASE + '/');
   await p.click(`.who-option:has-text("${name}")`);
+  await p.fill('input[name=password]', PASSWORD);
+  await p.press('input[name=password]', 'Enter');
   await p.waitForSelector('.topbar');
   return p;
 }
