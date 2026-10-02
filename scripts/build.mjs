@@ -25,7 +25,7 @@ const serverOpts = {
 };
 
 const webOpts = {
-  entryPoints: { app: 'web/src/main.tsx' },
+  entryPoints: { app: 'web/src/main.tsx', theme: 'web/src/theme-init.ts' },
   bundle: true,
   platform: 'browser',
   format: 'esm',

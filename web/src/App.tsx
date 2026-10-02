@@ -11,6 +11,7 @@ import { DialogHost, Toasts } from './components/Overlays.tsx';
 import { QuickCreate } from './components/QuickCreate.tsx';
 import { TicketPanel } from './components/TicketPanel.tsx';
 import { SearchBox } from './components/SearchBox.tsx';
+import { ThemePicker } from './components/ThemePicker.tsx';
 import { Bell, ConnectionBanner, OnlineNow } from './components/Collab.tsx';
 import { ActivityFeed } from './views/ActivityFeed.tsx';
 import { Admin } from './views/admin/Admin.tsx';
@@ -84,6 +85,7 @@ function WhoAreYou() {
     <div className="center-screen who">
       <div className="who-card">
         <h1 className="brand-big">Engineering Board</h1>
+        <ThemePicker />
         <p className="muted">Who's at this computer? The board remembers you on this browser.</p>
         {users.error && <ErrorBox message={users.error.message} retry={users.refresh} />}
         {!users.data && !users.error && <Spinner />}
@@ -221,6 +223,7 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
             ?
           </button>
           <Bell />
+          <ThemePicker />
           <button className="btn btn-primary new-job" onClick={() => setCreating(true)} title="New job (N)">
             + New job
           </button>

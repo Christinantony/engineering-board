@@ -123,10 +123,13 @@ describe('packaged build', () => {
     assert.match(page.headers.get('content-type'), /text\/html/);
     assert.match(page.headers.get('content-security-policy') ?? '', /default-src 'self'/);
     const html = await page.text();
-    const script = /src="(\/assets\/[^"]+\.js[^"]*)"/.exec(html)[1];
-    const js = await fetch(base + script);
-    assert.equal(js.status, 200);
-    assert.match(js.headers.get('content-type'), /javascript/);
+    const scripts = [...html.matchAll(/src="(\/assets\/[^"]+\.js[^"]*)"/g)].map((m) => m[1]);
+    assert.ok(scripts.some((src) => src.startsWith('/assets/app.js')), 'the application bundle is present');
+    for (const script of scripts) {
+      const js = await fetch(base + script);
+      assert.equal(js.status, 200, `script served: ${script}`);
+      assert.match(js.headers.get('content-type'), /javascript/);
+    }
 
     assert.equal((await fetch(`${base}/api/tickets`)).status, 401, 'API needs a chosen user');
     assert.equal((await fetch(`${base}/api/nope`)).status, 404, 'unknown API paths are 404, not the SPA');
