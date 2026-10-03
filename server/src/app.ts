@@ -1,5 +1,5 @@
 import { createServer, type Server } from 'node:http';
-import { STATUSES, PRIORITIES, ESTIMATE_BUCKETS, STATUS_LABEL, type User } from '@board/shared';
+import { STATUSES, PRIORITIES, ESTIMATE_BUCKETS, STATUS_LABEL, seesWholeBoard, type User } from '@board/shared';
 import { v, signInSchema, createPasswordSchema, changePasswordSchema } from '@board/shared';
 import { openDb, migrate, pendingMigrations, run, all, tx } from './db/connection.ts';
 import { createReadStream } from 'node:fs';
@@ -82,17 +82,21 @@ import { collectUnusedUploads, ingest, storeDir } from './domain/reviewStore.ts'
 import {
   addReference,
   addReviewComment,
+  canSeeFile,
   cleanupDrawing,
   decide,
   handover,
   markSigned,
   renameDrawing,
+  requireReviewAccess,
   resolveComment,
   respondToComment,
   reviewQueue,
+  reviewerTicketIds,
   runPendingCleanups,
   servableBlob,
   setBookmark,
+  setDrawingReviewers,
   submit,
   withdraw,
   workspace,
@@ -103,7 +107,7 @@ import { jobsNeedingSync, markSyncPending, revisionLog, settleSyncs, syncProject
 /** Default maximum PDF upload for drawing review (merged signed scans can be large). */
 export const DEFAULT_REVIEW_UPLOAD_MAX_MB = 200;
 
-export const APP_VERSION = '1.2.0';
+export const APP_VERSION = '1.3.0';
 
 export interface AppOptions {
   dbPath: string;
@@ -248,16 +252,24 @@ export function createApp(opts: AppOptions): App {
   function requireAdmin(req: Pick<Request, 'cookies'>): User {
     const user = currentUser(req);
     if (!user) throw new HttpError(401, 'unauthenticated', 'Please sign in first.');
+    if (!seesWholeBoard(user)) throw forbidden('Reviewers see only the drawings handed to them for review.');
     if (!readAdmin(ctx, req.cookies[ADMIN_COOKIE], user.id))
       throw new HttpError(403, 'admin_locked', 'Unlock the admin area with the PIN first.');
     return user;
   }
   const admin = (method: string, path: string, h: (req: Request, user: User) => unknown) =>
     router.add(method, path, (req) => h(req, requireAdmin(req)));
+  const REVIEWER_ONLY = 'Reviewers see only the drawings handed to them for review.';
+  /** Board-wide reads: reviewers see only the drawings handed to them (decision #29). */
+  const board = (method: string, path: string, h: (req: Request, user: User) => unknown) =>
+    authed(method, path, (req, user) => {
+      if (!seesWholeBoard(user)) throw forbidden(REVIEWER_ONLY);
+      return h(req, user);
+    });
   /** Job editing routes: reviewers look, comment and review, but don't change jobs (decision #24). */
   const worker = (method: string, path: string, h: (req: Request, user: User) => unknown) =>
     authed(method, path, (req, user) => {
-      if (user.role === 'reviewer') throw forbidden('Reviewers can comment on jobs and review drawings, but not create or change jobs.');
+      if (!seesWholeBoard(user)) throw forbidden('Reviewers review the drawings handed to them; they cannot create or change jobs.');
       return h(req, user);
     });
 
@@ -313,7 +325,7 @@ export function createApp(opts: AppOptions): App {
 
   // ---- reference data ----
   authed('GET', '/api/job-types', () => ({ job_types: listJobTypes(ctx) }));
-  authed('GET', '/api/tags', () => ({
+  board('GET', '/api/tags', () => ({
     tags: all<{ name: string; count: number }>(
       ctx.db,
       'SELECT g.name, COUNT(tt.ticket_id) count FROM tags g LEFT JOIN ticket_tags tt ON tt.tag_id = g.id GROUP BY g.id ORDER BY count DESC, g.name',
@@ -321,23 +333,23 @@ export function createApp(opts: AppOptions): App {
   }));
 
   // ---- tickets ----
-  authed('GET', '/api/tickets', (req) => listTickets(ctx, parseFilters(req.query)));
+  board('GET', '/api/tickets', (req) => listTickets(ctx, parseFilters(req.query)));
   worker('POST', '/api/tickets', (req, user) => {
     const key = req.headers['idempotency-key'];
     const k = typeof key === 'string' && key.length >= 8 && key.length <= 100 ? key : undefined;
     const { ticket, replayed } = createTicket(ctx, user, req.body ?? {}, k);
     return new Reply(replayed ? 200 : 201, { ticket, replayed });
   });
-  authed('GET', '/api/tickets/:id', (req) => ({ ticket: getTicket(ctx, id(req)), activity: ticketActivity(ctx, id(req)) }));
+  board('GET', '/api/tickets/:id', (req) => ({ ticket: getTicket(ctx, id(req)), activity: ticketActivity(ctx, id(req)) }));
   worker('PATCH', '/api/tickets/:id', (req, user) => ({ ticket: updateTicket(ctx, user, id(req), req.body ?? {}) }));
   worker('POST', '/api/tickets/:id/move', (req, user) => ({ ticket: moveTicket(ctx, user, id(req), req.body ?? {}) }));
   worker('POST', '/api/tickets/:id/claim', (req, user) => ({ ticket: claimTicket(ctx, user, id(req)) }));
   worker('POST', '/api/tickets/:id/release', (req, user) => ({ ticket: releaseTicket(ctx, user, id(req)) }));
   worker('POST', '/api/tickets/:id/my-rank', (req, user) => ({ ticket: setMyRank(ctx, user, id(req), req.body ?? {}) }));
-  authed('POST', '/api/tickets/:id/comments', (req, user) => new Reply(201, { activity: addComment(ctx, user, id(req), req.body ?? {}) }));
+  worker('POST', '/api/tickets/:id/comments', (req, user) => new Reply(201, { activity: addComment(ctx, user, id(req), req.body ?? {}) }));
   worker('POST', '/api/tickets/:id/archive', (req, user) => ({ ticket: archiveTicket(ctx, user, id(req)) }));
   worker('POST', '/api/tickets/:id/restore', (req, user) => ({ ticket: restoreTicket(ctx, user, id(req)) }));
-  authed('GET', '/api/tickets/:id/activity', (req) => ({ activity: ticketActivity(ctx, id(req)) }));
+  board('GET', '/api/tickets/:id/activity', (req) => ({ activity: ticketActivity(ctx, id(req)) }));
 
   // ---- drawing review ----
   const did = (req: Request) => v.int({ min: 1 })(req.params.id, 'id');
@@ -366,7 +378,8 @@ export function createApp(opts: AppOptions): App {
     tx(ctx.db, () => ingest(ctx, up.path, up.sha256!, pages));
     return new Reply(201, { file: { sha256: up.sha256, filename, size: up.bytes, pages } });
   });
-  authed('GET', '/api/review-files/:sha', (req) => {
+  authed('GET', '/api/review-files/:sha', (req, user) => {
+    if (!canSeeFile(ctx, user, req.params.sha)) throw new HttpError(404, 'not_found', 'PDF not found');
     const f = servableBlob(ctx, req.params.sha);
     req.res.writeHead(200, {
       'Content-Type': 'application/pdf',
@@ -378,8 +391,11 @@ export function createApp(opts: AppOptions): App {
     createReadStream(f.path).pipe(req.res);
     return HANDLED;
   });
-  authed('GET', '/api/tickets/:id/review', (req) => workspace(ctx, id(req)));
-  authed('GET', '/api/tickets/:id/review/log', (req) => {
+  authed('GET', '/api/tickets/:id/review', (req, user) => {
+    requireReviewAccess(ctx, user, id(req));
+    return workspace(ctx, id(req), user);
+  });
+  board('GET', '/api/tickets/:id/review/log', (req) => {
     const t = getTicket(ctx, id(req));
     return new Reply(200, revisionLog(ctx, t.file_location, t.id), {
       'Content-Type': 'text/markdown; charset=utf-8',
@@ -392,7 +408,7 @@ export function createApp(opts: AppOptions): App {
   };
   authed('POST', '/api/tickets/:id/review/submissions', (req, user) => new Reply(201, reviewed(id(req), submit(ctx, user, id(req), req.body ?? {}))));
   authed('POST', '/api/tickets/:id/review/references', (req, user) => reviewed(id(req), addReference(ctx, user, id(req), req.body ?? {})));
-  authed('POST', '/api/tickets/:id/review/sync', (req) => {
+  board('POST', '/api/tickets/:id/review/sync', (req) => {
     const t = getTicket(ctx, id(req));
     afterReview(t.id);
     return { ok: true };
@@ -410,12 +426,13 @@ export function createApp(opts: AppOptions): App {
   authed('POST', '/api/review/drawings/:id/signed', onDrawing((req, user) => markSigned(ctx, user, did(req))));
   authed('POST', '/api/review/drawings/:id/withdraw', onDrawing((req, user) => withdraw(ctx, user, did(req), req.body ?? {})));
   authed('PATCH', '/api/review/drawings/:id', onDrawing((req, user) => renameDrawing(ctx, user, did(req), req.body ?? {})));
+  authed('PUT', '/api/review/drawings/:id/reviewers', onDrawing((req, user) => setDrawingReviewers(ctx, user, did(req), req.body ?? {})));
   authed('POST', '/api/review/drawings/:id/comments', onDrawing((req, user) => addReviewComment(ctx, user, did(req), req.body ?? {})));
   authed('POST', '/api/review/comments/:id/respond', onDrawing((req, user) => respondToComment(ctx, user, did(req), req.body ?? {})));
   authed('POST', '/api/review/comments/:id/resolve', onDrawing((req, user) => resolveComment(ctx, user, did(req))));
 
   // ---- views ----
-  authed('GET', '/api/activity', (req) => {
+  board('GET', '/api/activity', (req) => {
     const limit = Math.min(Math.max(Number(req.query.get('limit')) || 30, 1), 200);
     const since = Number(req.query.get('since')) || undefined;
     if (since) return { activity: recentActivity(ctx, limit, since) };
@@ -435,7 +452,7 @@ export function createApp(opts: AppOptions): App {
     markSeen(ctx, user.id, up_to);
     return { ok: true };
   });
-  authed('GET', '/api/presence', () => ({ online: presence.snapshot() }));
+  board('GET', '/api/presence', () => ({ online: presence.snapshot() }));
   authed('POST', '/api/presence', (req, user) => {
     const { job_id, tab } = v.object({
       job_id: v.nullable(v.int({ min: 1 })),
@@ -444,17 +461,17 @@ export function createApp(opts: AppOptions): App {
     presence.view(user.id, tab, job_id);
     return { ok: true };
   });
-  authed('GET', '/api/dashboard', () => dashboard(ctx));
-  authed('GET', '/api/today', () => todayView(ctx));
-  authed('GET', '/api/my-work', (req, user) => {
+  board('GET', '/api/dashboard', () => dashboard(ctx));
+  board('GET', '/api/today', () => todayView(ctx));
+  board('GET', '/api/my-work', (req, user) => {
     const uid = req.query.get('user') ? v.int({ min: 1 })(req.query.get('user'), 'user') : user.id;
     return myWork(ctx, uid);
   });
-  authed('GET', '/api/reports', (req) => {
+  board('GET', '/api/reports', (req) => {
     const today = localDate(ctx.now().getTime(), ctx.tz);
     return report(ctx, req.query.get('from') ?? today, req.query.get('to') ?? today);
   });
-  authed('GET', '/api/workload', (req) => workload(ctx, (req.query.get('horizon') ?? 'today') as Horizon));
+  board('GET', '/api/workload', (req) => workload(ctx, (req.query.get('horizon') ?? 'today') as Horizon));
 
   // ---- live updates (Server-Sent Events) ----
   authed('GET', '/api/events', (req, user) => {
@@ -466,7 +483,12 @@ export function createApp(opts: AppOptions): App {
       'X-Accel-Buffering': 'no',
     });
     res.write(`retry: 3000\nevent: hello\ndata: ${JSON.stringify({ time: ctx.now().toISOString(), version: APP_VERSION })}\n\n`);
-    const unsubscribe = ctx.events.subscribe((e) => res.write(`data: ${JSON.stringify(e)}\n\n`));
+    // a reviewer hears only about jobs with drawings handed to them (decision #29)
+    const hears = (e: { type: string; id?: number }) =>
+      seesWholeBoard(user) || e.type === 'reload' || e.type === 'users' || (e.type === 'ticket' && e.id != null && reviewerTicketIds(ctx, user).has(e.id));
+    const unsubscribe = ctx.events.subscribe((e) => {
+      if (hears(e)) res.write(`data: ${JSON.stringify(e)}\n\n`);
+    });
     const ping = setInterval(() => res.write(': ping\n\n'), 25_000);
     const leave = presence.connect(user.id);
     const cleanup = () => {
@@ -481,11 +503,11 @@ export function createApp(opts: AppOptions): App {
   });
 
   // ---- admin ----
-  authed('GET', '/api/admin/status', (req, user) => ({
+  board('GET', '/api/admin/status', (req, user) => ({
     unlocked: readAdmin(ctx, req.cookies[ADMIN_COOKIE], user.id),
     pin_is_default: pinIsDefault(ctx),
   }));
-  authed('POST', '/api/admin/unlock', (req, user) => {
+  board('POST', '/api/admin/unlock', (req, user) => {
     const { pin } = v.object({ pin: v.string({ min: 1, max: 32 }) })(req.body);
     if (!verifyPin(ctx, pin)) throw forbidden('Wrong PIN');
     return new Reply(200, { unlocked: true }, { 'Set-Cookie': cookie(ADMIN_COOKIE, adminCookie(ctx, user.id), { maxAge: ADMIN_TTL_SECONDS }) });
@@ -519,13 +541,13 @@ export function createApp(opts: AppOptions): App {
   // ---- export / import ----
   const attach = (name: string, type: string) => ({ 'Content-Type': type, 'Content-Disposition': `attachment; filename="${name}"` });
   const today = () => localDate(ctx.now().getTime(), ctx.tz);
-  authed('GET', '/api/export/tickets.csv', (req) =>
+  board('GET', '/api/export/tickets.csv', (req) =>
     new Reply(200, exportCsv(ctx, parseFilters(req.query)), attach(`engineering-board-jobs-${today()}.csv`, 'text/csv; charset=utf-8')),
   );
-  authed('GET', '/api/export/tickets.json', (req) =>
+  board('GET', '/api/export/tickets.json', (req) =>
     new Reply(200, exportJson(ctx, { activity: req.query.get('activity') !== '0' }), attach(`engineering-board-${today()}.json`, 'application/json; charset=utf-8')),
   );
-  authed('GET', '/api/import/template.csv', () => new Reply(200, importTemplate(), attach('engineering-board-import-template.csv', 'text/csv; charset=utf-8')));
+  board('GET', '/api/import/template.csv', () => new Reply(200, importTemplate(), attach('engineering-board-import-template.csv', 'text/csv; charset=utf-8')));
   const importOpts = (req: Request) => ({
     date_order: req.query.get('date_order') === 'MDY' ? ('MDY' as const) : ('DMY' as const),
     create_job_types: req.query.get('create_job_types') !== '0',

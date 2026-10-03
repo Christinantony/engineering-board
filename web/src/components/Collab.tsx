@@ -2,6 +2,7 @@
 // open, and the "server unreachable" / "new version" banners.
 
 import { useEffect, useRef, useState } from 'react';
+import { seesWholeBoard } from '@board/shared';
 import { useApp } from '../context.ts';
 import { post } from '../lib/api.ts';
 import { when } from '../lib/format.ts';
@@ -31,7 +32,7 @@ interface NoticeData {
   due_today_mine: number;
 }
 
-function noticeText(n: Notice): string {
+function noticeText(n: Notice, reviewer = false): string {
   const who = n.by ?? 'Someone';
   switch (n.kind) {
     case 'urgent':
@@ -49,7 +50,7 @@ function noticeText(n: Notice): string {
     case 'unassigned':
       return `${who} took this off you`;
     case 'review_submitted':
-      return `${who} submitted drawings for board review`;
+      return reviewer ? `${who} handed you ${n.detail ?? 'a drawing'} to review` : `${who} submitted drawings for board review`;
     case 'review_passed':
       return `${who} passed ${n.detail ?? 'a drawing'} in board review`;
     case 'review_returned':
@@ -65,7 +66,10 @@ function noticeText(n: Notice): string {
 const LOUD = new Set(['urgent', 'assigned', 'unassigned', 'signature', 'review_returned']);
 
 export function Bell() {
-  const { openJob } = useApp();
+  const { openJob, me } = useApp();
+  const reviewer = !seesWholeBoard(me);
+  const loud = (kind: string) => LOUD.has(kind) || (reviewer && kind === 'review_submitted');
+  const open_ = (n: Notice) => (reviewer || n.kind.startsWith('review') || n.kind === 'signature' ? navigate(`/review/${n.ticket_id}`) : openJob(n.ticket_id));
   const q = useQuery<NoticeData>('/api/notifications');
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement | null>(null);
@@ -76,12 +80,12 @@ export function Bell() {
     if (!q.data) return;
     const top = q.data.items[0]?.id ?? 0;
     if (lastSeenTop.current != null) {
-      const fresh = q.data.items.filter((n) => n.id > lastSeenTop.current! && n.unread && LOUD.has(n.kind));
+      const fresh = q.data.items.filter((n) => n.id > lastSeenTop.current! && n.unread && loud(n.kind));
       for (const n of fresh.slice(0, 2).reverse())
-        toast(`${noticeText(n)}: ${n.job_number} ${n.title}`, {
+        toast(`${noticeText(n, reviewer)}: ${n.job_number} ${n.title}`, {
           kind: n.kind === 'urgent' ? 'error' : 'info',
           timeout: 12_000,
-          action: { label: 'Open', run: () => (n.kind.startsWith('review') || n.kind === 'signature' ? navigate(`/review/${n.ticket_id}`) : openJob(n.ticket_id)) },
+          action: { label: 'Open', run: () => open_(n) },
         });
     }
     lastSeenTop.current = Math.max(lastSeenTop.current ?? 0, top);
@@ -165,11 +169,10 @@ export function Bell() {
                     className={`bell-item k-${n.kind}${n.unread ? ' unread' : ''}`}
                     onClick={() => {
                       setOpen(false);
-                      if (n.kind.startsWith('review') || n.kind === 'signature') navigate(`/review/${n.ticket_id}`);
-                      else openJob(n.ticket_id);
+                      open_(n);
                     }}
                   >
-                    <span className="bell-what">{noticeText(n)}</span>
+                    <span className="bell-what">{noticeText(n, reviewer)}</span>
                     <span className="bell-job">
                       <span className="jobno">{n.job_number}</span> {n.title}
                     </span>
@@ -180,15 +183,17 @@ export function Bell() {
               ))}
             </ol>
           )}
-          <button
-            className="bell-all"
-            onClick={() => {
-              setOpen(false);
-              navigate('/activity');
-            }}
-          >
-            See all team activity
-          </button>
+          {!reviewer && (
+            <button
+              className="bell-all"
+              onClick={() => {
+                setOpen(false);
+                navigate('/activity');
+              }}
+            >
+              See all team activity
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -21,6 +21,7 @@ import {
   canReview,
   decisionSchema,
   drawingEditSchema,
+  drawingReviewersSchema,
   referenceAttachSchema,
   reviewCommentSchema,
   reviewSubmissionSchema,
@@ -33,7 +34,9 @@ import {
   type ReviewQueueRow,
   type ReviewReference,
   type ReviewWorkspace,
+  type Ticket,
   type User,
+  seesWholeBoard,
 } from '@board/shared';
 import { all, get, run, tx, type Param } from '../db/connection.ts';
 import { HttpError, badRequest, bool, conflict, forbidden, notFound, nowIso, type Ctx } from '../lib/core.ts';
@@ -145,6 +148,138 @@ function requireReviewer(actor: User) {
   if (!canReview(actor)) throw forbidden('Only the manager and reviewers can pass or return drawings in board review. Engineers cannot review drawings.');
 }
 
+// ---------------------------------------------------------------------------
+// Who a drawing is handed to (decision #29)
+// ---------------------------------------------------------------------------
+
+export function drawingReviewers(ctx: Ctx, drawingId: number): number[] {
+  return all<{ user_id: number }>(ctx.db, 'SELECT user_id FROM review_drawing_reviewers WHERE drawing_id = ? ORDER BY assigned_at, user_id', drawingId).map((r) => r.user_id);
+}
+
+/**
+ * The drawings of a job that `viewer` may see. Engineers and the manager see
+ * them all; a reviewer sees the ones handed to them, plus any they passed
+ * (they still sign those, even if the engineer later changed the reviewers).
+ */
+export function visibleDrawingIds(ctx: Ctx, viewer: User, ticketId: number): number[] | 'all' {
+  if (seesWholeBoard(viewer)) return 'all';
+  return all<{ id: number }>(
+    ctx.db,
+    `SELECT d.id FROM review_drawings d
+     WHERE d.ticket_id = ? AND (d.passed_by = ? OR EXISTS (SELECT 1 FROM review_drawing_reviewers r WHERE r.drawing_id = d.id AND r.user_id = ?))
+     ORDER BY d.id`,
+    ticketId,
+    viewer.id,
+    viewer.id,
+  ).map((r) => r.id);
+}
+
+/** A reviewer may act on a drawing only if it is handed to them (the manager on any). */
+function canSeeDrawing(ctx: Ctx, viewer: User, d: Pick<DrawingRow, 'id' | 'passed_by'>): boolean {
+  if (seesWholeBoard(viewer)) return true;
+  return d.passed_by === viewer.id || !!get(ctx.db, 'SELECT 1 FROM review_drawing_reviewers WHERE drawing_id = ? AND user_id = ?', d.id, viewer.id);
+}
+
+/** 404 rather than 403, so a reviewer can't probe which jobs or drawings exist. */
+function requireSeeDrawing(ctx: Ctx, viewer: User, d: DrawingRow) {
+  if (!canSeeDrawing(ctx, viewer, d)) throw notFound('Drawing');
+}
+
+/** Throws 404 unless `viewer` may open this job's review (a reviewer: at least one drawing handed to them). */
+export function requireReviewAccess(ctx: Ctx, viewer: User, ticketId: number) {
+  ticketRow(ctx, ticketId);
+  const ids = visibleDrawingIds(ctx, viewer, ticketId);
+  if (ids !== 'all' && !ids.length) throw notFound('Job');
+}
+
+/** Whether `viewer` may download the stored PDF `sha` (a reviewer: only files of drawings handed to them, and their jobs' signed references). */
+export function canSeeFile(ctx: Ctx, viewer: User, sha: string): boolean {
+  if (seesWholeBoard(viewer)) return true;
+  const mine = `(d.passed_by = ? OR EXISTS (SELECT 1 FROM review_drawing_reviewers r WHERE r.drawing_id = d.id AND r.user_id = ?))`;
+  return (
+    !!get(ctx.db, `SELECT 1 FROM review_attempts a JOIN review_drawings d ON d.id = a.drawing_id WHERE a.sha256 = ? AND ${mine} LIMIT 1`, sha, viewer.id, viewer.id) ||
+    !!get(
+      ctx.db,
+      `SELECT 1 FROM review_references f JOIN review_drawings d ON d.ticket_id = f.ticket_id WHERE f.sha256 = ? AND ${mine} LIMIT 1`,
+      sha,
+      viewer.id,
+      viewer.id,
+    )
+  );
+}
+
+/** The ids of jobs with at least one drawing handed to this reviewer. */
+export function reviewerTicketIds(ctx: Ctx, viewer: User): Set<number> {
+  return new Set(
+    all<{ ticket_id: number }>(
+      ctx.db,
+      `SELECT DISTINCT d.ticket_id FROM review_drawings d
+       WHERE d.passed_by = ? OR EXISTS (SELECT 1 FROM review_drawing_reviewers r WHERE r.drawing_id = d.id AND r.user_id = ?)`,
+      viewer.id,
+      viewer.id,
+    ).map((r) => r.ticket_id),
+  );
+}
+
+/** Check a list of reviewer ids: active manager or reviewers, not the person handing it over. */
+function checkReviewers(ctx: Ctx, actor: User, ids: number[], identifier: string): number[] {
+  const unique = [...new Set(ids)];
+  if (!unique.length) throw badRequest(`Choose at least one reviewer for ${identifier}.`);
+  for (const id of unique) {
+    const u = getUser(ctx, id);
+    if (!u || !canReview(u)) throw badRequest(`${u?.name ?? `User #${id}`} is not an active reviewer, so ${identifier} can't be handed to them.`);
+    if (u.id === actor.id) throw badRequest(`You can't hand ${identifier} to yourself for review.`);
+  }
+  return unique;
+}
+
+/** Replace a drawing's reviewers. Returns true when the list changed. */
+function assignReviewers(ctx: Ctx, actor: User, d: Pick<DrawingRow, 'id' | 'ticket_id' | 'identifier'>, ids: number[]): boolean {
+  const before = drawingReviewers(ctx, d.id);
+  const same = before.length === ids.length && ids.every((id) => before.includes(id));
+  if (same) return false;
+  const now = nowIso(ctx);
+  run(ctx.db, 'DELETE FROM review_drawing_reviewers WHERE drawing_id = ?', d.id);
+  for (const id of ids) run(ctx.db, 'INSERT INTO review_drawing_reviewers (drawing_id, user_id, assigned_by, assigned_at) VALUES (?, ?, ?, ?)', d.id, id, actor.id, now);
+  const names = ids.map((id) => userName(ctx, id)).join(', ');
+  event(ctx, d.ticket_id, actor.id, 'reviewers', `Handed to ${names}`, d.id);
+  // one activity row per reviewer newly handed this drawing: their notification
+  for (const id of ids.filter((x) => !before.includes(x)))
+    logActivity(ctx, d.ticket_id, actor.id, 'review_assigned', String(d.id), userName(ctx, id), d.identifier);
+  return true;
+}
+
+/** A job as a reviewer sees it: the job number and title, nothing else (decision #29). */
+function reviewerTicket(t: Ticket): Ticket {
+  return {
+    ...t,
+    description: '',
+    priority: 'normal' as Ticket['priority'],
+    assigned_to: null,
+    created_by: null,
+    requester: '',
+    job_type_id: null,
+    estimate_minutes: null,
+    actual_minutes: null,
+    due_date: null,
+    due_time: null,
+    due_at: null,
+    reference: '',
+    file_location: '',
+    notes: '',
+    waiting_for: '',
+    parent_job_id: null,
+    board_rank: 0,
+    my_rank: 0,
+    claimed_at: null,
+    started_at: null,
+    completed_at: null,
+    tags: [],
+    overdue: false,
+    due_today: false,
+  };
+}
+
 const userName = (ctx: Ctx, id: number | null) => (id == null ? 'someone' : getUser(ctx, id)?.name ?? `user #${id}`);
 
 /** "2 Oct 2026" in the board's time zone. */
@@ -182,14 +317,27 @@ export function syncState(ctx: Ctx, ticketId: number, folder: string) {
   return { state: s?.state ?? (folder.trim() ? 'pending' : 'no_folder'), detail: s?.detail ?? null, updated_at: s?.updated_at ?? null, folder };
 }
 
-export function workspace(ctx: StoreCtx, ticketId: number): ReviewWorkspace {
-  const ticket = getTicket(ctx, ticketId);
+/**
+ * The review workspace of a job. Pass `viewer` to get it as that person sees
+ * it: a reviewer gets only the drawings handed to them and the job's number
+ * and title (decision #29).
+ */
+export function workspace(ctx: StoreCtx, ticketId: number, viewer?: User): ReviewWorkspace {
+  const full = getTicket(ctx, ticketId);
+  const only = viewer ? visibleDrawingIds(ctx, viewer, ticketId) : 'all';
+  const shown = (drawingId: number | null) => only === 'all' || (drawingId != null && only.includes(drawingId));
+  const ticket = only === 'all' ? full : reviewerTicket(full);
   const references = all<Omit<ReviewReference, 'available'>>(
     ctx.db,
     'SELECT id, filename, sha256, pages, attached_by, attached_at FROM review_references WHERE ticket_id = ? ORDER BY id',
     ticketId,
   ).map((r) => ({ ...r, available: hasBlob(ctx, r.sha256) }));
-  const drawings = all<DrawingRow>(ctx.db, 'SELECT * FROM review_drawings WHERE ticket_id = ? ORDER BY id', ticketId);
+  const drawings = all<DrawingRow>(ctx.db, 'SELECT * FROM review_drawings WHERE ticket_id = ? ORDER BY id', ticketId).filter((d) => shown(d.id));
+  const assigned = all<{ drawing_id: number; user_id: number }>(
+    ctx.db,
+    `SELECT r.drawing_id, r.user_id FROM review_drawing_reviewers r JOIN review_drawings d ON d.id = r.drawing_id WHERE d.ticket_id = ? ORDER BY r.assigned_at, r.user_id`,
+    ticketId,
+  );
   const attempts = all<AttemptRow & { submission_number: number }>(
     ctx.db,
     `SELECT a.*, s.number AS submission_number FROM review_attempts a
@@ -224,6 +372,7 @@ export function workspace(ctx: StoreCtx, ticketId: number): ReviewWorkspace {
       cleanup: d.cleanup,
       cleanup_detail: d.cleanup_detail,
       version: d.version,
+      reviewers: assigned.filter((r) => r.drawing_id === d.id).map((r) => r.user_id),
       attempts: attempts
         .filter((a) => a.drawing_id === d.id)
         .map((a) => ({
@@ -250,7 +399,7 @@ export function workspace(ctx: StoreCtx, ticketId: number): ReviewWorkspace {
     ctx.db,
     'SELECT id, drawing_id, attempt_id, user_id, at, kind, detail FROM review_events WHERE ticket_id = ? ORDER BY id',
     ticketId,
-  );
+  ).filter((e) => e.drawing_id == null || shown(e.drawing_id));
   const submissions = get<{ n: number }>(ctx.db, 'SELECT COUNT(*) n FROM review_submissions WHERE ticket_id = ?', ticketId)!.n;
   return {
     ticket,
@@ -258,8 +407,9 @@ export function workspace(ctx: StoreCtx, ticketId: number): ReviewWorkspace {
     references,
     drawings: out,
     events,
-    sync: syncState(ctx, ticketId, ticket.file_location),
-    signatures_pending: signaturesPending(ctx, ticketId),
+    // a reviewer doesn't see the job's File location (or where the copies go)
+    sync: only === 'all' ? syncState(ctx, ticketId, full.file_location) : { state: 'ok', detail: null, updated_at: null, folder: '' },
+    signatures_pending: only === 'all' ? signaturesPending(ctx, ticketId) : out.filter((d) => d.required && d.state !== 'signed').length,
   };
 }
 
@@ -267,9 +417,13 @@ export type QueueTab = 'awaiting' | 'returned' | 'signature' | 'done' | 'all';
 
 /** The review queue: one row per job that has drawings in board review. */
 export function reviewQueue(ctx: Ctx, me: User, tab: QueueTab, q = '') {
+  // A reviewer's queue holds only the drawings handed to them (decision #29).
+  const whole = seesWholeBoard(me);
+  const mine = (alias: string) =>
+    whole ? '1' : `(${alias}.passed_by = ${Number(me.id)} OR EXISTS (SELECT 1 FROM review_drawing_reviewers rr WHERE rr.drawing_id = ${alias}.id AND rr.user_id = ${Number(me.id)}))`;
   const rows = all<ReviewQueueRow & { status: string; archived: number }>(
     ctx.db,
-    `SELECT t.id AS ticket_id, t.job_number, t.title, t.file_location AS folder, t.status, t.archived,
+    `SELECT t.id AS ticket_id, t.job_number, t.title, ${whole ? 't.file_location' : "''"} AS folder, t.status, t.archived,
        (SELECT COUNT(*) FROM review_submissions s WHERE s.ticket_id = t.id) AS submissions,
        (SELECT s.submitted_by FROM review_submissions s WHERE s.ticket_id = t.id ORDER BY s.id DESC LIMIT 1) AS submitted_by,
        (SELECT s.submitted_at FROM review_submissions s WHERE s.ticket_id = t.id ORDER BY s.id DESC LIMIT 1) AS submitted_at,
@@ -282,9 +436,9 @@ export function reviewQueue(ctx: Ctx, me: User, tab: QueueTab, q = '') {
        SUM(d.state = 'handed_over') AS handed_over,
        SUM(d.state = 'signed') AS signed,
        (SELECT COUNT(*) FROM review_comments c JOIN review_drawings d2 ON d2.id = c.drawing_id
-          WHERE d2.ticket_id = t.id AND c.resolved_at IS NULL AND d2.state <> 'withdrawn') AS open_comments,
-       (SELECT group_concat(DISTINCT d3.passed_by) FROM review_drawings d3 WHERE d3.ticket_id = t.id AND d3.state = 'handed_over') AS signers_csv
-     FROM tickets t JOIN review_drawings d ON d.ticket_id = t.id AND d.state <> 'withdrawn'
+          WHERE d2.ticket_id = t.id AND c.resolved_at IS NULL AND d2.state <> 'withdrawn' AND ${mine('d2')}) AS open_comments,
+       (SELECT group_concat(DISTINCT d3.passed_by) FROM review_drawings d3 WHERE d3.ticket_id = t.id AND d3.state = 'handed_over' AND ${mine('d3')}) AS signers_csv
+     FROM tickets t JOIN review_drawings d ON d.ticket_id = t.id AND d.state <> 'withdrawn' AND ${mine('d')}
      GROUP BY t.id
      ORDER BY submitted_at DESC`,
   ) as (ReviewQueueRow & { status: string; archived: number; signers_csv: string | null })[];
@@ -292,7 +446,12 @@ export function reviewQueue(ctx: Ctx, me: User, tab: QueueTab, q = '') {
   const matchesTerm = (r: ReviewQueueRow) => {
     if (!term) return true;
     if (`${r.job_number} ${r.title} ${r.folder}`.toLowerCase().includes(term)) return true;
-    return !!get(ctx.db, `SELECT 1 FROM review_drawings WHERE ticket_id = ? AND identifier LIKE ? ESCAPE '\\'`, r.ticket_id, `%${term.replace(/[\\%_]/g, '\\$&')}%`);
+    return !!get(
+      ctx.db,
+      `SELECT 1 FROM review_drawings d WHERE d.ticket_id = ? AND d.identifier LIKE ? ESCAPE '\\' AND ${mine('d')}`,
+      r.ticket_id,
+      `%${term.replace(/[\\%_]/g, '\\$&')}%`,
+    );
   };
   const clean = rows.map(({ signers_csv, ...r }) => ({
     ...r,
@@ -314,7 +473,7 @@ export function reviewQueue(ctx: Ctx, me: User, tab: QueueTab, q = '') {
   };
   const monthStart = new Date(ctx.now().getTime());
   const ym = new Intl.DateTimeFormat('en-CA', { timeZone: ctx.tz, year: 'numeric', month: '2-digit' }).format(monthStart);
-  const passedThisMonth = all<{ passed_at: string }>(ctx.db, `SELECT passed_at FROM review_drawings WHERE passed_at IS NOT NULL`).filter(
+  const passedThisMonth = all<{ passed_at: string }>(ctx.db, `SELECT passed_at FROM review_drawings WHERE passed_at IS NOT NULL${whole ? '' : ` AND passed_by = ${Number(me.id)}`}`).filter(
     (r) => new Intl.DateTimeFormat('en-CA', { timeZone: ctx.tz, year: 'numeric', month: '2-digit' }).format(new Date(r.passed_at)) === ym,
   ).length;
   const counts = {
@@ -364,7 +523,7 @@ export function addReference(ctx: StoreCtx, actor: User, ticketId: number, input
     attachReference(ctx, actor, ticketId, data.sha256, data.filename);
     bumpTicket(ctx, ticketId, actor);
   });
-  return workspace(ctx, ticketId);
+  return workspace(ctx, ticketId, actor);
 }
 
 // ---------------------------------------------------------------------------
@@ -480,6 +639,9 @@ export function submit(ctx: StoreCtx, actor: User, ticketId: number, input: unkn
       }
       touchDrawing(ctx, drawing.id, sets);
       event(ctx, ticketId, actor.id, 'submitted', d.notes, drawing.id, attemptId);
+      // hand it to its reviewers: required for a drawing new to the job; a resubmission keeps its own unless changed
+      if (d.reviewer_ids) assignReviewers(ctx, actor, drawing, checkReviewers(ctx, actor, d.reviewer_ids, identifier));
+      else if (!drawingReviewers(ctx, drawing.id).length) throw badRequest(`Choose at least one reviewer for ${identifier}.`);
       summary.push(attemptNo > 1 ? `${identifier} (attempt ${attemptNo})` : `${identifier} (${d.kind === 'new' ? 'new' : 'revision'})`);
       touched.push(drawing.id);
     }
@@ -489,7 +651,7 @@ export function submit(ctx: StoreCtx, actor: User, ticketId: number, input: unkn
     reindexTicket(ctx, ticketId);
     bumpTicket(ctx, ticketId, actor);
   });
-  return workspace(ctx, ticketId);
+  return workspace(ctx, ticketId, actor);
 }
 
 // ---------------------------------------------------------------------------
@@ -500,6 +662,7 @@ export function setBookmark(ctx: StoreCtx, actor: User, drawingId: number, input
   const data = bookmarkSchema(input);
   if (actor.role !== 'engineer' && !canReview(actor)) throw forbidden('You cannot change this drawing.');
   const d = drawingRow(ctx, drawingId);
+  requireSeeDrawing(ctx, actor, d);
   tx(ctx.db, () => {
     if (data.reference_id == null || data.page == null) {
       touchDrawing(ctx, d.id, { ref_reference_id: null, ref_page: null });
@@ -517,7 +680,7 @@ export function setBookmark(ctx: StoreCtx, actor: User, drawingId: number, input
     }
     bumpTicket(ctx, d.ticket_id, actor);
   });
-  return workspace(ctx, d.ticket_id);
+  return workspace(ctx, d.ticket_id, actor);
 }
 
 // ---------------------------------------------------------------------------
@@ -528,6 +691,7 @@ export function decide(ctx: StoreCtx, actor: User, drawingId: number, input: unk
   const data = decisionSchema(input);
   requireReviewer(actor);
   const d = drawingRow(ctx, drawingId);
+  requireSeeDrawing(ctx, actor, d);
   tx(ctx.db, () => {
     const t = ticketRow(ctx, d.ticket_id);
     if (t.archived) throw conflict(`${t.job_number} is archived.`);
@@ -554,7 +718,7 @@ export function decide(ctx: StoreCtx, actor: User, drawingId: number, input: unk
     }
     bumpTicket(ctx, d.ticket_id, actor);
   });
-  return { workspace: workspace(ctx, d.ticket_id), cleanup: data.outcome === 'passed' };
+  return { workspace: workspace(ctx, d.ticket_id, actor), cleanup: data.outcome === 'passed' };
 }
 
 // ---------------------------------------------------------------------------
@@ -578,12 +742,13 @@ export function handover(ctx: StoreCtx, actor: User, drawingId: number): ReviewW
     logActivity(ctx, d.ticket_id, actor.id, 'review_handover', String(d.id), reviewer?.name ?? null, reminder);
     bumpTicket(ctx, d.ticket_id, actor);
   });
-  return workspace(ctx, d.ticket_id);
+  return workspace(ctx, d.ticket_id, actor);
 }
 
 export function markSigned(ctx: StoreCtx, actor: User, drawingId: number): ReviewWorkspace {
   if (actor.role !== 'engineer' && !canReview(actor)) throw forbidden('You cannot record signatures.');
   const d = drawingRow(ctx, drawingId);
+  requireSeeDrawing(ctx, actor, d);
   tx(ctx.db, () => {
     if (d.state === 'signed') throw conflict(`${d.identifier} was already recorded as signed on ${localDay(ctx, d.signed_at!)}.`);
     if (d.state === 'passed') throw conflict(`Mark ${d.identifier} as handed over for signature first.`);
@@ -599,7 +764,7 @@ export function markSigned(ctx: StoreCtx, actor: User, drawingId: number): Revie
     }
     bumpTicket(ctx, d.ticket_id, actor);
   });
-  return workspace(ctx, d.ticket_id);
+  return workspace(ctx, d.ticket_id, actor);
 }
 
 // ---------------------------------------------------------------------------
@@ -618,7 +783,7 @@ export function withdraw(ctx: StoreCtx, actor: User, drawingId: number, input: u
     event(ctx, d.ticket_id, actor.id, 'withdrawn', body.trim() || null, d.id);
     bumpTicket(ctx, d.ticket_id, actor);
   });
-  return workspace(ctx, d.ticket_id);
+  return workspace(ctx, d.ticket_id, actor);
 }
 
 export function renameDrawing(ctx: StoreCtx, actor: User, drawingId: number, input: unknown): ReviewWorkspace {
@@ -635,7 +800,19 @@ export function renameDrawing(ctx: StoreCtx, actor: User, drawingId: number, inp
     reindexTicket(ctx, d.ticket_id);
     bumpTicket(ctx, d.ticket_id, actor);
   });
-  return workspace(ctx, d.ticket_id);
+  return workspace(ctx, d.ticket_id, actor);
+}
+
+/** An engineer changes who a drawing is handed to (someone on leave, a second check). */
+export function setDrawingReviewers(ctx: StoreCtx, actor: User, drawingId: number, input: unknown): ReviewWorkspace {
+  const { reviewer_ids } = drawingReviewersSchema(input);
+  requireEngineer(actor, 'choose who reviews a drawing');
+  const d = drawingRow(ctx, drawingId);
+  tx(ctx.db, () => {
+    if (d.state === 'signed' || d.state === 'withdrawn') throw conflict(`${d.identifier} is ${DRAWING_STATE_LABEL[d.state].toLowerCase()}; its reviewers can't change.`);
+    if (assignReviewers(ctx, actor, d, checkReviewers(ctx, actor, reviewer_ids, d.identifier))) bumpTicket(ctx, d.ticket_id, actor);
+  });
+  return workspace(ctx, d.ticket_id, actor);
 }
 
 // ---------------------------------------------------------------------------
@@ -645,6 +822,7 @@ export function renameDrawing(ctx: StoreCtx, actor: User, drawingId: number, inp
 export function addReviewComment(ctx: StoreCtx, actor: User, drawingId: number, input: unknown): ReviewWorkspace {
   const data = reviewCommentSchema(input);
   const d = drawingRow(ctx, drawingId);
+  requireSeeDrawing(ctx, actor, d);
   tx(ctx.db, () => {
     if (d.state === 'signed' || d.state === 'withdrawn') throw conflict(`${d.identifier} is ${DRAWING_STATE_LABEL[d.state].toLowerCase()}; comments are closed.`);
     const attemptId = data.attempt_id ?? d.current_attempt_id;
@@ -658,7 +836,7 @@ export function addReviewComment(ctx: StoreCtx, actor: User, drawingId: number, 
     logActivity(ctx, d.ticket_id, actor.id, 'review_comment', String(id), d.identifier, data.body);
     bumpTicket(ctx, d.ticket_id, actor);
   });
-  return workspace(ctx, d.ticket_id);
+  return workspace(ctx, d.ticket_id, actor);
 }
 
 function commentRow(ctx: Ctx, id: number) {
@@ -682,11 +860,12 @@ export function respondToComment(ctx: StoreCtx, actor: User, commentId: number, 
     event(ctx, c.ticket_id, actor.id, 'comment_response', body.trim(), c.drawing_id, c.attempt_id);
     bumpTicket(ctx, c.ticket_id, actor);
   });
-  return workspace(ctx, c.ticket_id);
+  return workspace(ctx, c.ticket_id, actor);
 }
 
 export function resolveComment(ctx: StoreCtx, actor: User, commentId: number): ReviewWorkspace {
   const c = commentRow(ctx, commentId);
+  requireSeeDrawing(ctx, actor, drawingRow(ctx, c.drawing_id));
   if (!canReview(actor) && c.user_id !== actor.id) throw forbidden('Only a reviewer or the person who wrote the comment can resolve it.');
   tx(ctx.db, () => {
     if (c.resolved_at) return;
@@ -694,7 +873,7 @@ export function resolveComment(ctx: StoreCtx, actor: User, commentId: number): R
     event(ctx, c.ticket_id, actor.id, 'comment_resolved', c.body.length > 120 ? c.body.slice(0, 117) + '…' : c.body, c.drawing_id, c.attempt_id);
     bumpTicket(ctx, c.ticket_id, actor);
   });
-  return workspace(ctx, c.ticket_id);
+  return workspace(ctx, c.ticket_id, actor);
 }
 
 // ---------------------------------------------------------------------------

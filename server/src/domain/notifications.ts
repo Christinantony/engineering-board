@@ -7,12 +7,16 @@
 //   * a note added to a job you own or created           (owner, creator)
 //   * a job you created marked done                      (creator)
 //   * a job taken off you                                (you)
-//   * drawings submitted for board review                (manager, reviewers)
+//   * drawings submitted for board review                (manager)
+//   * a drawing handed to you for review                 (that reviewer)
 //   * a drawing passed or returned, a review comment     (owner, creator)
 //   * a print you passed handed over for your signature  (that reviewer, once)
 // plus two standing reminders: your overdue jobs and your jobs due today.
+//
+// A reviewer hears only about the drawings handed to them (decision #29):
+// being handed one, comments on it, and the print handed over to sign.
 
-import { canReview, type Activity, type User } from '@board/shared';
+import { canReview, seesWholeBoard, type Activity, type User } from '@board/shared';
 import { all, get, run } from '../db/connection.ts';
 import { nowIso, type Ctx } from '../lib/core.ts';
 import { localDate } from '../lib/time.ts';
@@ -41,6 +45,13 @@ const WINDOW_DAYS = 14;
 
 function classify(a: Row, me: User): { kind: NoticeKind; detail: string | null } | null {
   if (a.user_id === me.id) return null; // never notify people about their own actions
+  if (!seesWholeBoard(me)) {
+    // reviewers: only their own drawings (comments are checked per drawing by the caller)
+    if (a.kind === 'review_assigned') return a.to_value === me.name ? { kind: 'review_submitted', detail: a.body } : null;
+    if (a.kind === 'review_comment') return { kind: 'review_comment', detail: `${a.to_value}: ${a.body ?? ''}` };
+    if (a.kind === 'review_handover') return a.to_value === me.name ? { kind: 'signature', detail: a.body } : null;
+    return null;
+  }
   const mine = a.t_assigned_to === me.id;
   const created = a.t_created_by === me.id;
   switch (a.kind) {
@@ -62,7 +73,7 @@ function classify(a: Row, me: User): { kind: NoticeKind; detail: string | null }
     case 'comment':
       return mine || created ? { kind: 'comment', detail: a.body } : null;
     case 'review_submitted':
-      return canReview(me) ? { kind: 'review_submitted', detail: a.body } : null;
+      return me.role === 'manager' ? { kind: 'review_submitted', detail: a.body } : null;
     case 'review_passed':
       return mine || created ? { kind: 'review_passed', detail: a.to_value } : null;
     case 'review_returned':
@@ -105,7 +116,7 @@ export function notifications(ctx: Ctx, me: User, limit = 40) {
      JOIN tickets t ON t.id = a.ticket_id
      LEFT JOIN users u ON u.id = a.user_id
      WHERE a.at >= ? AND (a.user_id IS NULL OR a.user_id <> ?)
-       AND a.kind IN ('created','priority','assigned','released','status','comment','review_submitted','review_passed','review_returned','review_comment','review_handover')
+       AND a.kind IN ('created','priority','assigned','released','status','comment','review_submitted','review_assigned','review_passed','review_returned','review_comment','review_handover')
        AND t.archived = 0
      ORDER BY a.id DESC
      LIMIT 1000`,
@@ -113,9 +124,21 @@ export function notifications(ctx: Ctx, me: User, limit = 40) {
     me.id,
   );
   const items: Notice[] = [];
+  // a reviewer hears about comments only on drawings handed to them (or that they passed)
+  const handedComment = (commentId: string | null) =>
+    !!commentId &&
+    !!get(
+      ctx.db,
+      `SELECT 1 FROM review_comments c JOIN review_drawings d ON d.id = c.drawing_id
+       WHERE c.id = ? AND (d.passed_by = ? OR EXISTS (SELECT 1 FROM review_drawing_reviewers r WHERE r.drawing_id = d.id AND r.user_id = ?))`,
+      Number(commentId),
+      me.id,
+      me.id,
+    );
   for (const r of rows) {
     const c = classify(r, me);
     if (!c) continue;
+    if (!seesWholeBoard(me) && r.kind === 'review_comment' && !handedComment(r.from_value)) continue;
     items.push({
       id: r.id,
       kind: c.kind,

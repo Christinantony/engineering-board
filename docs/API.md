@@ -87,7 +87,7 @@ Request pages with an explicit `limit` and successive `offset` values until the 
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/api/notifications` | Returns `{items[], unread, latest_activity_id, overdue_mine, due_today_mine}`. Items cover the last 14 days. Each item's kind is one of `urgent`, `assigned`, `review`, `waiting`, `comment`, `done`, `unassigned`, `review_submitted` (manager and reviewers), `review_passed`, `review_returned`, `review_comment` or `signature` (the one reminder to the reviewer who passed a drawing, when its print is handed over; `detail` holds the reminder sentence). |
+| GET | `/api/notifications` | Returns `{items[], unread, latest_activity_id, overdue_mine, due_today_mine}`. Items cover the last 14 days. Each item's kind is one of `urgent`, `assigned`, `review`, `waiting`, `comment`, `done`, `unassigned`, `review_submitted` (the manager, for every submission; a reviewer, once per drawing handed to them, with the drawing number in `detail`), `review_passed`, `review_returned`, `review_comment` or `signature` (the one reminder to the reviewer who passed a drawing, when its print is handed over; `detail` holds the reminder sentence). |
 | POST | `/api/notifications/seen` | `{up_to}` marks everything up to that activity id as seen. It never moves backwards. |
 | GET | `/api/presence` | Returns `{online: [{user_id, viewing: [ticket ids]}]}` |
 | POST | `/api/presence` | `{job_id \| null, tab}` is the heartbeat while a job panel is open, sent every 30 seconds. It expires after 90 seconds. |
@@ -97,7 +97,9 @@ Request pages with an explicit `limit` and successive `offset` values until the 
 
 ## Drawing review
 
-Roles: engineers upload and submit, mark handovers and respond to comments; the manager and reviewers (`role: "reviewer"`) pass or return drawings, never their own submission. Engineers and reviewers can set the reference-page bookmark and record signatures. Reviewers get 403 on every route that creates or changes jobs.
+Roles: engineers upload and submit, mark handovers and respond to comments; the manager and reviewers (`role: "reviewer"`) pass or return drawings, never their own submission. Engineers and reviewers can set the reference-page bookmark and record signatures.
+
+**Reviewers see only the drawings handed to them** (decision #29). Every route outside this section answers a reviewer with 403, except sign-in, `/api/users`, `/api/meta`, `/api/job-types`, notifications and the live-update stream (which carries only events for jobs with a drawing handed to them). Within this section a reviewer gets 404 for a job with nothing handed to them and for any drawing or PDF not theirs; the queue and workspace list only their drawings, and the workspace's `ticket` carries only the job number, title and status (other fields are blank), with `sync.folder` blank. The manager is unaffected.
 
 | Method | Path | Body / notes |
 |---|---|---|
@@ -106,7 +108,7 @@ Roles: engineers upload and submit, mark handovers and respond to comments; the 
 | GET | `/api/reviews?tab=awaiting\|returned\|signature\|done\|all&q=` | The queue: `{rows: ReviewQueueRow[], counts}`. |
 | GET | `/api/tickets/:id/review` | The workspace: `{ticket, submissions, references[], drawings[] (with attempts[] and comments[]), events[], sync, signatures_pending}`. |
 | GET | `/api/tickets/:id/review/log` | The job's revision log as Markdown. |
-| POST | `/api/tickets/:id/review/submissions` | `{references?: [{sha256, filename}], drawings: [{sha256, filename, identifier?, kind: "revision"\|"new", notes, ref_sha256?, ref_page?}]}`. A drawing whose number matches an existing one becomes its next attempt. Moves the job to Review. Returns 201 with the workspace. |
+| POST | `/api/tickets/:id/review/submissions` | `{references?: [{sha256, filename}], drawings: [{sha256, filename, identifier?, kind: "revision"\|"new", notes, ref_sha256?, ref_page?, reviewer_ids?}]}`. A drawing whose number matches an existing one becomes its next attempt. `reviewer_ids` (active reviewers or the manager) is required for a drawing new to the job; a resubmission keeps its reviewers when it is left out. Moves the job to Review. Returns 201 with the workspace. |
 | POST | `/api/tickets/:id/review/references` | `{sha256, filename}`: attach another signed scan (it becomes protected). |
 | POST | `/api/tickets/:id/review/sync` | Retry the project-folder copies now. |
 | PUT | `/api/review/drawings/:id/reference-page` | `{reference_id, page}`, or both `null` to clear. |
@@ -115,6 +117,7 @@ Roles: engineers upload and submit, mark handovers and respond to comments; the 
 | POST | `/api/review/drawings/:id/signed` | Handed over → signed. The last signature moves the job to Done. |
 | POST | `/api/review/drawings/:id/withdraw` | `{body?}`: awaiting or returned drawings only; it no longer counts towards the job. |
 | PATCH | `/api/review/drawings/:id` | `{identifier}`: correct the drawing number. |
+| PUT | `/api/review/drawings/:id/reviewers` | `{reviewer_ids: number[]}` (at least one): engineers change who a drawing is handed to. Not for signed or withdrawn drawings. Each drawing in the workspace lists its `reviewers`. |
 | POST | `/api/review/drawings/:id/comments` | `{body, attempt_id?}` |
 | POST | `/api/review/comments/:id/respond` | `{body}`: the engineer's correction response. |
 | POST | `/api/review/comments/:id/resolve` | A reviewer, the manager, or the comment's author. |

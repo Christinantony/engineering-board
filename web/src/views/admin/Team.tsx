@@ -34,7 +34,7 @@ export function TeamSection() {
     <section className="admin-section">
       <h2>Team</h2>
       <p className="muted">
-        Engineers can claim and be assigned jobs; managers create, assign and comment. Reviewers (and managers) pass or return drawings in board review and sign the prints; reviewers don't create or change jobs. People who leave can be made inactive: their history stays, they
+        Engineers can claim and be assigned jobs; managers create, assign and comment. Reviewers (and managers) pass or return drawings in board review and sign the prints. A reviewer sees only the drawings an engineer hands to them: not the board, workload or any other job. People who leave can be made inactive: their history stays, they
         disappear from pickers, and they can't sign in. Nobody is ever deleted.
       </p>
       <p className="muted">
