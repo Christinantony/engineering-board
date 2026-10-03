@@ -2,13 +2,13 @@
 
 ### The workboard for the mechanical design team
 
-*Catalogue edition, version 1.2.0*
+*Catalogue edition, version 1.3.0*
 
 One shared board for every design job: who is on it, what it is waiting for, when it is due and how it ended. It runs on a single PC on the office network. Everyone else opens it in a web browser.
 
 ![The board: six columns from Inbox to Done, with the demo jobs](assets/screenshots/board.png)
 
-*Every picture in this file is a real screenshot of version 1.2.0 running with its demo data, taken in Chromium by `scripts/screenshots.mjs`.*
+*Every picture in this file is a real screenshot of version 1.2.0 (1.3.0 for drawing review and Admin) running with its demo data, taken in Chromium by `scripts/screenshots.mjs`.*
 
 | | |
 |---|---|
@@ -109,9 +109,9 @@ Drag a card, press <kbd>Shift</kbd>+<kbd>←</kbd> / <kbd>→</kbd>, or use the 
 |---|:---:|:---:|:---:|:---:|
 | **Engineer** | yes | yes | yes | yes |
 | **Manager** | yes | yes | no | yes |
-| **Reviewer** | no | yes | no | no |
+| **Reviewer** | no | drawings only | no | no |
 
-Drawing review: engineers submit drawings, mark prints handed over and record signatures; the manager and reviewers pass or return drawings (never their own submission) and record signatures. Engineers can't review drawings. A job with drawings in board review is Done only when every drawing is physically signed.
+Drawing review: engineers submit drawings, hand each one to one or more reviewers, mark prints handed over and record signatures; the manager and reviewers pass or return drawings (never their own submission) and record signatures. A reviewer sees only the drawings handed to them, with the job's number and title, and no other page of the board; the manager sees everything. Engineers can't review drawings. A job with drawings in board review is Done only when every drawing is physically signed.
 
 ## C. Working together
 
@@ -256,6 +256,7 @@ Copy `config.example.json` to `config.json` next to `start.bat`, edit it, restar
 
 | Version | What it brought |
 |---|---|
+| **1.3.0** | Reviewer access: engineers hand each drawing to one or more reviewers (and can change them later). A reviewer sees only the drawings handed to them, with the job number and title: no board, workload, reports, search, other jobs, team activity or Admin. The manager keeps full access. |
 | **1.2.0** | Password sign-in for everyone, current and new: each person creates their own password at their first sign-in, changes it from the account menu, and an admin can reset a forgotten one. A `RESET-PASSWORDS` file on the host PC clears them all. Restores keep the current passwords. |
 | **1.1.0** | Drawing review: submit single-page drawings with the signed reference scan, compare them in two independent viewers, remember the matching reference page, comment, pass or return per drawing, print, hand over (with a reminder for the reviewer) and record the physical signature before a job can be Done. Project-folder copies, REVISION_LOG.md and clean-up of intermediate PDFs. New Reviewer role. |
 | **1.0.2** | Optional Charcoal and Midnight themes beside the original Light. |

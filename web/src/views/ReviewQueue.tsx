@@ -1,7 +1,7 @@
 // Drawing review queue: every job with drawings in board review.
 
 import { useEffect, useState } from 'react';
-import type { ReviewQueueRow, ReviewWorkspace } from '@board/shared';
+import { seesWholeBoard, type ReviewQueueRow, type ReviewWorkspace } from '@board/shared';
 import { useApp } from '../context.ts';
 import { when } from '../lib/format.ts';
 import { navigate, replaceParams, useLocation } from '../lib/router.ts';
@@ -36,6 +36,7 @@ export const folderName = (f: string) => f.trim().replace(/[\\/]+$/, '').split(/
 
 export function ReviewQueue() {
   const { me, user } = useApp();
+  const whole = seesWholeBoard(me);
   const { params } = useLocation();
   const tab = (TABS.some((t) => t.id === params.get('tab')) ? params.get('tab') : 'awaiting') as Tab;
   const [q, setQ] = useState(params.get('q') ?? '');
@@ -72,7 +73,9 @@ export function ReviewQueue() {
         <div>
           <h1>Drawing review</h1>
           <p className="view-lede">
-            Review submitted drawings and revision notes. Passing board review is an internal check: the printed drawing still needs its physical signature.
+            {whole
+              ? 'Review submitted drawings and revision notes. Passing board review is an internal check: the printed drawing still needs its physical signature.'
+              : 'The drawings engineers have handed to you for review. Passing board review is an internal check: the printed drawing still needs its physical signature.'}
           </p>
         </div>
       </header>
@@ -115,12 +118,13 @@ export function ReviewQueue() {
                 </button>
               ))}
             </div>
-            <input className="field-input rv-search" type="search" placeholder="Find job, drawing or folder" aria-label="Find job, drawing or folder" value={q} onChange={(e: any) => setQ(e.target.value)} />
+            <input className="field-input rv-search" type="search" placeholder={whole ? 'Find job, drawing or folder' : 'Find job or drawing'} aria-label={whole ? 'Find job, drawing or folder' : 'Find job or drawing'} value={q} onChange={(e: any) => setQ(e.target.value)} />
           </div>
           {data.error && <ErrorBox message={data.error.message} retry={data.refresh} />}
           {!data.data && !data.error && <Spinner />}
           {data.data && !rows.length && (
-            <p className="empty muted">{tab === 'awaiting' ? 'Nothing is waiting for board review.' : 'No jobs here.'} Engineers submit drawings from a job ("Submit for board review").</p>
+            <p className="empty muted">{tab === 'awaiting' ? (whole ? 'Nothing is waiting for board review.' : 'Nothing is waiting for your review.') : 'No jobs here.'}{' '}
+              {whole ? 'Engineers submit drawings from a job ("Submit for board review").' : 'When an engineer hands you a drawing, it appears here and in your notifications.'}</p>
           )}
           {!!rows.length && (
             <table className="rv-table">

@@ -138,6 +138,7 @@ let jobId;
   await c.selectOption('select[aria-label="Type of SUP-011.pdf"]', 'new');
   await c.fill('textarea[aria-label="Notes for SUP-011.pdf"]', 'New support plate, 6 mm, laser cut.');
   await settle(c);
+  await c.click('[aria-label="Reviewers for these drawings"] label:has-text("Ebin")');
   await shot(c, 'review-submit');
   await c.click('button:has-text("Submit 2 drawings for board review")');
   await c.waitForSelector('.rw-item:has-text("SUP-011")');

@@ -117,11 +117,55 @@ test('an engineer submits a signed scan and single-page drawings; a multi-page d
   await c.fill('textarea[aria-label="Notes for BRK-023.pdf"]', 'Mounting holes Ø8 → Ø10 for the revised fastener size.');
   await c.selectOption('select[aria-label="Type of SUP-011.pdf"]', 'new');
   await c.fill('textarea[aria-label="Notes for SUP-011.pdf"]', 'New support plate.');
+  // nothing goes to review until it is handed to someone (decision #29)
+  await c.waitForSelector('text=Choose at least one reviewer for every drawing');
+  assert.equal(await c.locator('button:has-text("Submit 2 drawings for board review")').isDisabled(), true);
+  await c.click('[aria-label="Reviewers for these drawings"] label:has-text("Ebin")');
+  await c.waitForSelector('.rw-pending-reviewers:has-text("Ebin")');
   await c.click('button:has-text("Submit 2 drawings for board review")');
   await c.waitForSelector('.toast:has-text("Submitted for board review")');
   await c.waitForSelector('.rw-item:has-text("BRK-023")');
   await c.waitForSelector('.rw-item:has-text("SUP-011")');
   assert.equal(await c.locator('[data-testid=action-bar]').getByText('Pass board review').count(), 0, 'engineers cannot pass drawings');
+});
+
+test('a reviewer sees only the review screens and the drawings handed to them', async () => {
+  // a second job, with a drawing handed to the manager only
+  const c = await login('Christin');
+  const other = await c.evaluate(async () => {
+    const r = await fetch('/api/tickets', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'Not for Ebin', claim: true }) });
+    return (await r.json()).ticket;
+  });
+  await c.goto(`${BASE}/review/${other.id}?submit=1`);
+  await c.waitForSelector('.rw-submit');
+  await c.setInputFiles('[data-testid=pick-drawings]', { name: 'GA-001.pdf', mimeType: 'application/pdf', buffer: makePdf(1, { labels: ['GA-001'] }) });
+  await c.selectOption('select[aria-label="Type of GA-001.pdf"]', 'new');
+  await c.fill('textarea[aria-label="Notes for GA-001.pdf"]', 'General arrangement.');
+  await c.click('[aria-label="Reviewers for these drawings"] label:has-text("Jeffin")');
+  await c.click('button:has-text("Submit 1 drawing for board review")');
+  await c.waitForSelector('.rw-item:has-text("GA-001")');
+  await c.waitForSelector('[data-testid=drawing-reviewers]:has-text("Jeffin")');
+
+  const e = await login('Ebin');
+  await e.waitForURL(/\/review$/);
+  assert.deepEqual(await e.locator('.nav a').allInnerTexts(), ['Review'], 'no board, workload or other views');
+  assert.equal(await e.locator('.topbar .search, .new-job').count(), 0);
+  await e.click('.me-menu summary');
+  assert.equal(await e.locator('.me-pop button:has-text("Team activity"), .me-pop button:has-text("Admin")').count(), 0);
+  await e.keyboard.press('Escape');
+  await e.waitForSelector(`.rv-table tr:has-text("Revise mounting bracket")`);
+  assert.equal(await e.locator('text=Not for Ebin').count(), 0, 'a job with nothing handed to Ebin is not listed');
+  // other pages send a reviewer back to the queue, and the job panel never opens
+  await e.goto(`${BASE}/workload`);
+  await e.waitForURL(/\/review$/);
+  await e.goto(`${BASE}/board?job=${jobId}`);
+  await e.waitForURL(/\/review/);
+  assert.equal(await e.locator('.panel').count(), 0);
+  await e.goto(`${BASE}/review/${jobId}`);
+  await e.waitForSelector('.rw-item:has-text("BRK-023")');
+  assert.equal(await e.locator('button:has-text("Open job"), a:has-text("Revision log")').count(), 0);
+  await e.goto(`${BASE}/review/${other.id}`);
+  await e.waitForSelector('.error-box');
 });
 
 test('a reviewer compares independently: page, zoom and rotation per viewer, and remembers the reference page', async () => {

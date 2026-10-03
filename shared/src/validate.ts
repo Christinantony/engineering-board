@@ -278,6 +278,11 @@ export const reviewSubmissionSchema = v.object({
       /** Optional reference bookmark chosen while preparing the submission. */
       ref_sha256: v.optional(v.nullable(sha)),
       ref_page: v.optional(v.nullable(v.int({ min: 1, max: 100_000 }))),
+      /**
+       * The reviewers this drawing is handed to (decision #29). Required for a
+       * drawing new to the job; a resubmission keeps its reviewers when omitted.
+       */
+      reviewer_ids: v.optional(v.array(v.int({ min: 1 }), { max: 20 })),
     }),
     { max: 50 },
   ),
@@ -300,3 +305,4 @@ export const reviewCommentSchema = v.object({
 });
 export const reviewTextSchema = v.object({ body: v.withDefault(v.string({ max: 5000 }), '') });
 export const drawingEditSchema = v.object({ identifier: identifierField });
+export const drawingReviewersSchema = v.object({ reviewer_ids: v.array(v.int({ min: 1 }), { max: 20 }) });

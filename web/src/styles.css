@@ -3757,7 +3757,8 @@ button.rv-stat:hover {
 /* ---- submit dialog ---- */
 .dialog.rw-submit {
   width: min(820px, 100%);
-  max-height: calc(100vh - 60px);
+  /* the backdrop puts dialogs 12vh down: keep the buttons on screen however long the form grows */
+  max-height: calc(88vh - 32px);
   overflow-y: auto;
 }
 .rw-submit-sec {
@@ -3920,4 +3921,47 @@ button.rv-stat:hover {
   align-items: center;
   gap: 8px;
   white-space: nowrap;
+}
+
+/* Reviewers a drawing is handed to (decision #29) */
+.rw-reviewer-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0;
+}
+.rw-reviewer-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  cursor: pointer;
+}
+.rw-reviewer-pick input {
+  margin: 0;
+  accent-color: var(--focus);
+}
+.rw-reviewer-pick.on {
+  border-color: var(--focus);
+  box-shadow: inset 0 0 0 1px var(--focus);
+}
+.rw-reviewer-pick:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+.rw-pending-reviewers {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rw-reviewers-buttons {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
 }

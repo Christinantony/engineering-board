@@ -665,6 +665,13 @@ function ActivityItem({ a }: { a: Activity }) {
     case 'review_handover':
       text = <>{who} handed the print to {a.to_value} for signature</>;
       break;
+    case 'review_assigned':
+      text = (
+        <>
+          {who} handed <strong>{a.body}</strong> to {a.to_value} for review
+        </>
+      );
+      break;
     case 'review_signed':
       text = (
         <>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { PASSWORD_MIN, ROLE_LABEL, type JobType, type User } from '@board/shared';
+import { PASSWORD_MIN, ROLE_LABEL, seesWholeBoard, type JobType, type User } from '@board/shared';
 import { AppContext, type AppState, type Meta } from './context.ts';
 import { del, post, setUnauthenticatedHandler } from './lib/api.ts';
 import { setTimeZone } from './lib/format.ts';
@@ -37,6 +37,10 @@ const NAV = [
   { path: '/workload', label: 'Workload', key: 'w' },
   { path: '/reports', label: 'Reports', key: 'r' },
 ];
+
+/** A reviewer's board is the review queue and nothing else (decision #29). */
+const REVIEWER_NAV = NAV.filter((n) => n.path === '/review');
+const REVIEWER_PATHS = /^\/review(\/\d+)?$/;
 
 const VIEWS: Record<string, () => any> = {
   '/board': BoardPage,
@@ -207,14 +211,19 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
   const { path, params } = useLocation();
   const [creating, setCreating] = useState(false);
   const live = useLiveState();
-  const jobId = Number(params.get('job')) || null;
+  const whole = seesWholeBoard(me);
+  const nav = whole ? NAV : REVIEWER_NAV;
+  const home = whole ? '/board' : '/review';
+  // a reviewer never opens the job panel
+  const jobId = whole ? Number(params.get('job')) || null : null;
 
   useEffect(() => {
     startLive(me.id, meta.version);
     return stopLive;
   }, []);
   useEffect(() => {
-    if (path === '/') navigate('/board', { replace: true, keepJob: true });
+    if (path === '/') navigate(home, { replace: true, keepJob: whole });
+    else if (!whole && !REVIEWER_PATHS.test(path)) navigate('/review', { replace: true });
   }, [path]);
 
   const openJob = useCallback((id: number | null) => setJob(id), []);
@@ -234,11 +243,11 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
       const k = e.key.toLowerCase();
       if (k === 'n') {
         e.preventDefault();
-        if (me.role !== 'reviewer') setCreating(true);
+        if (whole) setCreating(true);
         return;
       }
-      const nav = NAV.find((n) => n.key === k);
-      if (nav) navigate(nav.path, { keepJob: true });
+      const to = nav.find((n) => n.key === k);
+      if (to) navigate(to.path, { keepJob: whole });
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -287,16 +296,16 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
         <header className="topbar">
           <a
             className="brand"
-            href="/board"
+            href={home}
             onClick={(e: any) => {
               e.preventDefault();
-              navigate('/board');
+              navigate(home);
             }}
           >
             Engineering Board
           </a>
           <nav className="nav" aria-label="Views">
-            {NAV.map((n) => (
+            {nav.map((n) => (
               <a
                 key={n.path}
                 href={n.path}
@@ -313,8 +322,8 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
             ))}
           </nav>
           <span className="spacer" />
-          <SearchBox />
-          <OnlineNow />
+          {whole && <SearchBox />}
+          {whole && <OnlineNow />}
           <span className={`live live-${live}`} title={live === 'live' ? 'Changes from your team appear automatically' : 'Trying to reconnect to the server'}>
             <span className="live-dot" aria-hidden="true" />
             {live === 'live' ? 'Live' : live === 'connecting' ? 'Reconnecting…' : 'Offline'}
@@ -324,7 +333,7 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
           </button>
           <Bell />
           <ThemePicker />
-          {state.me.role !== 'reviewer' && (
+          {whole && (
             <button className="btn btn-primary new-job" onClick={() => setCreating(true)} title="New job (N)">
               + New job
             </button>
@@ -335,12 +344,16 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
               <span className="me-name">{state.me.name}</span>
             </summary>
             <div className="me-pop">
-              <button className="btn btn-quiet" onClick={() => navigate('/activity')}>
-                Team activity
-              </button>
-              <button className="btn btn-quiet" onClick={() => navigate('/admin')}>
-                Admin
-              </button>
+              {whole && (
+                <>
+                  <button className="btn btn-quiet" onClick={() => navigate('/activity')}>
+                    Team activity
+                  </button>
+                  <button className="btn btn-quiet" onClick={() => navigate('/admin')}>
+                    Admin
+                  </button>
+                </>
+              )}
               <a className="btn btn-quiet" href="/guides/user-guide.html" target="_blank" rel="noopener">
                 User guide
               </a>
@@ -355,7 +368,7 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
         </header>
 
         <ConnectionBanner />
-        {meta.pin_is_default && state.me.is_admin && path !== '/admin' && (
+        {meta.pin_is_default && state.me.is_admin && whole && path !== '/admin' && (
           <div className="banner">
             The admin PIN is still the default (1234).{' '}
             <button className="link-btn" onClick={() => navigate('/admin?s=pin')}>
@@ -366,7 +379,7 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
 
         <main className="main" id="main" tabIndex={-1}>
           <ErrorBoundary resetKey={path}>
-            <View path={path} />
+            <View path={whole || REVIEWER_PATHS.test(path) ? path : '/review'} />
           </ErrorBoundary>
         </main>
 

@@ -381,4 +381,35 @@ CREATE TABLE review_sync (
 ALTER TABLE users ADD COLUMN password_hash TEXT;
 `,
   },
+  {
+    id: 8,
+    name: 'drawing reviewers',
+    sql: /* sql */ `
+-- The engineer hands each drawing to one or more reviewers (decision #29).
+-- A reviewer sees and decides only the drawings handed to them; the manager
+-- still sees and decides every drawing.
+CREATE TABLE review_drawing_reviewers (
+  drawing_id  INTEGER NOT NULL REFERENCES review_drawings(id),
+  user_id     INTEGER NOT NULL REFERENCES users(id),
+  assigned_by INTEGER REFERENCES users(id),
+  assigned_at TEXT NOT NULL,
+  PRIMARY KEY (drawing_id, user_id)
+) WITHOUT ROWID;
+CREATE INDEX idx_review_drawing_reviewers_user ON review_drawing_reviewers(user_id, drawing_id);
+
+-- Drawings already in review: hand them to the reviewers who have already
+-- worked on them (passed, decided or commented), so nothing in flight is lost.
+-- Drawings nobody has touched yet show to the manager, and an engineer picks
+-- their reviewers with "Change reviewers".
+INSERT OR IGNORE INTO review_drawing_reviewers (drawing_id, user_id, assigned_by, assigned_at)
+  SELECT d.id, x.user_id, NULL, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  FROM review_drawings d
+  JOIN (
+    SELECT id AS drawing_id, passed_by AS user_id FROM review_drawings WHERE passed_by IS NOT NULL
+    UNION SELECT drawing_id, decided_by FROM review_attempts WHERE decided_by IS NOT NULL
+    UNION SELECT drawing_id, user_id FROM review_comments
+  ) x ON x.drawing_id = d.id
+  JOIN users u ON u.id = x.user_id AND u.role = 'reviewer';
+`,
+  },
 ];

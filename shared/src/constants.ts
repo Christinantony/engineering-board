@@ -40,6 +40,11 @@ export type Role = (typeof ROLES)[number];
 export const ROLE_LABEL: Record<Role, string> = { engineer: 'Engineer', manager: 'Manager', reviewer: 'Reviewer' };
 /** Who may pass or return drawings in board review (never engineers). */
 export const canReview = (u: { role: Role; active: boolean }) => u.active && (u.role === 'manager' || u.role === 'reviewer');
+/**
+ * Reviewers see only the drawings handed to them (decision #29). Everyone else
+ * (engineers and the manager) sees the whole board.
+ */
+export const seesWholeBoard = (u: { role: Role }) => u.role !== 'reviewer';
 
 /**
  * Estimate buckets. `minutes` is the planning value stored in the database
@@ -272,6 +277,8 @@ export interface ReviewDrawing {
   cleanup: 'none' | 'pending' | 'done' | 'failed';
   cleanup_detail: string | null;
   version: number;
+  /** The reviewers this drawing is handed to (decision #29). */
+  reviewers: number[];
   attempts: ReviewAttempt[];
   comments: ReviewComment[];
   open_comments: number;

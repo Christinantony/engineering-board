@@ -10,7 +10,7 @@ Pick your name, then enter your password. The browser remembers you, so you won'
 
 **Your first sign-in:** you don't have a password yet, so the board asks you to create one (at least 6 characters; a short phrase with spaces is fine). Only you should know it: nobody else, not even the admin, can see it. To change it later, use **your name → Change password**; other browsers signed in as you are asked to sign in again. If you forget it, ask whoever looks after the board to reset it under Admin → Team, then sign in and create a new one.
 
-Engineers and the manager can create jobs, edit them and comment. **Engineers** claim and do jobs. The **manager** can't claim, but can assign jobs to an engineer. **Reviewers** check drawings in [drawing review](#drawing-review): they can see everything and comment, but don't create or change jobs. Nothing is ever deleted: every change is kept in each job's history.
+Engineers and the manager can create jobs, edit them and comment. **Engineers** claim and do jobs. The **manager** can't claim, but can assign jobs to an engineer. **Reviewers** check the drawings an engineer hands to them in [drawing review](#drawing-review). A reviewer sees only those drawings, with the job's number and title: not the board, Today, My work, the dashboard, workload, reports, search or any other job. Nothing is ever deleted: every change is kept in each job's history.
 
 ## Themes
 
@@ -74,9 +74,10 @@ Drawings are checked on the board before they are printed and signed. **Board re
 
 | | Engineers | Manager and reviewers |
 |---|:---:|:---:|
-| Submit drawings and signed scans | yes | no |
+| Submit drawings and signed scans, and choose who reviews them | yes | no |
+| See a drawing | yes | the manager: every drawing; a reviewer: only the ones handed to them |
 | Comment | yes | yes |
-| Pass or return a drawing | no | yes (not their own submission) |
+| Pass or return a drawing | no | yes (not their own submission; a reviewer only on drawings handed to them) |
 | Mark a print handed over | yes | no |
 | Record the physical signature | yes | yes |
 
@@ -87,12 +88,13 @@ Open the job and press **Submit for board review…** (or **Review → the job �
 - **Signed reference scan**: for a revision, attach the signed, scanned set of the previous revision. It is usually one merged PDF for the whole set. Attach the file from the project folder: the board keeps its own copy and never touches yours.
 - **Drawings**: attach each drawing as **its own single-page PDF**, named with its part number (for example `BRK-023.pdf`). The file name becomes the drawing number; correct it in the form if needed. A PDF with more than one page is refused: export each sheet on its own.
 - For each drawing, say **what changed and why** (or, for a new drawing, its purpose), and choose **Revision** or **New drawing**. A revision needs a signed reference scan on the job.
+- **Hand to reviewers**: tick everyone who should review these drawings; one or several. Only they (and the manager) see them. To send one drawing to different people, press **Choose for this drawing** under it. A corrected drawing goes back to the same reviewers unless you change them.
 
-The job moves to the Review column, and the manager and reviewers are notified.
+The job moves to the Review column. Each reviewer is told about the drawings handed to them, and the manager about every submission. To change who reviews a drawing later (someone on leave, a second opinion), press **Change** next to **Reviewers** in the review screen.
 
 ### 2. Review
 
-**Review** in the top bar lists the jobs waiting for board review (press <kbd>V</kbd>). Open one to see:
+**Review** in the top bar lists the jobs waiting for board review (press <kbd>V</kbd>). A reviewer's list holds only the drawings handed to them, and **Review** is the only page they have. Open a job to see:
 
 - **Drawing set** on the left: every drawing with its state. A drawing can pass while others are still being corrected.
 - **Two viewers**: the signed reference on the left, the submitted drawing on the right. Each has its own page, zoom (**−**, **+**, **Fit page**, **Fit width**) and rotation (**↺**, **↻**, **Reset**). Rotating or zooming only changes what you see, never the PDF.
@@ -100,7 +102,7 @@ The job moves to the Review column, and the manager and reviewers are notified.
 - **Compare with**: switch the left viewer to **Previous attempt** to compare a corrected drawing with the one that was returned, or choose **Drawing only**.
 - **Revision notes** and **Reviewer comments** on the right. Engineers can **Respond** to a comment; the reviewer (or the comment's author) **Resolves** it.
 
-The manager or a reviewer then either:
+The manager, or a reviewer it was handed to, then either:
 
 - **Return for correction**, with a note or open comments. The engineer submits a corrected PDF as a new **attempt**: the drawing's engineering revision doesn't change (it can stay Rev C through attempts 1, 2 and 3). Only the drawings that need changes are resubmitted.
 - **Pass board review**. It can't be passed while comments are open. The status then reads **Board review passed — signature pending**.

@@ -7,10 +7,12 @@ import {
   DRAWING_STATE_LABEL,
   DRAWING_STATE_SHORT,
   canReview,
+  seesWholeBoard,
   type ReviewAttempt,
   type ReviewDrawing,
   type ReviewFile,
   type ReviewWorkspace,
+  type User,
 } from '@board/shared';
 import { useApp } from '../context.ts';
 import { when } from '../lib/format.ts';
@@ -47,6 +49,7 @@ export function ReviewWorkspaceView({ ticketId }: { ticketId: number }) {
   const visible = w.drawings.filter((d) => d.state !== 'withdrawn' || String(d.id) === params.get('d'));
   const selected = w.drawings.find((d) => String(d.id) === params.get('d')) ?? visible[0] ?? null;
   const isEngineer = me.role === 'engineer';
+  const whole = seesWholeBoard(me);
   const open = !w.ticket.archived && !['done', 'cancelled'].includes(w.ticket.status);
 
   return (
@@ -74,19 +77,23 @@ export function ReviewWorkspaceView({ ticketId }: { ticketId: number }) {
           {w.submissions > 0 && <span className="rv-chip rv-plain">Submission {w.submissions}</span>}
           <JobReviewStatus w={w} />
           <span className="spacer" />
-          <button className="btn btn-quiet btn-sm" onClick={() => navigate(`/board?job=${w.ticket.id}`)}>
-            Open job
-          </button>
-          <a className="btn btn-quiet btn-sm" href={`/api/tickets/${w.ticket.id}/review/log`} target="_blank" rel="noopener">
-            Revision log
-          </a>
+          {whole && (
+            <>
+              <button className="btn btn-quiet btn-sm" onClick={() => navigate(`/board?job=${w.ticket.id}`)}>
+                Open job
+              </button>
+              <a className="btn btn-quiet btn-sm" href={`/api/tickets/${w.ticket.id}/review/log`} target="_blank" rel="noopener">
+                Revision log
+              </a>
+            </>
+          )}
           {isEngineer && open && (
             <button className="btn btn-primary btn-sm" onClick={() => setParam('submit', '1')}>
               Submit drawings…
             </button>
           )}
         </div>
-        <SyncLine w={w} />
+        {whole && <SyncLine w={w} />}
       </header>
 
       {!w.drawings.length ? (
@@ -357,6 +364,10 @@ function DrawingDetails({ w, d }: { w: ReviewWorkspace; d: ReviewDrawing }) {
         <dd>{d.kind === 'new' ? 'New drawing' : 'Revision of a signed drawing'}</dd>
         <dt>Status</dt>
         <dd data-testid="drawing-state">{DRAWING_STATE_LABEL[d.state]}</dd>
+        <dt>Reviewers</dt>
+        <dd data-testid="drawing-reviewers">
+          <DrawingReviewers d={d} />
+        </dd>
         <dt>Reference page</dt>
         <dd>{ref && d.ref_page ? `Page ${d.ref_page} of ${ref.filename}` : d.kind === 'new' ? '—' : 'Not chosen yet'}</dd>
         {d.passed_at && (
@@ -391,6 +402,71 @@ function DrawingDetails({ w, d }: { w: ReviewWorkspace; d: ReviewDrawing }) {
         )}
       </dl>
     </section>
+  );
+}
+
+/** Who can be handed a drawing: active reviewers and the manager, never yourself. */
+function useReviewerOptions(): User[] {
+  const { users, me } = useApp();
+  return users.filter((u) => canReview(u) && u.id !== me.id);
+}
+
+/** Tick the reviewers a drawing is handed to (one or more). */
+function ReviewerChecks({ value, onChange, label }: { value: number[]; onChange: (ids: number[]) => void; label: string }) {
+  const options = useReviewerOptions();
+  if (!options.length) return <p className="rw-warn small">No reviewers yet: add them under Admin → Team.</p>;
+  return (
+    <div className="rw-reviewer-picks" role="group" aria-label={label}>
+      {options.map((u) => {
+        const on = value.includes(u.id);
+        return (
+          <label key={u.id} className={`rw-reviewer-pick${on ? ' on' : ''}`}>
+            <input type="checkbox" checked={on} onChange={() => onChange(on ? value.filter((x) => x !== u.id) : [...value, u.id])} />
+            <Badge user={u} size="sm" />
+            <span>{u.name}</span>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
+
+/** The reviewers a drawing is handed to; engineers can change them. */
+function DrawingReviewers({ d }: { d: ReviewDrawing }) {
+  const { me, user } = useApp();
+  const [editing, setEditing] = useState<number[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const canChange = me.role === 'engineer' && d.state !== 'signed' && d.state !== 'withdrawn';
+  const names = d.reviewers.map((id) => user(id)?.name ?? `#${id}`).join(', ');
+  if (editing) {
+    const save = async () => {
+      setBusy(true);
+      if (await reviewAction('PUT', `/api/review/drawings/${d.id}/reviewers`, { reviewer_ids: editing })) setEditing(null);
+      setBusy(false);
+    };
+    return (
+      <div className="rw-reviewers-edit">
+        <ReviewerChecks value={editing} onChange={setEditing} label={`Reviewers for ${d.identifier}`} />
+        <div className="rw-reviewers-buttons">
+          <button className="btn btn-sm btn-primary" disabled={!editing.length || busy} onClick={() => void save()}>
+            Save reviewers
+          </button>
+          <button className="btn btn-sm btn-quiet" disabled={busy} onClick={() => setEditing(null)}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <>
+      {names || <span className="rw-warn">Not handed to anyone yet</span>}{' '}
+      {canChange && (
+        <button className="link-btn" onClick={() => setEditing(d.reviewers)}>
+          Change
+        </button>
+      )}
+    </>
   );
 }
 
@@ -583,7 +659,11 @@ function ActionBar({ w, d, current, mineSubmitted }: { w: ReviewWorkspace; d: Re
             </div>
           </>
         )}
-        {d.state === 'awaiting' && !reviewer && <span className="muted small">Waiting for the manager or a reviewer.</span>}
+        {d.state === 'awaiting' && !reviewer && (
+          <span className="muted small">
+            {d.reviewers.length ? `Waiting for ${d.reviewers.map((id) => user(id)?.name ?? 'a reviewer').join(' or ')}.` : 'Choose who reviews it: Change, under Reviewers.'}
+          </span>
+        )}
         {['awaiting', 'returned'].includes(d.state) && engineer && (
           <button className="btn btn-quiet" disabled={busy} onClick={() => void withdraw()}>
             Withdraw
@@ -635,6 +715,8 @@ interface PendingDrawing extends Pending {
   identifier: string;
   kind: 'revision' | 'new';
   notes: string;
+  /** Its own reviewers; null = the ones chosen for the whole submission. */
+  reviewers: number[] | null;
 }
 
 let seq = 0;
@@ -649,6 +731,9 @@ function SubmitPanel({ w, forDrawing, onClose }: { w: ReviewWorkspace; forDrawin
   const target = w.drawings.find((d) => d.id === forDrawing) ?? null;
   const existing = useMemo(() => new Map(w.drawings.map((d) => [d.identifier.toLowerCase(), d])), [w.drawings]);
   const hasRef = w.references.length > 0 || refs.some((r) => r.result);
+  // who the drawings are handed to (decision #29): one choice for the submission, changeable per drawing
+  const [everyone, setEveryone] = useState<number[]>(() => target?.reviewers ?? []);
+  const reviewersOf = (d: PendingDrawing) => d.reviewers ?? everyone;
 
   useEffect(() => {
     const esc = (e: KeyboardEvent) => e.key === 'Escape' && !busy && onClose();
@@ -678,6 +763,7 @@ function SubmitPanel({ w, forDrawing, onClose }: { w: ReviewWorkspace; forDrawin
         identifier: id,
         kind: match ? match.kind : hasRef ? 'revision' : 'new',
         notes: '',
+        reviewers: !target && match?.reviewers.length ? match.reviewers : null,
       });
     }
   };
@@ -686,15 +772,23 @@ function SubmitPanel({ w, forDrawing, onClose }: { w: ReviewWorkspace; forDrawin
   const uploading = [...refs, ...drawings].some((x) => !x.result && !x.error);
   const failed = [...refs, ...drawings].some((x) => x.error);
   const missingNotes = drawings.some((d) => !d.notes.trim() || !d.identifier.trim());
+  const missingReviewers = drawings.some((d) => !reviewersOf(d).length);
   const revisionWithoutRef = drawings.some((d) => d.kind === 'revision' && !existing.has(d.identifier.toLowerCase()) && !hasRef);
-  const canSubmit = (drawings.length > 0 || refs.length > 0) && !uploading && !failed && !missingNotes && !revisionWithoutRef && !busy;
+  const canSubmit = (drawings.length > 0 || refs.length > 0) && !uploading && !failed && !missingNotes && !missingReviewers && !revisionWithoutRef && !busy;
 
   const submitNow = async () => {
     if (!canSubmit) return;
     setBusy(true);
     const res = await reviewAction('POST', `/api/tickets/${w.ticket.id}/review/submissions`, {
       references: refs.map((r) => ({ sha256: r.result!.sha256, filename: r.result!.filename })),
-      drawings: drawings.map((d) => ({ sha256: d.result!.sha256, filename: d.result!.filename, identifier: d.identifier.trim(), kind: d.kind, notes: d.notes.trim() })),
+      drawings: drawings.map((d) => ({
+        sha256: d.result!.sha256,
+        filename: d.result!.filename,
+        identifier: d.identifier.trim(),
+        kind: d.kind,
+        notes: d.notes.trim(),
+        reviewer_ids: reviewersOf(d),
+      })),
     });
     setBusy(false);
     if (res) {
@@ -733,6 +827,16 @@ function SubmitPanel({ w, forDrawing, onClose }: { w: ReviewWorkspace; forDrawin
         )}
 
         <section className="rw-submit-sec">
+          <h3>Hand to reviewers</h3>
+          <p className="muted small">
+            {target
+              ? `Who reviews the corrected ${target.identifier}. Only the people ticked see it.`
+              : 'Tick everyone who should review these drawings. Only they see them (the manager sees every drawing). You can choose differently for one drawing below.'}
+          </p>
+          <ReviewerChecks value={everyone} onChange={setEveryone} label="Reviewers for these drawings" />
+        </section>
+
+        <section className="rw-submit-sec">
           <h3>Drawings</h3>
           {drawings.map((d) => {
             const match = existing.get(d.identifier.trim().toLowerCase());
@@ -765,6 +869,7 @@ function SubmitPanel({ w, forDrawing, onClose }: { w: ReviewWorkspace; forDrawin
                       <span className="field-label">{d.kind === 'new' && !match ? 'Purpose of the new drawing' : 'What changed and why'}</span>
                       <textarea className="field-input" rows={2} value={d.notes} maxLength={5000} onChange={(e: any) => edit(d.key, { notes: e.target.value })} aria-label={`Notes for ${d.file.name}`} />
                     </label>
+                    {!target && <PendingReviewers d={d} everyone={everyone} onChange={(ids) => edit(d.key, { reviewers: ids })} />}
                   </div>
                 )}
               </div>
@@ -780,6 +885,7 @@ function SubmitPanel({ w, forDrawing, onClose }: { w: ReviewWorkspace; forDrawin
           {uploading && <span className="muted small">Uploading…</span>}
           {!uploading && failed && <span className="rw-warn small">Remove the files that could not be used</span>}
           {!uploading && !failed && missingNotes && drawings.length > 0 && <span className="muted small">Add notes for every drawing</span>}
+          {!uploading && !failed && !missingNotes && missingReviewers && <span className="muted small">Choose at least one reviewer for every drawing</span>}
           <button className="btn btn-quiet" disabled={busy} onClick={onClose}>
             Cancel
           </button>
@@ -788,6 +894,33 @@ function SubmitPanel({ w, forDrawing, onClose }: { w: ReviewWorkspace; forDrawin
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** One drawing's reviewers in the submit form: the submission's choice, or its own. */
+function PendingReviewers({ d, everyone, onChange }: { d: PendingDrawing; everyone: number[]; onChange: (ids: number[] | null) => void }) {
+  const { user } = useApp();
+  const own = d.reviewers != null;
+  const ids = d.reviewers ?? everyone;
+  return (
+    <div className="rw-pending-reviewers">
+      <span className="field-label">Reviewers</span>
+      {own ? (
+        <>
+          <ReviewerChecks value={ids} onChange={onChange} label={`Reviewers for ${d.identifier || d.file.name}`} />
+          <button className="link-btn small" onClick={() => onChange(null)}>
+            Use the reviewers chosen above
+          </button>
+        </>
+      ) : (
+        <span className="small">
+          {ids.length ? ids.map((id) => user(id)?.name).join(', ') : <span className="muted">The ones ticked above</span>}{' '}
+          <button className="link-btn small" onClick={() => onChange([...everyone])}>
+            Choose for this drawing
+          </button>
+        </span>
+      )}
     </div>
   );
 }

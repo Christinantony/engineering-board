@@ -130,6 +130,7 @@ export function clearDemo(ctx: Ctx): number {
     const list = ids.join(',');
     run(ctx.db, `UPDATE tickets SET parent_job_id = NULL WHERE parent_job_id IN (${list})`);
     // drawing review records of demo jobs (signed-scan file rows stay protected)
+    run(ctx.db, `DELETE FROM review_drawing_reviewers WHERE drawing_id IN (SELECT id FROM review_drawings WHERE ticket_id IN (${list}))`);
     run(ctx.db, `DELETE FROM review_comments WHERE drawing_id IN (SELECT id FROM review_drawings WHERE ticket_id IN (${list}))`);
     run(ctx.db, `DELETE FROM review_events WHERE ticket_id IN (${list})`);
     run(ctx.db, `DELETE FROM review_attempts WHERE drawing_id IN (SELECT id FROM review_drawings WHERE ticket_id IN (${list}))`);
