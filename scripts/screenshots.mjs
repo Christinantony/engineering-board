@@ -52,6 +52,7 @@ const ebin = await api('POST', '/api/admin/users', { name: 'Ebin', role: 'review
 if (!ebin.body?.user) throw new Error(`could not add the reviewer: ${ebin.r.status} ${JSON.stringify(ebin.body)}`);
 await api('POST', '/api/session/password', { user_id: ebin.body.user.id, password: PASSWORD });
 await api('POST', '/api/admin/pin', { new_pin: '4821' }, admin);
+const pumpSkid = (await api('GET', '/api/projects', undefined, s.cookie)).body.projects.find((p) => p.name === 'Pump skid').id;
 
 const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH });
 const open = [];
@@ -91,8 +92,15 @@ const shot = (p, file, opts = {}) => p.screenshot({ path: `${OUT}/${file}.png`, 
   await settle(p);
   await shot(p, 'job-panel');
   await p.keyboard.press('Escape');
-  for (const [path, file] of [['/today', 'today'], ['/my-work', 'my-work'], ['/dashboard', 'dashboard'], ['/workload', 'workload'], ['/reports', 'reports'], ['/search?q=housing', 'search'], ['/activity', 'activity']]) {
-    await p.goto(BASE + path);
+  await p.keyboard.press('n');
+  await p.waitForSelector('#qc-title');
+  await p.fill('#qc-title', 'Revise pump housing drawing to Rev D');
+  await p.selectOption('#qc-project', { label: 'Pump skid' });
+  await settle(p);
+  await shot(p, 'new-job');
+  await p.keyboard.press('Escape');
+  for (const [path, file] of [['/projects?project=__PUMP__', 'projects'], ['/today', 'today'], ['/my-work', 'my-work'], ['/dashboard', 'dashboard'], ['/workload', 'workload'], ['/reports', 'reports'], ['/search?q=housing', 'search'], ['/activity', 'activity']]) {
+    await p.goto(BASE + path.replace('__PUMP__', String(pumpSkid)));
     await p.waitForSelector('.topbar');
     await settle(p, 900);
     await shot(p, file);
@@ -121,7 +129,10 @@ let jobId;
 {
   const c = await page('Christin');
   jobId = await c.evaluate(async () => {
-    const r = await fetch('/api/tickets', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'Revise mounting bracket for M10 fasteners', claim: true, priority: 'high', reference: 'BRK-023 Rev C' }) });
+    // every new job belongs to a project (decision #30)
+    const pr = await fetch('/api/projects', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Telescope mount' }) });
+    const project_id = (await pr.json()).project.id;
+    const r = await fetch('/api/tickets', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'Revise mounting bracket for M10 fasteners', claim: true, priority: 'high', reference: 'BRK-023 Rev C', project_id }) });
     return (await r.json()).ticket.id;
   });
   await c.goto(`${BASE}/board?job=${jobId}`);

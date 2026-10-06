@@ -259,6 +259,7 @@ function reviewerTicket(t: Ticket): Ticket {
     created_by: null,
     requester: '',
     job_type_id: null,
+    project_id: null,
     estimate_minutes: null,
     actual_minutes: null,
     due_date: null,
@@ -424,6 +425,7 @@ export function reviewQueue(ctx: Ctx, me: User, tab: QueueTab, q = '') {
   const rows = all<ReviewQueueRow & { status: string; archived: number }>(
     ctx.db,
     `SELECT t.id AS ticket_id, t.job_number, t.title, ${whole ? 't.file_location' : "''"} AS folder, t.status, t.archived,
+       ${whole ? '(SELECT p.name FROM ticket_projects tp JOIN projects p ON p.id = tp.project_id WHERE tp.ticket_id = t.id)' : 'NULL'} AS project,
        (SELECT COUNT(*) FROM review_submissions s WHERE s.ticket_id = t.id) AS submissions,
        (SELECT s.submitted_by FROM review_submissions s WHERE s.ticket_id = t.id ORDER BY s.id DESC LIMIT 1) AS submitted_by,
        (SELECT s.submitted_at FROM review_submissions s WHERE s.ticket_id = t.id ORDER BY s.id DESC LIMIT 1) AS submitted_at,
@@ -445,7 +447,7 @@ export function reviewQueue(ctx: Ctx, me: User, tab: QueueTab, q = '') {
   const term = q.trim().toLowerCase();
   const matchesTerm = (r: ReviewQueueRow) => {
     if (!term) return true;
-    if (`${r.job_number} ${r.title} ${r.folder}`.toLowerCase().includes(term)) return true;
+    if (`${r.job_number} ${r.title} ${r.folder} ${r.project ?? ''}`.toLowerCase().includes(term)) return true;
     return !!get(
       ctx.db,
       `SELECT 1 FROM review_drawings d WHERE d.ticket_id = ? AND d.identifier LIKE ? ESCAPE '\\' AND ${mine('d')}`,

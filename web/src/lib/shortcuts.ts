@@ -9,6 +9,7 @@ export const SHORTCUTS: { group: string; items: [string, string][] }[] = [
       ['B', 'Board'],
       ['T', 'Today'],
       ['M', 'My work'],
+      ['P', 'Projects'],
       ['D', 'Dashboard'],
       ['V', 'Drawing review'],
       ['W', 'Workload'],

@@ -30,7 +30,7 @@ describe('tickets', () => {
       assert.equal(r.status, 400);
       assert.equal(r.body.error, 'validation');
       const paths = r.body.details.map((d: any) => d.path).sort();
-      assert.deepEqual(paths, ['due_date', 'priority', 'title']);
+      assert.deepEqual(paths, ['due_date', 'priority', 'project_id', 'title']);
     });
 
     it('rejects a due time without a date, unknown job types and non-JSON bodies', async () => {
@@ -46,9 +46,10 @@ describe('tickets', () => {
 
     it('never creates duplicates when the same request is retried', async () => {
       const key = { 'Idempotency-Key': 'retry-key-123456' };
+      const project_id = await christin.testProject();
       const [r1, r2] = await Promise.all([
-        christin.post('/api/tickets', { title: 'Double click' }, key),
-        christin.post('/api/tickets', { title: 'Double click' }, key),
+        christin.post('/api/tickets', { title: 'Double click', project_id }, key),
+        christin.post('/api/tickets', { title: 'Double click', project_id }, key),
       ]);
       assert.deepEqual([r1.status, r2.status].sort(), [200, 201]);
       assert.equal(r1.body.ticket.id, r2.body.ticket.id);
@@ -61,7 +62,7 @@ describe('tickets', () => {
       assert.equal(t.status, 'claimed');
       const allenId = (await allen.get('/api/session')).body.user.id;
       assert.equal(t.assigned_to, allenId);
-      assert.equal((await jeffin.post('/api/tickets', { title: 'x', claim: true })).status, 403);
+      assert.equal((await jeffin.post('/api/tickets', { title: 'x', claim: true, project_id: await jeffin.testProject() })).status, 403);
     });
 
     it('lets the manager create and assign directly to an engineer', async () => {

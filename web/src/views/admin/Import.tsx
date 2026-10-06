@@ -22,6 +22,8 @@ interface Preview {
   }[];
   counts: { total: number; valid: number; with_errors: number; with_warnings: number };
   new_job_types: string[];
+  new_projects: string[];
+  no_project_column: boolean;
   already_imported: { at: string; rows: number; filename: string; user: string | null } | null;
 }
 
@@ -58,13 +60,14 @@ export function ImportSection() {
   const [csv, setCsv] = useState('');
   const [dateOrder, setDateOrder] = useState<'DMY' | 'MDY'>('DMY');
   const [createTypes, setCreateTypes] = useState(true);
+  const [createProjects, setCreateProjects] = useState(true);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ created: number; first: string; last: string; skipped: number } | null>(null);
   const [allowDup, setAllowDup] = useState(false);
 
   const qs = (extra = '') =>
-    `date_order=${dateOrder}&create_job_types=${createTypes ? 1 : 0}&filename=${encodeURIComponent(file?.name ?? '')}${extra}`;
+    `date_order=${dateOrder}&create_job_types=${createTypes ? 1 : 0}&create_projects=${createProjects ? 1 : 0}&filename=${encodeURIComponent(file?.name ?? '')}${extra}`;
 
   const choose = async (f: File | null) => {
     setPreview(null);
@@ -142,6 +145,10 @@ export function ImportSection() {
           <input type="checkbox" checked={createTypes} onChange={(e: any) => setCreateTypes(e.target.checked)} />
           Add job types that don't exist yet
         </label>
+        <label className="check">
+          <input type="checkbox" checked={createProjects} onChange={(e: any) => setCreateProjects(e.target.checked)} />
+          Add projects that don't exist yet
+        </label>
         <button className="btn btn-primary" disabled={!csv || busy} onClick={() => void check()}>
           {busy && !preview ? 'Checking…' : 'Check the file'}
         </button>
@@ -171,6 +178,13 @@ export function ImportSection() {
             ))}
           </p>
           {preview.new_job_types.length > 0 && <p className="muted">New job types will be added: {preview.new_job_types.join(', ')}.</p>}
+          {preview.new_projects.length > 0 && <p className="muted">New projects will be added: {preview.new_projects.join(', ')}.</p>}
+          {preview.no_project_column && (
+            <p className="warn-note">
+              This sheet has no Project column, so the jobs will be imported without a project. Add a "Project" column, or choose each job's project on
+              the board afterwards (Projects → No project).
+            </p>
+          )}
           {preview.already_imported && (
             <div className="notice notice-warn">
               This exact file was already imported on {preview.already_imported.at.slice(0, 10)}

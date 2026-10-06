@@ -8,6 +8,7 @@ import {
   STATUS_LABEL,
   commentSchema,
   createTicketSchema,
+  createBoardTicketSchema,
   estimateLabel,
   moveTicketSchema,
   rankSchema,
@@ -24,12 +25,13 @@ import { dueAtIso, localDate, startOfLocalDayIso, addDays } from '../lib/time.ts
 import { boardScope, bottomRank, myScope, rankFor } from './rank.ts';
 import { reindexTicket, searchCondition, rankExpr } from './search.ts';
 import { getUser } from './users.ts';
+import { projectIdsFor, requireProject, setTicketProject } from './projects.ts';
 
 // ---------------------------------------------------------------------------
 // Row mapping
 // ---------------------------------------------------------------------------
 
-type Row = Omit<Ticket, 'archived' | 'is_demo' | 'tags' | 'overdue' | 'due_today'> & { archived: number; is_demo: number };
+type Row = Omit<Ticket, 'archived' | 'is_demo' | 'tags' | 'overdue' | 'due_today' | 'project_id'> & { archived: number; is_demo: number };
 
 function tagsFor(ctx: Ctx, ids: number[]): Map<number, string[]> {
   const map = new Map<number, string[]>();
@@ -54,6 +56,7 @@ function tagsFor(ctx: Ctx, ids: number[]): Map<number, string[]> {
 
 function toTickets(ctx: Ctx, rows: Row[]): Ticket[] {
   const tags = tagsFor(ctx, rows.map((r) => r.id));
+  const projects = projectIdsFor(ctx, rows.map((r) => r.id));
   const now = nowIso(ctx);
   const today = localDate(ctx.now().getTime(), ctx.tz);
   return rows.map((r) => {
@@ -63,6 +66,7 @@ function toTickets(ctx: Ctx, rows: Row[]): Ticket[] {
       archived: bool(r.archived),
       is_demo: bool(r.is_demo),
       tags: tags.get(r.id) ?? [],
+      project_id: projects.get(r.id) ?? null,
       overdue: open && r.due_at != null && now > r.due_at,
       due_today: open && r.due_date === today,
     };
@@ -247,8 +251,14 @@ function applyAssignment(ctx: Ctx, actor: User, row: Row, to: number | null) {
 // Create
 // ---------------------------------------------------------------------------
 
-export function createTicket(ctx: Ctx, actor: User, input: unknown, idempotencyKey?: string): { ticket: Ticket; replayed: boolean } {
-  const data = createTicketSchema(input);
+export function createTicket(
+  ctx: Ctx,
+  actor: User,
+  input: unknown,
+  idempotencyKey?: string,
+  opts: { requireProject?: boolean } = {},
+): { ticket: Ticket; replayed: boolean } {
+  const data = (opts.requireProject ? createBoardTicketSchema : createTicketSchema)(input);
   if (data.claim && actor.role !== 'engineer') throw forbidden('Only engineers can claim jobs');
   return tx(ctx.db, () => {
     if (idempotencyKey) {
@@ -256,6 +266,7 @@ export function createTicket(ctx: Ctx, actor: User, input: unknown, idempotencyK
       if (prev) return { ticket: getTicket(ctx, prev.ticket_id), replayed: true };
     }
     checkJobType(ctx, data.job_type_id);
+    if (data.project_id != null) requireProject(ctx, data.project_id);
     checkParent(ctx, null, data.parent_job_id);
     if (data.due_time && !data.due_date) throw badRequest('A due time needs a due date');
     const now = nowIso(ctx);
@@ -287,6 +298,7 @@ export function createTicket(ctx: Ctx, actor: User, input: unknown, idempotencyK
     const id = Number(res.lastInsertRowid);
     run(ctx.db, 'UPDATE tickets SET board_rank = ? WHERE id = ?', rankFor(ctx, boardScope('inbox'), id), id);
     if (data.tags.length) setTags(ctx, id, data.tags);
+    if (data.project_id != null) setTicketProject(ctx, id, data.project_id);
     log(ctx, id, actor.id, 'created', null, data.priority, data.title);
 
     const assignee = data.claim ? actor.id : data.assigned_to ?? null;
@@ -316,6 +328,7 @@ const FIELD_LABEL: Record<string, string> = {
   estimate_minutes: 'estimate',
   actual_minutes: 'actual time',
   job_type_id: 'job type',
+  project_id: 'project',
   due: 'due date',
   tags: 'tags',
   parent_job_id: 'parent job',
@@ -365,6 +378,10 @@ export function updateTicket(ctx: Ctx, actor: User, id: number, input: unknown):
       set('job_type_id', data.job_type_id);
       const name = (jid: number | null) => (jid == null ? null : get<{ name: string }>(ctx.db, 'SELECT name FROM job_types WHERE id = ?', jid)?.name ?? null);
       log(ctx, id, actor.id, 'field', name(row.job_type_id), name(data.job_type_id), FIELD_LABEL.job_type_id);
+    }
+    if (data.project_id !== undefined) {
+      const changed = setTicketProject(ctx, id, data.project_id);
+      if (changed) log(ctx, id, actor.id, 'field', changed.from, changed.to, FIELD_LABEL.project_id);
     }
     if (data.parent_job_id !== undefined && data.parent_job_id !== row.parent_job_id) {
       checkParent(ctx, id, data.parent_job_id);
@@ -601,6 +618,8 @@ export interface TicketFilters {
   status?: Status[];
   priority?: string[];
   job_type?: number[];
+  /** Project ids, or "none" for jobs without a project. */
+  project?: (number | 'none')[];
   tag?: string;
   overdue?: boolean;
   blocked?: boolean;
@@ -643,6 +662,14 @@ export function parseFilters(qs: URLSearchParams): TicketFilters {
   const jt = csv(qs.get('job_type')).map(Number);
   if (jt.some((n) => !Number.isInteger(n))) throw badRequest('job_type must be ids');
   if (jt.length) f.job_type = jt;
+  const pr = csv(qs.get('project'));
+  if (pr.length)
+    f.project = pr.map((p) => {
+      if (p === 'none') return 'none' as const;
+      const n = Number(p);
+      if (!Number.isInteger(n)) throw badRequest('project must be ids or "none"');
+      return n;
+    });
   if (qs.get('tag')) f.tag = qs.get('tag')!;
   for (const k of ['overdue', 'blocked', 'unassigned'] as const) if (qs.get(k) === '1' || qs.get(k) === 'true') f[k] = true;
   for (const k of ['due_from', 'due_to', 'created_from', 'created_to'] as const) {
@@ -708,6 +735,16 @@ export function listTickets(ctx: Ctx, f: TicketFilters = {}): { tickets: Ticket[
   if (f.status?.length) add(`t.status IN (${f.status.map(() => '?').join(',')})`, ...f.status);
   if (f.priority?.length) add(`t.priority IN (${f.priority.map(() => '?').join(',')})`, ...f.priority);
   if (f.job_type?.length) add(`t.job_type_id IN (${f.job_type.map(() => '?').join(',')})`, ...f.job_type);
+  if (f.project?.length) {
+    const ids = f.project.filter((p): p is number => p !== 'none');
+    const parts: string[] = [];
+    if (ids.length) {
+      parts.push(`t.id IN (SELECT ticket_id FROM ticket_projects WHERE project_id IN (${ids.map(() => '?').join(',')}))`);
+      params.push(...ids);
+    }
+    if (f.project.includes('none')) parts.push('t.id NOT IN (SELECT ticket_id FROM ticket_projects)');
+    where.push(`(${parts.join(' OR ')})`);
+  }
   if (f.tag) add(`t.id IN (SELECT tt.ticket_id FROM ticket_tags tt JOIN tags g ON g.id = tt.tag_id WHERE g.name = ?)`, f.tag);
   if (f.overdue) add(`t.due_at IS NOT NULL AND t.due_at < ? AND t.status NOT IN ('done','cancelled')`, now);
   if (f.blocked) add(`t.status IN ('waiting','blocked')`);

@@ -32,7 +32,7 @@ Signed scans are only ever read from the PDF someone attaches; the board stores 
 
 1. In Excel, **File → Save As → CSV UTF-8 (Comma delimited)**. The first row must be column names. Only a title column is required; the board recognises common names such as *Job*, *Task*, *Assigned To*, *Due Date*, *Est*, *Drawing No* and *Status*. **Download a template** shows every column it understands.
 2. Choose the file and check the preview. **Nothing is created yet.** Each row shows where it will go, and any problems are explained: an unknown person, a date it couldn't read, and so on. Rows with errors are skipped; rows with warnings go in with the change described.
-3. Pick how dates like `02/10/2026` should be read (day first is the default).
+3. Pick how dates like `02/10/2026` should be read (day first is the default). A **Project** column puts each job in its project: names are matched regardless of capitals, and names the board doesn't have yet are added (untick **Add projects that don't exist yet** to leave those blank instead). Without a Project column the jobs import without a project, and are listed under **Projects → No project** until someone picks one.
 4. **Import.** A backup is taken first, and the whole file goes in at once or not at all. Importing the same file twice is caught and needs a deliberate tick.
 
 ## Export

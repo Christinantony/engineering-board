@@ -10,6 +10,7 @@ import { localDate } from '../lib/time.ts';
 import { createJobType, listJobTypes } from './jobTypes.ts';
 import { reindexTicket } from './search.ts';
 import { createTicket, getTicket, listTickets, moveTicket, type TicketFilters } from './tickets.ts';
+import { cleanProjectName, createProject, listProjects } from './projects.ts';
 import { listUsers } from './users.ts';
 
 // ---------------------------------------------------------------------------
@@ -42,6 +43,7 @@ export const CSV_COLUMNS = [
   'assignee',
   'requester',
   'job_type',
+  'project',
   'estimate_minutes',
   'actual_minutes',
   'due_date',
@@ -63,6 +65,7 @@ export const CSV_COLUMNS = [
 export function exportCsv(ctx: Ctx, f: TicketFilters = {}): string {
   const users = new Map(listUsers(ctx).map((u) => [u.id, u.name]));
   const types = new Map(listJobTypes(ctx).map((j) => [j.id, j.name]));
+  const projects = new Map(listProjects(ctx).map((p) => [p.id, p.name]));
   const tickets = allTickets(ctx, f);
   const numbers = new Map(tickets.map((t) => [t.id, t.job_number]));
   const rows = tickets.map((t) => [
@@ -74,6 +77,7 @@ export function exportCsv(ctx: Ctx, f: TicketFilters = {}): string {
     t.assigned_to ? users.get(t.assigned_to) ?? '' : '',
     t.requester,
     t.job_type_id ? types.get(t.job_type_id) ?? '' : '',
+    t.project_id ? projects.get(t.project_id) ?? '' : '',
     t.estimate_minutes,
     t.actual_minutes,
     t.due_date,
@@ -100,6 +104,8 @@ export function exportJson(ctx: Ctx, opts: { activity: boolean } = { activity: t
   const byId = new Map(users.map((u) => [u.id, u.name]));
   const types = listJobTypes(ctx);
   const tName = new Map(types.map((j) => [j.id, j.name]));
+  const projects = listProjects(ctx);
+  const pName = new Map(projects.map((p) => [p.id, p.name]));
   const tickets = allTickets(ctx, {});
   const activity = opts.activity
     ? all<{ ticket_id: number; at: string; kind: string; user_id: number | null; from_value: string | null; to_value: string | null; body: string | null }>(
@@ -120,6 +126,7 @@ export function exportJson(ctx: Ctx, opts: { activity: boolean } = { activity: t
     time_zone: ctx.tz,
     users: users.map(({ id, name, initials, color, role, active }) => ({ id, name, initials, color, role, active })),
     job_types: types.map(({ id, name, active }) => ({ id, name, active })),
+    projects: projects.map(({ id, name, created_at }) => ({ id, name, created_at })),
     tickets: tickets.map((t) => {
       const { overdue: _o, due_today: _d, board_rank: _b, my_rank: _m, version: _v, ...rest } = t;
       return {
@@ -127,6 +134,7 @@ export function exportJson(ctx: Ctx, opts: { activity: boolean } = { activity: t
         assignee: t.assigned_to ? byId.get(t.assigned_to) ?? null : null,
         created_by_name: t.created_by ? byId.get(t.created_by) ?? null : null,
         job_type: t.job_type_id ? tName.get(t.job_type_id) ?? null : null,
+        project: t.project_id ? pName.get(t.project_id) ?? null : null,
         ...(opts.activity ? { activity: byTicket.get(t.id) ?? [] } : {}),
       };
     }),
@@ -147,6 +155,7 @@ type Field =
   | 'estimate'
   | 'requester'
   | 'job_type'
+  | 'project'
   | 'tags'
   | 'reference'
   | 'file_location'
@@ -165,8 +174,9 @@ const ALIASES: Record<Field, string[]> = {
   estimate: ['estimate', 'estimateminutes', 'estimatedminutes', 'est', 'estminutes', 'minutes', 'duration', 'effort', 'estimatedtime'],
   requester: ['requester', 'requestedby', 'requestor', 'customer', 'client', 'from', 'raisedby'],
   job_type: ['jobtype', 'type', 'category', 'worktype', 'kind'],
+  project: ['project', 'projectname', 'proj'],
   tags: ['tags', 'tag', 'labels', 'label'],
-  reference: ['reference', 'ref', 'drawing', 'drawingnumber', 'drawingno', 'dwg', 'partnumber', 'partno', 'part', 'project', 'projectnumber', 'projectno', 'jobnumber', 'jobno'],
+  reference: ['reference', 'ref', 'drawing', 'drawingnumber', 'drawingno', 'dwg', 'partnumber', 'partno', 'part', 'projectnumber', 'projectno', 'jobnumber', 'jobno'],
   file_location: ['filelocation', 'file', 'path', 'filepath', 'folder', 'location', 'link', 'url'],
   notes: ['notes', 'note', 'comments', 'comment', 'remarks', 'remark'],
   status: ['status', 'state', 'stage', 'column'],
@@ -265,6 +275,8 @@ export function parseStatus(raw: string): Status | null | 'invalid' {
 export interface ImportOptions {
   date_order?: 'DMY' | 'MDY';
   create_job_types?: boolean;
+  /** Add project names the board doesn't have yet (default yes). */
+  create_projects?: boolean;
   filename?: string;
 }
 
@@ -281,6 +293,8 @@ export interface PreviewRow {
   requester: string;
   job_type: string | null;
   job_type_is_new: boolean;
+  project: string | null;
+  project_is_new: boolean;
   tags: string[];
   reference: string;
   file_location: string;
@@ -308,6 +322,8 @@ export function previewImport(ctx: Ctx, csv: string, opts: ImportOptions = {}) {
   const types = listJobTypes(ctx);
   const order = opts.date_order ?? 'DMY';
   const createTypes = opts.create_job_types ?? true;
+  const createProjects = opts.create_projects ?? true;
+  const projects = listProjects(ctx);
 
   const findUser = (s: string): User | undefined => {
     const n = s.trim().toLowerCase();
@@ -363,6 +379,12 @@ export function previewImport(ctx: Ctx, csv: string, opts: ImportOptions = {}) {
     const jtNew = !!jtRaw && !jt;
     if (jtNew && !createTypes) warnings.push(`Job type "${jtRaw}" doesn't exist; left blank`);
 
+    const prRaw = cleanProjectName(get('project')).slice(0, 100);
+    const pr = prRaw ? projects.find((p) => p.name.toLowerCase() === prRaw.toLowerCase()) : undefined;
+    const prNew = !!prRaw && !pr;
+    if (prNew && !createProjects) warnings.push(`Project "${prRaw}" doesn't exist; set it on the board after importing`);
+    if (!prRaw && mapping.includes('project')) warnings.push('No project; set it on the board after importing');
+
     let status = parseStatus(get('status'));
     if (status === 'invalid') {
       warnings.push(`Status "${get('status')}" not recognised; imported to the Inbox`);
@@ -390,6 +412,8 @@ export function previewImport(ctx: Ctx, csv: string, opts: ImportOptions = {}) {
       requester: get('requester'),
       job_type: jt?.name ?? (jtNew && createTypes ? jtRaw.trim() : null),
       job_type_is_new: jtNew && createTypes,
+      project: pr?.name ?? (prNew && createProjects ? prRaw : null),
+      project_is_new: prNew && createProjects,
       tags: get('tags')
         .split(/[,;]/)
         .map((s) => s.trim())
@@ -421,6 +445,9 @@ export function previewImport(ctx: Ctx, csv: string, opts: ImportOptions = {}) {
       with_warnings: out.filter((r) => !r.errors.length && r.warnings.length).length,
     },
     new_job_types: [...new Set(out.filter((r) => r.job_type_is_new && !r.errors.length).map((r) => r.job_type!))],
+    /** True when the sheet has no project column: every job imports without a project. */
+    no_project_column: !mapping.includes('project'),
+    new_projects: [...new Map(out.filter((r) => r.project_is_new && !r.errors.length).map((r) => [r.project!.toLowerCase(), r.project!])).values()],
     already_imported: previous ?? null,
     hash,
   };
@@ -448,6 +475,10 @@ export function commitImport(
     for (const name of preview.new_job_types) {
       if (!typeIds.has(name.toLowerCase())) typeIds.set(name.toLowerCase(), createJobType(ctx, { name }).id);
     }
+    const projectIds = new Map(listProjects(ctx).map((p) => [p.name.toLowerCase(), p.id]));
+    for (const name of preview.new_projects) {
+      if (!projectIds.has(name.toLowerCase())) projectIds.set(name.toLowerCase(), createProject(ctx, actor, { name }).id);
+    }
     const users = new Map(listUsers(ctx).map((u) => [u.id, u]));
     for (const r of rows) {
       const { ticket } = createTicket(ctx, actor, {
@@ -456,6 +487,7 @@ export function commitImport(
         priority: r.priority,
         requester: r.requester,
         job_type_id: r.job_type ? typeIds.get(r.job_type.toLowerCase()) ?? null : null,
+        project_id: r.project ? projectIds.get(r.project.toLowerCase()) ?? null : null,
         estimate_minutes: r.estimate_minutes,
         due_date: r.due_date,
         due_time: r.due_time,
@@ -496,9 +528,9 @@ export function commitImport(
 /** A starter file people can fill in from Excel. */
 export function importTemplate(): string {
   return toCsv([
-    ['title', 'description', 'priority', 'assignee', 'due_date', 'estimate', 'requester', 'job_type', 'tags', 'reference', 'file_location', 'notes', 'status'],
-    ['Pump drawing revision', 'Update holes per ECN-112', 'High', 'Paul', '02/10/2026', '120', 'Quality', 'Drawing Revision', 'customer-A', 'DWG-4410', '\\\\SERVER\\Projects\\Pump', '', ''],
-    ['STEP cleanup', 'Repair imported geometry', 'Normal', '', '03/10/2026', '1 hr', 'Production', 'STEP/IGES Cleanup', 'STEP', '', '', '', ''],
+    ['title', 'project', 'description', 'priority', 'assignee', 'due_date', 'estimate', 'requester', 'job_type', 'tags', 'reference', 'file_location', 'notes', 'status'],
+    ['Pump drawing revision', 'Pump skid', 'Update holes per ECN-112', 'High', 'Paul', '02/10/2026', '120', 'Quality', 'Drawing Revision', 'customer-A', 'DWG-4410', '\\\\SERVER\\Projects\\Pump', '', ''],
+    ['STEP cleanup', 'Pump skid', 'Repair imported geometry', 'Normal', '', '03/10/2026', '1 hr', 'Production', 'STEP/IGES Cleanup', 'STEP', '', '', '', ''],
   ]);
 }
 

@@ -412,4 +412,32 @@ INSERT OR IGNORE INTO review_drawing_reviewers (drawing_id, user_id, assigned_by
   JOIN users u ON u.id = x.user_id AND u.role = 'reviewer';
 `,
   },
+  {
+    id: 9,
+    name: 'projects',
+    sql: /* sql */ `
+-- Projects are added by the team as each one is needed (none are preset), and
+-- every new job belongs to one (decision #30). A separate link table keeps the
+-- tickets table unchanged, so older backups still restore.
+CREATE TABLE projects (
+  id         INTEGER PRIMARY KEY,
+  name       TEXT NOT NULL COLLATE NOCASE UNIQUE CHECK (length(name) BETWEEN 1 AND 100),
+  created_by INTEGER REFERENCES users(id),
+  created_at TEXT NOT NULL,
+  is_demo    INTEGER NOT NULL DEFAULT 0 CHECK (is_demo IN (0,1))
+);
+CREATE TRIGGER projects_no_delete BEFORE DELETE ON projects
+WHEN OLD.is_demo IS NOT 1
+BEGIN
+  SELECT RAISE(ABORT, 'projects cannot be deleted');
+END;
+
+-- One project per job.
+CREATE TABLE ticket_projects (
+  ticket_id  INTEGER PRIMARY KEY REFERENCES tickets(id),
+  project_id INTEGER NOT NULL REFERENCES projects(id)
+);
+CREATE INDEX idx_ticket_projects_project ON ticket_projects(project_id);
+`,
+  },
 ];

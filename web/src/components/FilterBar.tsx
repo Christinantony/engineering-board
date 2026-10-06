@@ -53,7 +53,7 @@ export function FilterBar({
   shown?: number;
   total?: number;
 }) {
-  const { me, engineers, jobTypes } = useApp();
+  const { me, engineers, jobTypes, projects } = useApp();
   const set = (patch: Partial<Filters>) => onChange({ ...value, ...patch });
   const n = activeCount(value);
   const mineOnly = value.assignee.length === 1 && value.assignee[0] === me.id;
@@ -63,6 +63,14 @@ export function FilterBar({
       : value.jobType.length === 1
         ? jobTypes.find((j) => j.id === value.jobType[0])?.name ?? 'Job type'
         : `${value.jobType.length} job types`;
+  const prLabel =
+    value.project.length === 0
+      ? 'Project'
+      : value.project.length === 1
+        ? value.project[0] === 'none'
+          ? 'No project'
+          : projects.find((p) => p.id === value.project[0])?.name ?? 'Project'
+        : `${value.project.length} projects`;
   const stLabel = value.status.length === 0 ? 'Status' : value.status.length === 1 ? STATUS_LABEL[value.status[0]] : `${value.status.length} statuses`;
 
   return (
@@ -112,6 +120,19 @@ export function FilterBar({
           ))}
         </Drop>
       )}
+      <Drop label={prLabel} active={value.project.length > 0}>
+        {projects.length === 0 && <span className="muted fopt">No projects yet</span>}
+        {projects.map((p) => (
+          <label key={p.id} className="fopt">
+            <input type="checkbox" checked={value.project.includes(p.id)} onChange={() => set({ project: toggle(value.project, p.id) })} />
+            {p.name}
+          </label>
+        ))}
+        <label className="fopt">
+          <input type="checkbox" checked={value.project.includes('none')} onChange={() => set({ project: toggle(value.project, 'none') })} />
+          <span className="muted">No project</span>
+        </label>
+      </Drop>
       <Drop label={jtLabel} active={value.jobType.length > 0}>
         {jobTypes.map((j) => (
           <label key={j.id} className="fopt">

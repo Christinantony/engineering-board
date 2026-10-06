@@ -2,7 +2,7 @@
 
 ### The workboard for the mechanical design team
 
-*Catalogue edition, version 1.3.0*
+*Catalogue edition, version 1.4.0*
 
 One shared board for every design job: who is on it, what it is waiting for, when it is due and how it ended. It runs on a single PC on the office network. Everyone else opens it in a web browser.
 
@@ -23,7 +23,7 @@ One shared board for every design job: who is on it, what it is waiting for, whe
 
 | Section | What you will find |
 |---|---|
-| [A. The pages](#a-the-pages) | Eight views, each with its shortcut key |
+| [A. The pages](#a-the-pages) | Nine views, each with its shortcut key |
 | [B. The job record](#b-the-job-record) | Every field a job carries, and how a job moves |
 | [C. Working together](#c-working-together) | Claiming, live updates, edit merging, notifications |
 | [D. Finding things](#d-finding-things) | Search, filters, export |
@@ -51,6 +51,7 @@ Every page has a one-key shortcut. Press <kbd>?</kbd> anywhere for the full list
 | **A6** | **Reports** | <kbd>R</kbd> | Jobs completed per day, per engineer and per job type, plus how long jobs take. This and last week, this and last month, last 30 days. | You need numbers for a review meeting. |
 | **A7** | **Team activity** | name menu | Every change to every job, newest first. History cannot be edited or deleted. | You want to know who did what, and when. |
 | **A8** | **Drawing review** | <kbd>V</kbd> | Jobs with drawings in board review; a workspace per job with the signed reference and the submitted drawing side by side (independent page, zoom and rotation), revision notes, comments, pass or return, handover and signature. | You check drawings before they are printed and signed. |
+| **A9** | **Projects** | <kbd>P</kbd> | Every project with its open and total jobs, and all of a project's jobs. Projects are added by the team when their first job comes in; none are preset. | You want everything for one project, or to add a new one. |
 
 | | |
 |---|---|
@@ -60,6 +61,8 @@ Every page has a one-key shortcut. Press <kbd>?</kbd> anywhere for the full list
 | **A5 Workload** | **A6 Reports** |
 | ![A job opened from the board, with every field in the side panel](assets/screenshots/job-panel.png) | ![My work: one engineer's open jobs in their own order](assets/screenshots/my-work.png) |
 | **A1 Board with a job open** | **A3 My work** |
+| ![Projects: every project with its open and total jobs, and all the jobs of the chosen project](assets/screenshots/projects.png) | ![New job: a title and its project, with "+ Add a project…" for a new one](assets/screenshots/new-job.png) |
+| **A9 Projects** | **New job, with its project** |
 
 **A8 Drawing review.** The queue, and the workspace with the signed reference on the left and the submitted drawing on the right, each with its own page, zoom and rotation. The open comment blocks **Pass board review** until it is resolved.
 
@@ -73,12 +76,13 @@ Every page has a one-key shortcut. Press <kbd>?</kbd> anywhere for the full list
 
 ### B1. Fields
 
-Only the title is required. Everything else can be added as the job develops.
+A job needs a title and a project. Everything else can be added as the job develops.
 
 | Field | Notes |
 |---|---|
 | **Job number** | Assigned automatically, never reused. |
 | **Title** | Up to 200 characters. |
+| **Project** | Required for every new job. Chosen from the team's project list, or added there and then (**+ Add a project…**). A job can move to another project; jobs from before 1.4.0 show as *No project* until one is picked. |
 | **Description** and **notes** | Free text. Edits by two people are merged, see C3. |
 | **Priority** | Urgent, high, normal or low. An urgent job notifies everyone. |
 | **Estimate** | Eight buckets from under 15 minutes to over 2 days. |
@@ -236,9 +240,9 @@ Copy `config.example.json` to `config.json` next to `start.bat`, edit it, restar
 | **History** | Append-only, enforced by database triggers. Jobs cannot be deleted. |
 | **Concurrency** | Version-checked edits, atomic claiming, idempotent creation. |
 | **Search** | SQLite full-text with trigram matching, so any three letters match. |
-| **Upgrades** | Schema version 6. A backup is taken before a new version changes the database. A board refuses to start on data written by a newer version. |
+| **Upgrades** | Schema version 9. A backup is taken before a new version changes the database. A board refuses to start on data written by a newer version. |
 | **Network** | LAN only; no outbound traffic. Name picker plus a password (scrypt hash) and a signed cookie bound to it; admin behind a hashed PIN; five wrong passwords pause sign-in for 30 seconds. |
-| **Checked by** | 156 backend tests, 35 browser tests, 15 package checks, and a typecheck. |
+| **Checked by** | 180 backend tests, 37 browser tests, 15 package checks, and a typecheck. |
 
 ## J. Documentation
 
@@ -256,6 +260,7 @@ Copy `config.example.json` to `config.json` next to `start.bat`, edit it, restar
 
 | Version | What it brought |
 |---|---|
+| **1.4.0** | Projects: every job belongs to a project, chosen or added from the New job form; a Projects page with each project's jobs; project filter, search, card and job-panel display; Project column in import and export. No preset list: projects are added as they are needed. |
 | **1.3.0** | Reviewer access: engineers hand each drawing to one or more reviewers (and can change them later). A reviewer sees only the drawings handed to them, with the job number and title: no board, workload, reports, search, other jobs, team activity or Admin. The manager keeps full access. |
 | **1.2.0** | Password sign-in for everyone, current and new: each person creates their own password at their first sign-in, changes it from the account menu, and an admin can reset a forgotten one. A `RESET-PASSWORDS` file on the host PC clears them all. Restores keep the current passwords. |
 | **1.1.0** | Drawing review: submit single-page drawings with the signed reference scan, compare them in two independent viewers, remember the matching reference page, comment, pass or return per drawing, print, hand over (with a reminder for the reviewer) and record the physical signature before a job can be Done. Project-folder copies, REVISION_LOG.md and clean-up of intermediate PDFs. New Reviewer role. |

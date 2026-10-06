@@ -67,11 +67,22 @@ export class Client {
   post = (p: string, b: unknown = {}, h?: Record<string, string>) => this.req('POST', p, b, h);
   patch = (p: string, b: unknown) => this.req('PATCH', p, b);
   put = (p: string, b: unknown) => this.req('PUT', p, b);
+
+  /** The id of a project called "Test project", added the first time it is needed. */
+  async testProject(): Promise<number> {
+    const list = (await this.get('/api/projects')).body?.projects as { id: number; name: string }[] | undefined;
+    const found = list?.find((p) => p.name === 'Test project');
+    if (found) return found.id;
+    const r = await this.post('/api/projects', { name: 'Test project' });
+    if (r.status === 201) return r.body.project.id;
+    if (r.status === 409) return r.body.project.id;
+    throw new Error(`could not add the test project: ${r.status} ${JSON.stringify(r.body)}`);
+  }
   del = (p: string) => this.req('DELETE', p);
 
-  /** Create a ticket and return it (asserts success). */
+  /** Create a ticket and return it (asserts success). Puts it in the "Test project" unless a project is given. */
   async create(fields: Record<string, unknown>) {
-    const r = await this.post('/api/tickets', fields);
+    const r = await this.post('/api/tickets', { project_id: await this.testProject(), ...fields });
     if (r.status !== 201) throw new Error(`create failed: ${r.status} ${JSON.stringify(r.body)}`);
     return r.body.ticket;
   }
@@ -149,6 +160,7 @@ export const UNDO: Record<number, string> = {
       DROP TABLE review_references; DROP TABLE review_files;`,
   7: 'ALTER TABLE users DROP COLUMN password_hash;',
   8: 'DROP TABLE review_drawing_reviewers;',
+  9: 'DROP TABLE ticket_projects; DROP TABLE projects;',
 };
 
 /** Take a database back to schema `to`, as the version that wrote it would have left it. */
