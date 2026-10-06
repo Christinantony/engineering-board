@@ -3,6 +3,7 @@ import { all, get, run, tx } from './connection.ts';
 import type { Ctx } from '../lib/core.ts';
 import { createTicket, claimTicket, moveTicket, updateTicket, addComment } from '../domain/tickets.ts';
 import { listUsers } from '../domain/users.ts';
+import { createProject, findProjectByName } from '../domain/projects.ts';
 import { rebuildIndex } from '../domain/search.ts';
 import { addDays, localDate } from '../lib/time.ts';
 
@@ -86,10 +87,20 @@ export function seedDemo(ctx: Ctx): number {
     { title: 'Prototype jig for weld fixture', description: 'Quick 3D-printed locating jig for the frame welds.', type: 'Prototype Support', priority: 'low', est: 90, creator: e3, owner: e3 },
   ];
 
+  // a few demo projects, added the way the team adds real ones (decision #30)
+  const projectFor = (title: string) =>
+    /pump|bracket|shaft|bom/i.test(title) ? 'Pump skid' : /enclosure|interference|manufacturing|jig/i.test(title) ? 'Control enclosure' : 'ACME housing';
+
   let count = 0;
   tx(ctx.db, () => {
+    const projectIds = new Map<string, number>();
+    for (const name of ['ACME housing', 'Control enclosure', 'Pump skid']) {
+      const existing = findProjectByName(ctx, name);
+      projectIds.set(name, existing?.id ?? createProject(ctx, mgr, { name }, { demo: true }).id);
+    }
     for (const s of specs) {
       const { ticket } = createTicket(ctx, s.creator, {
+        project_id: projectIds.get(projectFor(s.title)),
         title: s.title,
         description: s.description,
         priority: s.priority ?? 'normal',
@@ -139,6 +150,8 @@ export function clearDemo(ctx: Ctx): number {
     run(ctx.db, `DELETE FROM review_references WHERE ticket_id IN (${list})`);
     run(ctx.db, `DELETE FROM review_sync WHERE ticket_id IN (${list})`);
     run(ctx.db, `UPDATE project_files SET ticket_id = NULL WHERE ticket_id IN (${list})`);
+    run(ctx.db, `DELETE FROM ticket_projects WHERE ticket_id IN (${list})`);
+    run(ctx.db, `DELETE FROM projects WHERE is_demo = 1 AND id NOT IN (SELECT project_id FROM ticket_projects)`);
     run(ctx.db, `DELETE FROM activity WHERE ticket_id IN (${list})`);
     run(ctx.db, `DELETE FROM ticket_tags WHERE ticket_id IN (${list})`);
     run(ctx.db, `DELETE FROM idempotency WHERE ticket_id IN (${list})`);

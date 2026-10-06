@@ -19,7 +19,7 @@ export function JobRow({
   showUpdated?: boolean;
   handle?: any;
 }) {
-  const { me, user, jobType, openJob } = useApp();
+  const { me, user, jobType, openJob, project } = useApp();
   const due = dueLabel(t);
   const open = t.status !== 'done' && t.status !== 'cancelled';
   const waiting = t.status === 'waiting' || t.status === 'blocked';
@@ -43,7 +43,13 @@ export function JobRow({
             {t.status === 'blocked' ? 'Blocked' : 'Waiting'} for {t.waiting_for}
           </span>
         )}
-        {!waiting && jobType(t.job_type_id) && <span className="jobrow-sub muted">{jobType(t.job_type_id)!.name}</span>}
+        {!waiting && (project(t.project_id) || jobType(t.job_type_id)) && (
+          <span className="jobrow-sub muted">
+            {project(t.project_id) && <span className="jobrow-project">{project(t.project_id)!.name}</span>}
+            {project(t.project_id) && jobType(t.job_type_id) && ' · '}
+            {jobType(t.job_type_id)?.name}
+          </span>
+        )}
       </span>
       <span className="jobrow-tags">
         <PriorityTag p={t.priority} />

@@ -15,7 +15,7 @@ interface Props {
 }
 
 export function TicketCard({ t, dragging, ghost, onPointerDown, onOpen }: Props) {
-  const { me, user, jobType } = useApp();
+  const { me, user, jobType, project } = useApp();
   const assignee = user(t.assigned_to);
   const due = dueLabel(t);
   const open = !['done', 'cancelled'].includes(t.status);
@@ -49,6 +49,11 @@ export function TicketCard({ t, dragging, ghost, onPointerDown, onOpen }: Props)
     >
       <div className="card-top">
         <span className="jobno">{t.job_number}</span>
+        {project(t.project_id) && (
+          <span className="card-project" title={`Project: ${project(t.project_id)!.name}`}>
+            {project(t.project_id)!.name}
+          </span>
+        )}
         {assignee ? <Badge user={assignee} /> : <span className="unassigned-label">Unassigned</span>}
       </div>
       <div className="card-title">{t.title}</div>

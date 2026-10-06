@@ -19,6 +19,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_PATH ?? 'playwright');
 const PORT = 18094;
 const BASE = `http://127.0.0.1:${PORT}`;
 let server, dir, browser;
+let PROJECT_ID;
 const PASSWORD = 'board-e2e-1';
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 
@@ -50,6 +51,10 @@ before(async () => {
   const r = await api('POST', '/api/admin/users', { name: 'Ebin', role: 'reviewer' }, `${s.cookie}; ${u.cookie}`);
   assert.equal(r.r.status, 201);
   assert.equal((await api('POST', '/api/session/password', { user_id: r.body.user.id, password: PASSWORD })).r.status, 200);
+  // every new job needs a project (decision #30)
+  const pr = await api('POST', '/api/projects', { name: 'Telescope mount' }, s.cookie);
+  assert.equal(pr.r.status, 201);
+  PROJECT_ID = pr.body.project.id;
   browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH });
 });
 
@@ -97,10 +102,10 @@ const scan = makePdf(3, { labels: ['BRK-023 Rev B signed', 'ASM-010 Rev C signed
 
 test('an engineer submits a signed scan and single-page drawings; a multi-page drawing is refused', async () => {
   const c = await login('Christin');
-  const created = await c.evaluate(async () => {
-    const r = await fetch('/api/tickets', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'Revise mounting bracket', claim: true }) });
+  const created = await c.evaluate(async (project_id) => {
+    const r = await fetch('/api/tickets', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'Revise mounting bracket', claim: true, project_id }) });
     return (await r.json()).ticket;
-  });
+  }, PROJECT_ID);
   jobId = created.id;
   await c.goto(`${BASE}/board?job=${jobId}`);
   await c.click('.panel-review button:has-text("Submit for board review")');
@@ -132,10 +137,10 @@ test('an engineer submits a signed scan and single-page drawings; a multi-page d
 test('a reviewer sees only the review screens and the drawings handed to them', async () => {
   // a second job, with a drawing handed to the manager only
   const c = await login('Christin');
-  const other = await c.evaluate(async () => {
-    const r = await fetch('/api/tickets', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'Not for Ebin', claim: true }) });
+  const other = await c.evaluate(async (project_id) => {
+    const r = await fetch('/api/tickets', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'Not for Ebin', claim: true, project_id }) });
     return (await r.json()).ticket;
-  });
+  }, PROJECT_ID);
   await c.goto(`${BASE}/review/${other.id}?submit=1`);
   await c.waitForSelector('.rw-submit');
   await c.setInputFiles('[data-testid=pick-drawings]', { name: 'GA-001.pdf', mimeType: 'application/pdf', buffer: makePdf(1, { labels: ['GA-001'] }) });

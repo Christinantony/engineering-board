@@ -1,6 +1,6 @@
 {
   "name": "engineering-board",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "type": "module",
   "description": "Internal engineering workboard. Zero runtime dependencies: Node.js 22.16+ only.",

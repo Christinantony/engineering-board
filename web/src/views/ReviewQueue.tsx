@@ -159,7 +159,7 @@ export function ReviewQueue() {
                           {r.job_number}
                         </a>
                         <div className="rv-title">{r.title}</div>
-                        {r.folder && <div className="muted small">{folderName(r.folder)}</div>}
+                        {(r.project || r.folder) && <div className="muted small">{r.project ?? folderName(r.folder)}</div>}
                       </td>
                       <td>
                         {r.drawings} drawing{r.drawings === 1 ? '' : 's'}
@@ -198,7 +198,7 @@ function QueuePreview({ row }: { row: ReviewQueueRow }) {
       <div className="muted small">Submission {row.submissions}</div>
       <h2 className="rv-preview-job">{row.job_number}</h2>
       <div className="rv-preview-title">{row.title}</div>
-      {row.folder && <div className="muted small">{folderName(row.folder)}</div>}
+      {(row.project || row.folder) && <div className="muted small">{row.project ?? folderName(row.folder)}</div>}
       {!ws && <Spinner />}
       {ws && (
         <>

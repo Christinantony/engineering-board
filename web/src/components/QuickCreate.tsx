@@ -8,9 +8,21 @@ import { claimTicket, createTicket } from '../lib/actions.ts';
 import { newKey } from '../lib/api.ts';
 import { toast } from '../lib/toasts.ts';
 import { PRIORITY_TEXT } from './bits.tsx';
+import { ProjectPicker } from './ProjectPicker.tsx';
+import { useLocation } from '../lib/router.ts';
+
+/** The project used for the last new job, offered again for the next one (this page only). */
+let lastProject: number | null = null;
 
 export function QuickCreate({ onClose }: { onClose: () => void }) {
-  const { me, jobTypes, openJob } = useApp();
+  const { me, jobTypes, openJob, project: projectById } = useApp();
+  const { path, params } = useLocation();
+  // on a project's page, new jobs go to that project
+  const pagePj = path === '/projects' ? Number(params.get('project')) || null : null;
+  const [project, setProject] = useState<number | null>(() => {
+    const pick = pagePj ?? lastProject;
+    return pick != null && projectById(pick) ? pick : null;
+  });
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<Priority>('normal');
@@ -40,11 +52,17 @@ export function QuickCreate({ onClose }: { onClose: () => void }) {
       toast('Give the job a short title first', { kind: 'error' });
       return;
     }
+    if (project == null) {
+      document.getElementById('qc-project')?.focus();
+      toast('Choose the project this job belongs to (or add it with "+ Add a project…")', { kind: 'error' });
+      return;
+    }
     if (busy) return;
     setBusy(true);
     const t = await createTicket(
       {
         title: title.trim(),
+        project_id: project,
         description,
         priority,
         estimate_minutes: estimate ? Number(estimate) : null,
@@ -57,6 +75,7 @@ export function QuickCreate({ onClose }: { onClose: () => void }) {
     );
     setBusy(false);
     if (!t) return; // error already shown; the form keeps what was typed
+    lastProject = project;
     onClose();
     toast(`${t.job_number} created${t.assigned_to ? ' and claimed' : ''}`, {
       kind: 'success',
@@ -94,6 +113,10 @@ export function QuickCreate({ onClose }: { onClose: () => void }) {
           placeholder="e.g. Revise pump housing drawing to Rev D"
           onChange={(e: any) => setTitle(e.target.value)}
         />
+        <label className="qc-project">
+          <span className="field-label">Project</span>
+          <ProjectPicker id="qc-project" value={project} onChange={setProject} required />
+        </label>
         <textarea
           className="field-input"
           rows={2}

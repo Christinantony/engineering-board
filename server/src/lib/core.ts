@@ -17,7 +17,7 @@ export const badRequest = (message: string) => new HttpError(400, 'bad_request',
 export const forbidden = (message: string) => new HttpError(403, 'forbidden', message);
 
 export interface ChangeEvent {
-  type: 'ticket' | 'users' | 'job_types' | 'reload' | 'presence';
+  type: 'ticket' | 'users' | 'job_types' | 'projects' | 'reload' | 'presence';
   id?: number;
   version?: number;
   by?: number | null;

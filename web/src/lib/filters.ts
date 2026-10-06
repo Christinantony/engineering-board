@@ -11,6 +11,8 @@ export interface Filters {
   assignee: (number | 'none')[];
   priority: Priority[];
   jobType: number[];
+  /** Project ids, or "none" for jobs without a project. */
+  project: (number | 'none')[];
   status: Status[];
   overdue: boolean;
   blocked: boolean;
@@ -24,6 +26,7 @@ export const EMPTY_FILTERS: Filters = {
   assignee: [],
   priority: [],
   jobType: [],
+  project: [],
   status: [],
   overdue: false,
   blocked: false,
@@ -40,6 +43,7 @@ export function readFilters(params: URLSearchParams): Filters {
     assignee: list(params.get('a')).map((x) => (x === 'none' ? 'none' : Number(x))).filter((x) => x === 'none' || Number.isInteger(x)),
     priority: list(params.get('p')) as Priority[],
     jobType: list(params.get('jt')).map(Number).filter(Number.isInteger),
+    project: list(params.get('pr')).map((x) => (x === 'none' ? 'none' : Number(x))).filter((x) => x === 'none' || Number.isInteger(x)),
     status: list(params.get('st')) as Status[],
     overdue: params.get('o') === '1',
     blocked: params.get('b') === '1',
@@ -57,6 +61,7 @@ export function writeFilters(params: URLSearchParams, f: Filters): URLSearchPara
   set('a', f.assignee.join(','));
   set('p', f.priority.join(','));
   set('jt', f.jobType.join(','));
+  set('pr', f.project.join(','));
   set('st', f.status.join(','));
   set('o', f.overdue ? '1' : '');
   set('b', f.blocked ? '1' : '');
@@ -72,6 +77,7 @@ export function activeCount(f: Filters): number {
     (f.assignee.length ? 1 : 0) +
     (f.priority.length ? 1 : 0) +
     (f.jobType.length ? 1 : 0) +
+    (f.project.length ? 1 : 0) +
     (f.status.length ? 1 : 0) +
     Number(f.overdue) +
     Number(f.blocked) +
@@ -111,6 +117,7 @@ export function matches(t: Ticket, f: Filters, today = localDate()): boolean {
   if (f.assignee.length && !f.assignee.some((a) => (a === 'none' ? t.assigned_to == null : t.assigned_to === a))) return false;
   if (f.priority.length && !f.priority.includes(t.priority)) return false;
   if (f.jobType.length && (t.job_type_id == null || !f.jobType.includes(t.job_type_id))) return false;
+  if (f.project.length && !f.project.some((p) => (p === 'none' ? t.project_id == null : t.project_id === p))) return false;
   if (f.status.length && !f.status.includes(t.status)) return false;
   if (f.overdue && !t.overdue) return false;
   if (f.blocked && t.status !== 'waiting' && t.status !== 'blocked') return false;
@@ -129,6 +136,7 @@ export function toQuery(f: Filters, today = localDate()): URLSearchParams {
   if (f.assignee.length) q.set('assignee', f.assignee.join(','));
   if (f.priority.length) q.set('priority', f.priority.join(','));
   if (f.jobType.length) q.set('job_type', f.jobType.join(','));
+  if (f.project.length) q.set('project', f.project.join(','));
   if (f.status.length) q.set('status', f.status.join(','));
   if (f.overdue) q.set('overdue', '1');
   if (f.blocked) q.set('blocked', '1');

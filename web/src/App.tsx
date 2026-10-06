@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { PASSWORD_MIN, ROLE_LABEL, seesWholeBoard, type JobType, type User } from '@board/shared';
+import { PASSWORD_MIN, ROLE_LABEL, seesWholeBoard, type JobType, type Project, type User } from '@board/shared';
 import { AppContext, type AppState, type Meta } from './context.ts';
 import { del, post, setUnauthenticatedHandler } from './lib/api.ts';
 import { setTimeZone } from './lib/format.ts';
@@ -26,12 +26,14 @@ import { Search } from './views/Search.tsx';
 import { Today } from './views/Today.tsx';
 import { Workload } from './views/Workload.tsx';
 import { ReviewQueue } from './views/ReviewQueue.tsx';
+import { Projects } from './views/Projects.tsx';
 import { ReviewWorkspaceView } from './views/ReviewWorkspace.tsx';
 
 const NAV = [
   { path: '/board', label: 'Board', key: 'b' },
   { path: '/today', label: 'Today', key: 't' },
   { path: '/my-work', label: 'My work', key: 'm' },
+  { path: '/projects', label: 'Projects', key: 'p' },
   { path: '/dashboard', label: 'Dashboard', key: 'd' },
   { path: '/review', label: 'Review', key: 'v' },
   { path: '/workload', label: 'Workload', key: 'w' },
@@ -53,6 +55,7 @@ const VIEWS: Record<string, () => any> = {
   '/activity': ActivityFeed,
   '/admin': Admin,
   '/review': ReviewQueue,
+  '/projects': Projects,
 };
 
 export function App() {
@@ -212,6 +215,8 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
   const [creating, setCreating] = useState(false);
   const live = useLiveState();
   const whole = seesWholeBoard(me);
+  // reviewers don't see projects (decision #29)
+  const projects = useQuery<{ projects: Project[] }>(whole ? '/api/projects' : null);
   const nav = whole ? NAV : REVIEWER_NAV;
   const home = whole ? '/board' : '/review';
   // a reviewer never opens the job panel
@@ -254,25 +259,29 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
   }, []);
 
   const state = useMemo<AppState | null>(() => {
-    if (!users.data || !types.data) return null;
+    if (!users.data || !types.data || (whole && !projects.data)) return null;
     const all = users.data.users;
     const byId = new Map(all.map((u) => [u.id, u]));
     const jt = new Map(types.data.job_types.map((j) => [j.id, j]));
+    const projectList = projects.data?.projects ?? [];
+    const pr = new Map(projectList.map((p) => [p.id, p]));
     return {
       me: byId.get(me.id) ?? me,
       users: all,
       engineers: all.filter((u) => u.role === 'engineer'),
       jobTypes: types.data.job_types,
+      projects: projectList,
       meta,
       user: (id) => (id == null ? undefined : byId.get(id)),
       jobType: (id) => (id == null ? undefined : jt.get(id)),
+      project: (id) => (id == null ? undefined : pr.get(id)),
       openJob,
       newJob,
     };
-  }, [users.data, types.data, me, meta, openJob, newJob]);
+  }, [users.data, types.data, projects.data, me, meta, openJob, newJob]);
 
   if (!state) {
-    const err = users.error ?? types.error;
+    const err = users.error ?? types.error ?? projects.error;
     return <div className="center-screen">{err ? <ErrorBox message={err.message} retry={() => invalidate()} /> : <Spinner />}</div>;
   }
 
@@ -403,6 +412,7 @@ const TITLES: Record<string, string> = {
   '/activity': 'Team activity',
   '/admin': 'Admin',
   '/review': 'Drawing review',
+  '/projects': 'Projects',
 };
 
 function View({ path }: { path: string }) {

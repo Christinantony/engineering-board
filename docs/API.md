@@ -1,4 +1,4 @@
-# API reference (v1.1)
+# API reference (v1.4)
 
 All endpoints are under `/api` and use JSON. Mutating requests must send `Content-Type: application/json`, which together with `SameSite=Strict` cookies blocks cross-site form posts.
 
@@ -42,12 +42,23 @@ Everyone signs in with their own password (decision #28). A new person, or one w
 | GET | `/api/meta` | Version, time zone, today's date, statuses, estimate buckets, and whether the default PIN is still set. |
 | GET | `/api/health` | Liveness check. |
 
+## Projects
+
+Every job created on the board belongs to a project (decision #30). Reviewers get 403 on both routes.
+
+| Method | Path | Body / notes |
+|---|---|---|
+| GET | `/api/projects` | `{projects: [{id, name, created_by, created_at, open, total}]}`, sorted by name. `open` counts jobs not done, cancelled or archived. |
+| POST | `/api/projects` | `{name}` (1–100 characters; extra spaces are collapsed). Engineers and the manager. 201 `{project}`; a name that already exists (any case) answers 409 `project_exists` with the existing `project`. |
+
+Tickets carry `project_id` (null for jobs from before projects, or imported without one). `PATCH /api/tickets/:id` accepts `project_id` to move a job to another project; it can't be set back to null. Live updates send `{type:'projects'}` when one is added. CSV exports have a `project` column, JSON exports a `projects` list and each ticket's `project`. Import preview rows carry `project` and `project_is_new`, the preview has `new_projects` and `no_project_column`, and `create_projects=0` leaves unknown names blank.
+
 ## Tickets
 
 | Method | Path | Body / query |
 |---|---|---|
-| GET | `/api/tickets` | Query: `view=board` (hides cancelled jobs and done jobs older than 7 days), `q`, `assignee=1,2,none`, `status`, `priority`, `job_type`, `tag`, `overdue=1`, `blocked=1`, `unassigned=1`, `due_from`/`due_to`, `created_from`/`created_to` (YYYY-MM-DD), `archived=exclude\|only\|include`, `limit`, `offset`. Returns `{tickets, total, revision}`. Default page size: 2000 for `view=board`, otherwise 100; explicit `limit` is capped at 2000. |
-| POST | `/api/tickets` | `{title, description?, priority?, requester?, job_type_id?, estimate_minutes?, due_date?, due_time?, reference?, file_location?, notes?, tags?, parent_job_id?, claim?, assigned_to?}`. Send an `Idempotency-Key` header so retries never duplicate. Returns 201, or 200 with `replayed: true`. |
+| GET | `/api/tickets` | Query: `view=board` (hides cancelled jobs and done jobs older than 7 days), `q`, `assignee=1,2,none`, `status`, `priority`, `job_type`, `project=1,2,none`, `tag`, `overdue=1`, `blocked=1`, `unassigned=1`, `due_from`/`due_to`, `created_from`/`created_to` (YYYY-MM-DD), `archived=exclude\|only\|include`, `limit`, `offset`. Returns `{tickets, total, revision}`. Default page size: 2000 for `view=board`, otherwise 100; explicit `limit` is capped at 2000. |
+| POST | `/api/tickets` | `{title, project_id, description?, priority?, requester?, job_type_id?, estimate_minutes?, due_date?, due_time?, reference?, file_location?, notes?, tags?, parent_job_id?, claim?, assigned_to?}`. `project_id` is required (400 `validation` with path `project_id` otherwise). Send an `Idempotency-Key` header so retries never duplicate. Returns 201, or 200 with `replayed: true`. |
 | GET | `/api/tickets/:id` | `{ticket, activity}` |
 | PATCH | `/api/tickets/:id` | `{version, ...fields}`. A stale `version` returns 409 with `current`. |
 | POST | `/api/tickets/:id/move` | `{status, from_status?, before_id?, after_id?, reason?}`. Handles drag and drop: status change plus position. |

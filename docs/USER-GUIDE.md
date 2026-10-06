@@ -45,7 +45,9 @@ Cards show the job number, title, owner, priority, due date and estimate. The du
 
 ## Creating a job
 
-Press <kbd>N</kbd> or click **+ New job**. Only the title is needed; everything else can be added later.
+Press <kbd>N</kbd> or click **+ New job**. A job needs a title and its **project**; everything else can be added later.
+
+- **Project**: every job belongs to a project. Choose it from the list. If it's a new project, choose **+ Add a project…** and type its name: it's added to the list for everyone, and chosen for this job. The board offers the project you used last; from a project's page, **+ New job in this project** fills it in.
 
 - <kbd>Enter</kbd> creates it in the Inbox. <kbd>Shift</kbd>+<kbd>Enter</kbd> creates it and claims it for you in one go.
 - **Priority**: urgent, high, normal or low. A new urgent job notifies everyone.
@@ -65,6 +67,17 @@ Click a card to open its panel on the right. Every field saves as you finish wit
 **Working on the same job as someone else:** you see who else has it open ("Also viewing"). If you both change *different* fields, both changes are kept with no fuss. If you both change the *same* field, you're asked which version to keep: yours, theirs, or both (for notes and descriptions).
 
 **Release** gives a claimed job back to the Inbox. **Archive** (for done or cancelled jobs) hides it from normal lists; **Restore** brings it back.
+
+## Projects
+
+**Projects** in the top bar (<kbd>P</kbd>) lists every project with its open and total jobs. Choose one to see all of its jobs, open ones first, then done, cancelled and archived ones. From there, **Show on the board** filters the board to that project, and **+ New job in this project** starts a job in it.
+
+- **Adding a project:** **+ Add project** here, or **+ Add a project…** in the New job form or a job's Project field. There is no preset list: add each project when its first job comes in. A name can only be used once, so typing an existing name (in any capitals) just chooses that project.
+- **A job's project** shows on its card, in lists, and at the top of its details, where you can move it to another project (the change is kept in its history) and open **All its jobs**.
+- **Filter by project** with **Project** on the board's and search's filter bar. Searching for a project's name finds its jobs.
+- **No project:** jobs from before projects existed, or imported without one, are listed under **No project** on the Projects page until someone picks their project.
+
+Projects can't be renamed or deleted, so check the name before adding it.
 
 ## Drawing review
 
@@ -168,7 +181,7 @@ It also reminds you of your own jobs that are overdue or due today. Opening the 
 |---|---|---|
 | Anywhere | <kbd>N</kbd> | New job |
 | | <kbd>F</kbd> or <kbd>/</kbd> | Search |
-| | <kbd>B</kbd> <kbd>T</kbd> <kbd>M</kbd> <kbd>D</kbd> <kbd>W</kbd> <kbd>R</kbd> | Board, Today, My work, Dashboard, Workload, Reports |
+| | <kbd>B</kbd> <kbd>T</kbd> <kbd>M</kbd> <kbd>P</kbd> <kbd>D</kbd> <kbd>W</kbd> <kbd>R</kbd> | Board, Today, My work, Projects, Dashboard, Workload, Reports |
 | | <kbd>?</kbd> | List of shortcuts |
 | | <kbd>Esc</kbd> | Close the panel, dialog or menu |
 | Board, with a card selected | <kbd>Tab</kbd> or arrow keys | Move between cards |

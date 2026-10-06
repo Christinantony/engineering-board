@@ -43,6 +43,7 @@ import {
 } from './domain/auth.ts';
 import { createUser, getUser, listUsers, requireUser, updateUser } from './domain/users.ts';
 import { createJobType, listJobTypes, updateJobType } from './domain/jobTypes.ts';
+import { createProject, listProjects } from './domain/projects.ts';
 import {
   addComment,
   archiveTicket,
@@ -107,7 +108,7 @@ import { jobsNeedingSync, markSyncPending, revisionLog, settleSyncs, syncProject
 /** Default maximum PDF upload for drawing review (merged signed scans can be large). */
 export const DEFAULT_REVIEW_UPLOAD_MAX_MB = 200;
 
-export const APP_VERSION = '1.3.0';
+export const APP_VERSION = '1.4.0';
 
 export interface AppOptions {
   dbPath: string;
@@ -334,10 +335,15 @@ export function createApp(opts: AppOptions): App {
 
   // ---- tickets ----
   board('GET', '/api/tickets', (req) => listTickets(ctx, parseFilters(req.query)));
+  // ---- projects (decision #30): added by the team when needed, none preset ----
+  board('GET', '/api/projects', () => ({ projects: listProjects(ctx) }));
+  worker('POST', '/api/projects', (req, user) => new Reply(201, { project: createProject(ctx, user, req.body ?? {}) }));
+
   worker('POST', '/api/tickets', (req, user) => {
     const key = req.headers['idempotency-key'];
     const k = typeof key === 'string' && key.length >= 8 && key.length <= 100 ? key : undefined;
-    const { ticket, replayed } = createTicket(ctx, user, req.body ?? {}, k);
+    // every job created on the board belongs to a project (decision #30)
+    const { ticket, replayed } = createTicket(ctx, user, req.body ?? {}, k, { requireProject: true });
     return new Reply(replayed ? 200 : 201, { ticket, replayed });
   });
   board('GET', '/api/tickets/:id', (req) => ({ ticket: getTicket(ctx, id(req)), activity: ticketActivity(ctx, id(req)) }));
@@ -551,6 +557,7 @@ export function createApp(opts: AppOptions): App {
   const importOpts = (req: Request) => ({
     date_order: req.query.get('date_order') === 'MDY' ? ('MDY' as const) : ('DMY' as const),
     create_job_types: req.query.get('create_job_types') !== '0',
+    create_projects: req.query.get('create_projects') !== '0',
     filename: (req.query.get('filename') ?? '').slice(0, 200),
     skip_invalid: req.query.get('skip_invalid') === '1',
     allow_duplicate: req.query.get('allow_duplicate') === '1',

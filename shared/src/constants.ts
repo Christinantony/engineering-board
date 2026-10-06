@@ -113,6 +113,18 @@ export interface JobType {
   active: boolean;
 }
 
+/** A project jobs belong to, added by the team when it is needed (decision #30). */
+export interface Project {
+  id: number;
+  name: string;
+  created_by: number | null;
+  created_at: string;
+  /** Jobs in this project that are open (not done, cancelled or archived). */
+  open: number;
+  /** All jobs in this project, archived included. */
+  total: number;
+}
+
 export interface Ticket {
   id: number;
   job_number: string;
@@ -124,6 +136,8 @@ export interface Ticket {
   created_by: number | null;
   requester: string;
   job_type_id: number | null;
+  /** The job's project. Null only for jobs from before projects existed (or imported without one). */
+  project_id: number | null;
   estimate_minutes: number | null;
   actual_minutes: number | null;
   due_date: string | null; // YYYY-MM-DD (local)
@@ -317,6 +331,8 @@ export interface ReviewQueueRow {
   job_number: string;
   title: string;
   folder: string;
+  /** The job's project (null for reviewers, and for jobs without one). */
+  project: string | null;
   submissions: number;
   submitted_by: number | null;
   submitted_at: string;

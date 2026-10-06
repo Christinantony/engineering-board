@@ -10,6 +10,7 @@ import { ask } from '../lib/dialogs.ts';
 import { clock, dueLabel, when } from '../lib/format.ts';
 import { useQuery } from '../lib/store.ts';
 import { navigate } from '../lib/router.ts';
+import { ProjectPicker } from './ProjectPicker.tsx';
 import { toast } from '../lib/toasts.ts';
 import { Badge, ErrorBox, PRIORITY_TEXT, Spinner } from './bits.tsx';
 import { AlsoViewing, useAnnounceViewing } from './Collab.tsx';
@@ -339,6 +340,19 @@ function PanelContent({ t, activity, onClose }: { t: Ticket; activity: Activity[
       </div>
 
       <dl className="fields">
+        <div className={`field${t.project_id == null ? ' field-missing' : ''}`}>
+          <dt className="field-label">Project</dt>
+          <dd className="field-project">
+            <ProjectPicker value={t.project_id} onChange={(pid) => void save({ project_id: pid })} />
+            {t.project_id != null ? (
+              <button className="link-btn" onClick={() => navigate(`/projects?project=${t.project_id}`)} title="Every job in this project">
+                All its jobs
+              </button>
+            ) : (
+              <span className="field-hint">Every job belongs to a project: choose one.</span>
+            )}
+          </dd>
+        </div>
         <div className="field">
           <dt className="field-label">Status</dt>
           <dd>

@@ -17,6 +17,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_PATH ?? 'playwright');
 const PORT = 18093;
 const BASE = `http://127.0.0.1:${PORT}`;
 let server, dir, browser;
+/** A demo project id, for jobs created through the API (every new job needs a project). */
+let PROJECT_ID;
+/** Choose the project in the New job form. */
+const pickProject = (p, name = 'Pump skid') => p.selectOption('#qc-project', { label: name });
 /** Every seeded person creates this password before the tests (as they would at a first sign-in). */
 const PASSWORD = 'board-e2e-1';
 
@@ -57,6 +61,8 @@ before(async () => {
   const s = await api('POST', '/api/session', { user_id: 1, password: PASSWORD });
   const u = await api('POST', '/api/admin/unlock', { pin: '1234' }, s.cookie);
   await api('POST', '/api/admin/demo', {}, `${s.cookie}; ${u.cookie}`);
+  // the demo adds projects; jobs made through the API below go in one of them
+  PROJECT_ID = (await (await fetch(BASE + '/api/projects', { headers: { cookie: s.cookie } })).json()).projects.find((p) => p.name === 'Pump skid').id;
   browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH });
 });
 
@@ -154,6 +160,7 @@ test('quick create with N and Shift+Enter creates and claims', async () => {
   const c = await login('Allen');
   await c.keyboard.press('n');
   await c.fill('#qc-title', 'Check weld symbol on frame drawing');
+  await pickProject(c);
   await c.keyboard.press('Shift+Enter');
   await c.waitForSelector('.toast:has-text("created and claimed")');
   assert.equal(await columnOf(c, 'Check weld symbol'), 'claimed');
@@ -248,6 +255,7 @@ test('my work can be reordered with the keyboard', async () => {
   for (const title of ['Queue one', 'Queue two']) {
     await a.keyboard.press('n');
     await a.fill('#qc-title', title);
+    await pickProject(a);
     await a.keyboard.press('Shift+Enter');
     await a.waitForSelector('.quick-create', { state: 'detached' });
   }
@@ -323,6 +331,7 @@ test('assignment pops a notification for the engineer, with a count on the bell'
   const jeffin = await login('Jeffin');
   await jeffin.keyboard.press('n');
   await jeffin.fill('#qc-title', 'Notify Allen about this');
+  await pickProject(jeffin);
   await jeffin.keyboard.press('Enter');
   await jeffin.waitForSelector('.quick-create', { state: 'detached' });
   const card = jeffin.locator('.card', { hasText: 'Notify Allen about this' });
@@ -402,6 +411,7 @@ test('admin: back up now, then restore it; the board follows', async () => {
   const other = await login('Paul');
   await other.keyboard.press('n');
   await other.fill('#qc-title', 'Created after the backup');
+  await pickProject(other);
   await other.keyboard.press('Enter');
   await other.waitForSelector('.card:has-text("Created after the backup")');
   // restore the newest manual backup
@@ -517,7 +527,7 @@ test('the host PC going away and coming back: people are told, then it carries o
   }
   // a job created while Allen's screen was reconnecting still shows up
   const s = await api('POST', '/api/session', { user_id: 2, password: PASSWORD });
-  await api('POST', '/api/tickets', { title: 'Made after the restart' }, s.cookie);
+  await api('POST', '/api/tickets', { title: 'Made after the restart', project_id: PROJECT_ID }, s.cookie);
   await p.waitForSelector('.banner-bad', { state: 'detached', timeout: 20000 });
   await p.waitForSelector('.card:has-text("Made after the restart")', { timeout: 15000 });
   // the board is usable again: open the new job
@@ -587,7 +597,7 @@ test('large board and workload lists show every job; later-page failures stay vi
         await route.fulfill({ status: 429, contentType: 'application/json', body: JSON.stringify({ error: 'test_page_failure', message: 'Later page temporarily unavailable.' }) });
       } else await route.continue();
     });
-    const made = await api('POST', '/api/tickets', { title: 'Pagination refresh trigger' }, s.cookie);
+    const made = await api('POST', '/api/tickets', { title: 'Pagination refresh trigger', project_id: PROJECT_ID }, s.cookie);
     assert.equal(made.r.status, 201);
     await p.waitForSelector('.error-box:has-text("last complete load")');
     assert.equal(await p.locator('.card[data-card]').count(), expected.total, 'no partial refresh replaces the complete board');
@@ -612,12 +622,12 @@ test('large board and workload lists show every job; later-page failures stay vi
       } else await route.continue();
     });
     try {
-      assert.equal((await api('POST', '/api/tickets', { title: 'Pagination inflight trigger' }, s.cookie)).r.status, 201);
+      assert.equal((await api('POST', '/api/tickets', { title: 'Pagination inflight trigger', project_id: PROJECT_ID }, s.cookie)).r.status, 201);
       let deadline;
       try {
         await Promise.race([received, new Promise((_, reject) => { deadline = setTimeout(() => reject(new Error('refresh did not request its last page')), 5000); })]);
       } finally { clearTimeout(deadline); }
-      assert.equal((await api('POST', '/api/tickets', { title: 'Created while last page was inflight' }, s.cookie)).r.status, 201);
+      assert.equal((await api('POST', '/api/tickets', { title: 'Created while last page was inflight', project_id: PROJECT_ID }, s.cookie)).r.status, 201);
       // Let the 120 ms SSE coalescer invalidate the still-pending collection.
       await p.waitForTimeout(300);
     } finally { releaseLastPage(); }
@@ -912,4 +922,53 @@ test('password sign-in: a new person creates theirs, a wrong one is refused, cha
   await p.waitForSelector('text=create one now');
   // tidy: make Nila inactive so the other tests' pickers are unchanged
   await api('PATCH', `/api/admin/users/${nilaId}`, { active: false }, `${s.cookie}; ${u.cookie}`);
+});
+
+test('projects: add one from the New job form, find its jobs, show it on the board and in the job', async () => {
+  const c = await login('Christin');
+  // a job can't be created without a project
+  await c.keyboard.press('n');
+  await c.fill('#qc-title', 'Align spiral array feed');
+  await c.click('.quick-create button:has-text("Create job")');
+  await c.waitForSelector('.toast:has-text("Choose the project this job belongs to")');
+  // add a new project right from the form
+  await c.selectOption('#qc-project', { label: '+ Add a project…' });
+  await c.waitForSelector('#dialog-text');
+  await c.fill('#dialog-text', '  Spiral   array ');
+  await c.click('.dialog button:has-text("Add project")');
+  await c.waitForSelector('.toast:has-text(\'Project "Spiral array" added\')');
+  assert.equal(await c.locator('#qc-project option:checked').innerText(), 'Spiral array');
+  await c.click('.quick-create button:has-text("Create job")');
+  await c.waitForSelector('.toast:has-text("created")');
+
+  // the card shows its project, and the board filters by project
+  await c.waitForSelector('.card:has-text("Align spiral array feed") .card-project:has-text("Spiral array")');
+  await c.click('.fdrop summary:has-text("Project")');
+  await c.click('.fopt:has-text("Spiral array") input');
+  await c.waitForFunction(() => document.querySelectorAll('.card').length === 1);
+  assert.match(c.url(), /pr=\d+/);
+
+  // the Projects page lists it with its job; a duplicate name picks the existing project
+  await c.keyboard.press('Escape');
+  await c.goto(BASE + '/projects');
+  await c.click('.pj-item:has-text("Spiral array")');
+  await c.waitForSelector('.pj-detail .jobrow:has-text("Align spiral array feed")');
+  assert.match(await c.locator('.pj-item:has-text("Spiral array") .pj-counts').innerText(), /1 open · 1 total/);
+  await c.click('button:has-text("+ Add project")');
+  await c.fill('#dialog-text', 'SPIRAL ARRAY');
+  await c.click('.dialog button:has-text("Add project")');
+  await c.waitForSelector('.toast:has-text("already exists")');
+  assert.equal(await c.locator('.pj-item:has-text("Spiral array")').count(), 1);
+
+  // a new job from the project's page goes into that project
+  await c.click('button:has-text("+ New job in this project")');
+  assert.equal(await c.locator('#qc-project option:checked').innerText(), 'Spiral array');
+  await c.keyboard.press('Escape');
+
+  // the job panel shows the project and can move the job to another one
+  await c.click('.pj-detail .jobrow:has-text("Align spiral array feed")');
+  await c.waitForSelector('.panel-body .field-project select');
+  assert.equal(await c.locator('.panel-body .field-project option:checked').innerText(), 'Spiral array');
+  await c.selectOption('.panel-body .field-project select', { label: 'Pump skid' });
+  await c.waitForSelector('.tl-item:has-text("changed project: Spiral array → Pump skid")');
 });

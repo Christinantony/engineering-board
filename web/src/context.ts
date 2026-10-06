@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { JobType, User } from '@board/shared';
+import type { JobType, Project, User } from '@board/shared';
 
 export interface Meta {
   version: string;
@@ -16,9 +16,12 @@ export interface AppState {
   users: User[];
   engineers: User[];
   jobTypes: JobType[];
+  /** Projects, sorted by name (empty for reviewers, who don't see projects). */
+  projects: Project[];
   meta: Meta;
   user(id: number | null | undefined): User | undefined;
   jobType(id: number | null | undefined): JobType | undefined;
+  project(id: number | null | undefined): Project | undefined;
   openJob(id: number | null): void;
   newJob(): void;
 }

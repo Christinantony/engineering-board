@@ -169,12 +169,14 @@ export const ticketFields = {
   tags: v.array(v.string({ min: 1, max: 40 }), { max: 20 }),
 };
 
-export const createTicketSchema = v.object({
+const createTicketShape = {
   title: ticketFields.title,
   description: v.withDefault(ticketFields.description, ''),
   priority: v.withDefault(ticketFields.priority, 'normal'),
   requester: v.withDefault(ticketFields.requester, ''),
   job_type_id: v.optional(ticketFields.job_type_id),
+  /** Required for jobs created on the board (checked by the route); optional for imports. */
+  project_id: v.optional(v.nullable(id)),
   estimate_minutes: v.optional(ticketFields.estimate_minutes),
   due_date: v.optional(ticketFields.due_date),
   due_time: v.optional(ticketFields.due_time),
@@ -187,6 +189,17 @@ export const createTicketSchema = v.object({
   claim: v.withDefault(v.bool(), false),
   /** Assign on creation (manager use). */
   assigned_to: v.optional(v.nullable(id)),
+};
+/** Creating a job through the importer (a project is optional there). */
+export const createTicketSchema = v.object(createTicketShape);
+/** Creating a job on the board: it must belong to a project (decision #30). */
+export const createBoardTicketSchema = v.object({
+  ...createTicketShape,
+  project_id: (input: unknown, path = '') => {
+    if (input === undefined || input === null || input === '')
+      throw new ValidationError([{ path, message: 'choose the project this job belongs to (or add the project first)' }]);
+    return id(input, path);
+  },
 });
 export type CreateTicketInput = Infer<typeof createTicketSchema>;
 
@@ -197,6 +210,8 @@ export const updateTicketSchema = v.object({
   priority: v.optional(ticketFields.priority),
   requester: v.optional(ticketFields.requester),
   job_type_id: v.optional(ticketFields.job_type_id),
+  /** A job can move to another project, but never back to having none. */
+  project_id: v.optional(id),
   estimate_minutes: v.optional(ticketFields.estimate_minutes),
   actual_minutes: v.optional(ticketFields.actual_minutes),
   due_date: v.optional(ticketFields.due_date),
@@ -252,6 +267,10 @@ export const passwordField = v.string({ min: PASSWORD_MIN, max: 100, trim: false
 export const signInSchema = v.object({ user_id: v.int({ min: 1 }), password: v.string({ max: 100, trim: false }) });
 export const createPasswordSchema = v.object({ user_id: v.int({ min: 1 }), password: passwordField });
 export const changePasswordSchema = v.object({ current_password: v.string({ max: 100, trim: false }), new_password: passwordField });
+
+export const projectSchema = v.object({
+  name: v.string({ min: 1, max: 100 }),
+});
 
 export const jobTypeSchema = v.object({
   name: v.string({ min: 1, max: 60 }),

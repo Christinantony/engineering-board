@@ -116,7 +116,7 @@ export function setCached<T>(key: string, fn: (prev: T | undefined) => T) {
 }
 
 export const TICKET_KEYS = (k: string) =>
-  /^\/api\/(tickets|dashboard|today|my-work|workload|activity|tags|notifications|reports|reviews)/.test(k);
+  /^\/api\/(tickets|dashboard|today|my-work|workload|activity|tags|notifications|reports|reviews|projects)/.test(k);
 
 // ---------------------------------------------------------------------------
 // Live updates (Server-Sent Events) with a 30-second polling fallback
@@ -230,6 +230,7 @@ export function startLive(meId?: number, loadedVersion?: string) {
       } else if (e.type === 'presence') invalidate('/api/presence');
       else if (e.type === 'users') invalidate((k) => k.startsWith('/api/users') || k.startsWith('/api/admin/users') || TICKET_KEYS(k));
       else if (e.type === 'job_types') invalidate('/api/job-types');
+      else if (e.type === 'projects') invalidate('/api/projects');
       else if (e.type === 'reload') invalidate();
     } catch {
       /* ignore malformed event */

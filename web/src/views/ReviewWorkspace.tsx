@@ -31,7 +31,7 @@ import { useFocusTrap } from '../lib/focus.ts';
 type Compare = 'reference' | 'previous' | 'none';
 
 export function ReviewWorkspaceView({ ticketId }: { ticketId: number }) {
-  const { me } = useApp();
+  const { me, project } = useApp();
   const { params } = useLocation();
   const q = useQuery<ReviewWorkspace>(`/api/tickets/${ticketId}/review`);
   const w = q.data;
@@ -69,6 +69,11 @@ export function ReviewWorkspaceView({ ticketId }: { ticketId: number }) {
           <span className="rw-jobno">{w.ticket.job_number}</span> · {w.ticket.title}
         </h1>
         <div className="rw-chips">
+          {project(w.ticket.project_id) && (
+            <span className="rv-chip rv-plain" title="Project">
+              {project(w.ticket.project_id)!.name}
+            </span>
+          )}
           {w.ticket.file_location && (
             <span className="rv-chip rv-plain" title={w.ticket.file_location}>
               {folderName(w.ticket.file_location)}
