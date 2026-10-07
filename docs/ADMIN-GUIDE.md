@@ -29,13 +29,11 @@ Everyone sees a change straight away: the board refreshes itself.
 
 ## Tools
 
-**Admin → Tools** holds the reference data behind the **Tools** page. For the sheet calculator:
+**Admin → Tools** holds the reference data behind the **Tools** page. The sheet calculator is the team's *Sheet Requirement Calculator* workbook (kept in the repository under `docs/tools/`) as a board page; its Materials sheet is this list:
 
-- **Materials**: name, optional density (kg/m³, used for the sheet mass) and order. Retiring a material hides it from new calculations.
-- **Standard sheet sizes**: length × width in mm per material. Leave the thickness empty for a size stocked in every thickness, or give it to list what is stocked per thickness; components of that thickness then use only those sizes. Sizes can be removed.
-- **Settings**: the usable share of a sheet (allowance for scrap and offcuts when counting by area; 85% to start) and the cut width (added to each part when counting how many fit on a sheet).
-
-The board starts with mild steel, two stainless grades and aluminium in common sheet sizes so the calculator works on day one; edit the list to match what the team buys.
+- **Materials**: name and order. Retiring a material hides it from new calculations; nothing is deleted.
+- **Standard sheet sizes**: sheet length × width in mm per material. The list starts with the workbook's typical stock sizes (mild steel, stainless steel and aluminium 2500 × 1250; copper and brass 2000 × 1000; plywood, MDF and acrylic 2440 × 1220; FR4 1220 × 1020; PTFE 1200 × 1000), which the workbook itself calls placeholders: replace them with what your supplier delivers. A material may have several sizes; the calculator then uses the one needing the fewest sheets.
+- **Defaults** for the workbook's three inputs, prefilled for every new calculation: spacing / kerf (3 mm), edge margin (5 mm) and rotation (allowed). People can change them for a calculation.
 
 ## Drawing review and project folders
 

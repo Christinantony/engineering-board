@@ -143,7 +143,7 @@ What each role may do with jobs is a setting (decision #31): `{engineer, manager
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/api/tools/sheet` | `{materials, sizes, settings}` for the sheet calculator. Anyone with board access. The calculation runs in the browser (`shared/src/sheets.ts`). |
+| GET | `/api/tools/sheet` | `{materials, sizes, settings}` for the sheet calculator: materials `{id, name, sort_order, active}`, sizes `{id, material_id, length, width, active}`, settings `{kerf, margin, rotate}` (the workbook's input defaults). Anyone with board access. The calculation runs in the browser (`shared/src/sheets.ts`, the workbook formula for formula). |
 
 ## Admin (unlock with the PIN first)
 
@@ -155,9 +155,9 @@ What each role may do with jobs is a setting (decision #31): `{engineer, manager
 | GET/POST | `/api/admin/users`; PATCH `/api/admin/users/:id` `{name?, initials?, color?, role?, is_admin?, active?}`. `role` is `engineer`, `manager` or `reviewer`. |
 | DELETE | `/api/admin/users/:id/password`: reset a forgotten password. The person is signed out everywhere and creates a new one at their next sign-in (409 if they have none). |
 | GET/PUT | `/api/admin/permissions` `{engineer: {create, claim, edit}, manager: {…}, reviewer: {…}}`. PUT answers 409 when it would take `claim` from a role whose members hold open jobs. |
-| POST/PATCH | `/api/admin/materials`, `/api/admin/materials/:id` `{name?, density?, sort_order?, active?}` |
-| POST/PATCH/DELETE | `/api/admin/sheet-sizes`, `/api/admin/sheet-sizes/:id` `{material_id, thickness?, length, width}`; `thickness` null means every thickness. |
-| PUT | `/api/admin/tools/sheet-settings` `{utilisation (0.1–1), kerf (mm)}` |
+| POST/PATCH | `/api/admin/materials`, `/api/admin/materials/:id` `{name?, sort_order?, active?}` |
+| POST/PATCH/DELETE | `/api/admin/sheet-sizes`, `/api/admin/sheet-sizes/:id` `{material_id, length, width}` |
+| PUT | `/api/admin/tools/sheet-settings` `{kerf (mm), margin (mm), rotate}` |
 | POST | `/api/admin/job-types`; PATCH `/api/admin/job-types/:id` |
 | POST/DELETE | `/api/admin/demo`: load or clear the demo jobs |
 | GET | `/api/admin/info`: database size and counts, backup folder, list of backups |

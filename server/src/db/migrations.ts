@@ -444,24 +444,23 @@ CREATE INDEX idx_ticket_projects_project ON ticket_projects(project_id);
     id: 10,
     name: 'tools: materials and sheet sizes',
     sql: /* sql */ `
--- Reference data for the sheet calculator (decision #32), kept by the admin
--- under Admin → Tools. Materials are retired, not deleted, so old
--- calculations keep their names; sizes can be removed.
+-- Reference data for the sheet calculator (decision #32): the Materials sheet
+-- of the team's Sheet Requirement Calculator workbook, kept by the admin under
+-- Admin → Tools. Materials are retired, not deleted, so old calculations keep
+-- their names; sizes can be removed. A material may list several stock sizes.
 CREATE TABLE materials (
   id         INTEGER PRIMARY KEY,
   name       TEXT NOT NULL COLLATE NOCASE UNIQUE CHECK (length(name) BETWEEN 1 AND 60),
-  density    REAL CHECK (density IS NULL OR density > 0),
   sort_order INTEGER NOT NULL DEFAULT 0,
   active     INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1))
 );
 CREATE TABLE sheet_sizes (
   id          INTEGER PRIMARY KEY,
   material_id INTEGER NOT NULL REFERENCES materials(id),
-  thickness   REAL CHECK (thickness IS NULL OR thickness > 0),
   length      REAL NOT NULL CHECK (length > 0),
   width       REAL NOT NULL CHECK (width > 0),
   active      INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1)),
-  UNIQUE (material_id, thickness, length, width)
+  UNIQUE (material_id, length, width)
 );
 `,
   },

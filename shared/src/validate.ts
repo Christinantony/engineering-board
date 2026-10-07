@@ -275,37 +275,21 @@ export const projectSchema = v.object({
 const capabilityFlags = v.object({ create: v.bool(), claim: v.bool(), edit: v.bool() });
 export const permissionsSchema = v.object({ engineer: capabilityFlags, manager: capabilityFlags, reviewer: capabilityFlags });
 
-// ---- tools: sheet calculator reference data (decision #32) ----
+// ---- tools: sheet calculator reference data (decision #32, the team's workbook) ----
 const mm = v.number({ min: 0.01, max: 100_000 });
-export const materialSchema = v.object({
-  name: v.string({ min: 1, max: 60 }),
-  /** kg/m³, optional: lets the calculator show sheet mass. */
-  density: v.optional(v.nullable(v.number({ min: 1, max: 30_000 }))),
-});
+export const materialSchema = v.object({ name: v.string({ min: 1, max: 60 }) });
 export const materialUpdateSchema = v.object({
   name: v.optional(v.string({ min: 1, max: 60 })),
-  density: v.optional(v.nullable(v.number({ min: 1, max: 30_000 }))),
   sort_order: v.optional(v.int()),
   active: v.optional(v.bool()),
 });
-export const sheetSizeSchema = v.object({
-  material_id: v.int({ min: 1 }),
-  /** null = this size is stocked in every thickness */
-  thickness: v.optional(v.nullable(mm)),
-  length: mm,
-  width: mm,
-});
-export const sheetSizeUpdateSchema = v.object({
-  thickness: v.optional(v.nullable(mm)),
-  length: v.optional(mm),
-  width: v.optional(mm),
-  active: v.optional(v.bool()),
-});
+export const sheetSizeSchema = v.object({ material_id: v.int({ min: 1 }), length: mm, width: mm });
+export const sheetSizeUpdateSchema = v.object({ length: v.optional(mm), width: v.optional(mm), active: v.optional(v.bool()) });
+/** Defaults for the workbook's three inputs: kerf (Calculator!B9), edge margin (B10) and rotation (B11). */
 export const sheetSettingsSchema = v.object({
-  /** Share of a sheet that becomes parts, 0.1–1: the rest is scrap and kerf. */
-  utilisation: v.number({ min: 0.1, max: 1 }),
-  /** Cut width in mm added to each part when counting how many fit on a sheet. */
-  kerf: v.number({ min: 0, max: 50 }),
+  kerf: v.number({ min: 0, max: 100 }),
+  margin: v.number({ min: 0, max: 500 }),
+  rotate: v.bool(),
 });
 
 export const jobTypeSchema = v.object({

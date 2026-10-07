@@ -142,9 +142,14 @@ After a drawing passes, the board removes the earlier attempts' PDFs (the histor
 
 ## Tools
 
-**Tools** (<kbd>O</kbd>) holds small calculators for the team. The first is the **sheet calculator**: list the flat components you need (name, material, thickness, blank length and width, quantity) and it tells you, per material and thickness, how many standard sheets to buy, which stock size needs the fewest, how many of each part fit on a sheet, how much of each sheet becomes parts, and the sheet mass when the material's density is known. Rows missing a material or thickness are left out and listed; a part larger than every stock sheet is flagged. The list is remembered in your browser; **Print** gives a copy for the purchase request.
+**Tools** (<kbd>O</kbd>) holds small calculators for the team. The first is the **sheet calculator**, the team's *Sheet Requirement Calculator* workbook as a board page, same inputs and same sums:
 
-The materials, their standard sheet sizes, the usable share of a sheet and the cut width come from **Admin → Tools**, so the list reflects what the team actually buys. **How this is counted**, under the results, explains the method.
+- One row per component: its **material**, **length a**, **width b** and **number n**. Add as many rows as you need; each is worked out on its own, and the total per material is shown at the top.
+- The three workbook settings apply to every row: **spacing / kerf** between adjacent parts, **edge margin** unusable on every side of the sheet, and **allow rotation by 90°**. They start at the defaults the admin keeps (3 mm, 5 mm, rotation on) and can be changed for a calculation; **Back to the defaults** restores them.
+- For each row: parts per sheet in each orientation and the one used, **sheets required**, parts on the last sheet, total area of parts, sheet area purchased, material utilisation and waste. Where a material has more than one stock size, each is tried and the one needing the fewest sheets is chosen.
+- **Show cutting layout** draws the workbook's Layout sheet to scale: the sheet, the usable area inside the margin, numbered parts, grey unused slots on a partly filled sheet, and a sheet-number box to step through the sheets.
+
+It is a straight-grid estimate, as the workbook says: a nesting program may save a little more. Rows missing a material, size or number are listed as not counted. The list is remembered in your browser; **Print** gives a copy for the purchase request. The materials and stock sizes come from **Admin → Tools**.
 
 ## Other pages
 

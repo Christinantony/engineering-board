@@ -1,7 +1,8 @@
 // Tools (decision #32): reference data for the engineers' toolset, kept by the
-// admin under Admin → Tools. The first tool is the sheet calculator; its
-// materials, standard sheet sizes and settings live here. The calculation
-// itself is in shared/src/sheets.ts and runs in the browser.
+// admin under Admin → Tools. The first tool is the sheet calculator, the
+// team's Sheet Requirement Calculator workbook (docs/tools/) as a board page:
+// its Materials sheet lives here, its Calculator and Layout sheets are
+// shared/src/sheets.ts, run in the browser.
 
 import {
   DEFAULT_SHEET_SETTINGS,
@@ -23,40 +24,45 @@ const SETTINGS_KEY = 'sheet_calculator';
 interface MaterialRow {
   id: number;
   name: string;
-  density: number | null;
   sort_order: number;
   active: number;
 }
 interface SizeRow {
   id: number;
   material_id: number;
-  thickness: number | null;
   length: number;
   width: number;
   active: number;
 }
 
-const toMaterial = (r: MaterialRow): SheetMaterial => ({ id: r.id, name: r.name, density: r.density, sort_order: r.sort_order, active: bool(r.active) });
-const toSize = (r: SizeRow): SheetSize => ({ id: r.id, material_id: r.material_id, thickness: r.thickness, length: r.length, width: r.width, active: bool(r.active) });
+const toMaterial = (r: MaterialRow): SheetMaterial => ({ id: r.id, name: r.name, sort_order: r.sort_order, active: bool(r.active) });
+const toSize = (r: SizeRow): SheetSize => ({ id: r.id, material_id: r.material_id, length: r.length, width: r.width, active: bool(r.active) });
 
 /**
- * A starting list so the calculator works on day one. Only written when there
- * are no materials at all (a new board, or the upgrade to 1.5.0); the admin
- * edits it from there. Sizes with no thickness are stocked in every thickness.
+ * The workbook's Materials sheet, row for row (its note: "typical commercial
+ * stock sizes, entered as placeholders. Replace with your supplier's actual
+ * sizes"). Written only when there are no materials at all (a new board, or
+ * the upgrade to 1.5.0); the admin edits the list from there.
  */
-export const INITIAL_MATERIALS: { name: string; density: number; sizes: [number, number][] }[] = [
-  { name: 'Mild steel (IS 2062)', density: 7850, sizes: [[2500, 1250], [3000, 1500], [6000, 2000]] },
-  { name: 'Stainless steel 304', density: 8000, sizes: [[2500, 1250], [3000, 1500]] },
-  { name: 'Stainless steel 316', density: 8000, sizes: [[2500, 1250], [3000, 1500]] },
-  { name: 'Aluminium', density: 2700, sizes: [[2500, 1250], [3000, 1500]] },
+export const INITIAL_MATERIALS: { name: string; length: number; width: number }[] = [
+  { name: 'Mild Steel', length: 2500, width: 1250 },
+  { name: 'Stainless Steel', length: 2500, width: 1250 },
+  { name: 'Aluminium', length: 2500, width: 1250 },
+  { name: 'Copper', length: 2000, width: 1000 },
+  { name: 'Brass', length: 2000, width: 1000 },
+  { name: 'Plywood', length: 2440, width: 1220 },
+  { name: 'MDF', length: 2440, width: 1220 },
+  { name: 'Acrylic', length: 2440, width: 1220 },
+  { name: 'FR4 / G10', length: 1220, width: 1020 },
+  { name: 'Teflon / PTFE', length: 1200, width: 1000 },
 ];
 
 export function seedTools(ctx: Ctx) {
   if (get<{ n: number }>(ctx.db, 'SELECT COUNT(*) n FROM materials')!.n > 0) return;
   tx(ctx.db, () => {
     INITIAL_MATERIALS.forEach((m, i) => {
-      const id = Number(run(ctx.db, 'INSERT INTO materials (name, density, sort_order) VALUES (?, ?, ?)', m.name, m.density, (i + 1) * 10).lastInsertRowid);
-      for (const [length, width] of m.sizes) run(ctx.db, 'INSERT INTO sheet_sizes (material_id, thickness, length, width) VALUES (?, NULL, ?, ?)', id, length, width);
+      const id = Number(run(ctx.db, 'INSERT INTO materials (name, sort_order) VALUES (?, ?)', m.name, (i + 1) * 10).lastInsertRowid);
+      run(ctx.db, 'INSERT INTO sheet_sizes (material_id, length, width) VALUES (?, ?, ?)', id, m.length, m.width);
     });
   });
 }
@@ -65,7 +71,7 @@ export function listMaterials(ctx: Ctx): SheetMaterial[] {
   return all<MaterialRow>(ctx.db, 'SELECT * FROM materials ORDER BY active DESC, sort_order, name').map(toMaterial);
 }
 export function listSheetSizes(ctx: Ctx): SheetSize[] {
-  return all<SizeRow>(ctx.db, 'SELECT * FROM sheet_sizes ORDER BY material_id, thickness IS NOT NULL, thickness, length * width, length').map(toSize);
+  return all<SizeRow>(ctx.db, 'SELECT * FROM sheet_sizes ORDER BY material_id, length * width, length').map(toSize);
 }
 
 export function getSheetSettings(ctx: Ctx): SheetSettings {
@@ -100,7 +106,7 @@ export function createMaterial(ctx: Ctx, input: unknown): SheetMaterial {
   return tx(ctx.db, () => {
     if (get(ctx.db, 'SELECT 1 FROM materials WHERE name = ?', data.name)) throw conflict(`A material called "${data.name}" already exists`);
     const next = (get<{ m: number | null }>(ctx.db, 'SELECT MAX(sort_order) m FROM materials')!.m ?? 0) + 10;
-    const res = run(ctx.db, 'INSERT INTO materials (name, density, sort_order) VALUES (?, ?, ?)', data.name, data.density ?? null, next);
+    const res = run(ctx.db, 'INSERT INTO materials (name, sort_order) VALUES (?, ?)', data.name, next);
     ctx.events.emit({ type: 'tools' });
     return requireMaterial(ctx, Number(res.lastInsertRowid));
   });
@@ -111,15 +117,7 @@ export function updateMaterial(ctx: Ctx, id: number, input: unknown): SheetMater
   return tx(ctx.db, () => {
     const m = requireMaterial(ctx, id);
     if (data.name && get(ctx.db, 'SELECT 1 FROM materials WHERE name = ? AND id <> ?', data.name, id)) throw conflict(`A material called "${data.name}" already exists`);
-    run(
-      ctx.db,
-      'UPDATE materials SET name = ?, density = ?, sort_order = ?, active = ? WHERE id = ?',
-      data.name ?? m.name,
-      data.density === undefined ? m.density : data.density,
-      data.sort_order ?? m.sort_order,
-      int(data.active ?? m.active),
-      id,
-    );
+    run(ctx.db, 'UPDATE materials SET name = ?, sort_order = ?, active = ? WHERE id = ?', data.name ?? m.name, data.sort_order ?? m.sort_order, int(data.active ?? m.active), id);
     ctx.events.emit({ type: 'tools' });
     return requireMaterial(ctx, id);
   });
@@ -135,10 +133,9 @@ export function createSheetSize(ctx: Ctx, input: unknown): SheetSize {
   const data = sheetSizeSchema(input);
   return tx(ctx.db, () => {
     requireMaterial(ctx, data.material_id);
-    const thickness = data.thickness ?? null;
-    if (get(ctx.db, 'SELECT 1 FROM sheet_sizes WHERE material_id = ? AND thickness IS ? AND length = ? AND width = ?', data.material_id, thickness, data.length, data.width))
+    if (get(ctx.db, 'SELECT 1 FROM sheet_sizes WHERE material_id = ? AND length = ? AND width = ?', data.material_id, data.length, data.width))
       throw conflict('That sheet size is already in the list');
-    const res = run(ctx.db, 'INSERT INTO sheet_sizes (material_id, thickness, length, width) VALUES (?, ?, ?, ?)', data.material_id, thickness, data.length, data.width);
+    const res = run(ctx.db, 'INSERT INTO sheet_sizes (material_id, length, width) VALUES (?, ?, ?)', data.material_id, data.length, data.width);
     ctx.events.emit({ type: 'tools' });
     return requireSize(ctx, Number(res.lastInsertRowid));
   });
@@ -148,12 +145,11 @@ export function updateSheetSize(ctx: Ctx, id: number, input: unknown): SheetSize
   const data = sheetSizeUpdateSchema(input);
   return tx(ctx.db, () => {
     const s = requireSize(ctx, id);
-    const thickness = data.thickness === undefined ? s.thickness : data.thickness;
     const length = data.length ?? s.length;
     const width = data.width ?? s.width;
-    if (get(ctx.db, 'SELECT 1 FROM sheet_sizes WHERE material_id = ? AND thickness IS ? AND length = ? AND width = ? AND id <> ?', s.material_id, thickness, length, width, id))
+    if (get(ctx.db, 'SELECT 1 FROM sheet_sizes WHERE material_id = ? AND length = ? AND width = ? AND id <> ?', s.material_id, length, width, id))
       throw conflict('That sheet size is already in the list');
-    run(ctx.db, 'UPDATE sheet_sizes SET thickness = ?, length = ?, width = ?, active = ? WHERE id = ?', thickness, length, width, int(data.active ?? s.active), id);
+    run(ctx.db, 'UPDATE sheet_sizes SET length = ?, width = ?, active = ? WHERE id = ?', length, width, int(data.active ?? s.active), id);
     ctx.events.emit({ type: 'tools' });
     return requireSize(ctx, id);
   });

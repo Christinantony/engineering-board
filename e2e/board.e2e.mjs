@@ -1022,30 +1022,41 @@ test('roles: the admin lets managers claim, the manager claims from a card, and 
   assert.equal(await j.locator('.card:has-text("Manager claims this") .btn-claim').count(), 0, 'back to the shipped rules: no Claim for the manager');
 });
 
-test('tools: the sheet calculator counts sheets from the admin-kept materials and sizes; Go to location links to the job folder', async () => {
+test('tools: the sheet calculator gives the workbook\'s answer and draws its layout; Go to location links to the job folder', async () => {
   const p = await login('Paul');
   await p.keyboard.press('o');
   await p.waitForSelector('.tool-card:has-text("Sheet calculator")');
   await p.click('.tool-card:has-text("Sheet calculator")');
   await p.waitForSelector('.sheet-table');
-  await p.fill('input[aria-label="Component 1 name"]', 'Base plate');
-  await p.selectOption('select[aria-label="Component 1 material"]', { label: 'Mild steel (IS 2062)' });
-  await p.fill('input[aria-label="Component 1 thickness (mm)"]', '6');
-  await p.fill('input[aria-label="Component 1 length (mm)"]', '1000');
-  await p.fill('input[aria-label="Component 1 width (mm)"]', '500');
-  await p.fill('input[aria-label="Component 1 quantity"]', '4');
-  await p.waitForSelector('[data-testid=sheet-total]:has-text("1")');
-  assert.match(await p.textContent('.sheet-group-answer'), /1 sheet of 2,?500 × 1,?250 · \d/);
-  // thirty plates: 24 fit on a 6000×2000 sheet (6 × 4), so that stock size wins with 2 sheets
-  await p.fill('input[aria-label="Component 1 quantity"]', '30');
-  await p.waitForSelector('[data-testid=sheet-total]:has-text("2")');
-  assert.match(await p.textContent('.sheet-group-answer'), /2 sheets of 6,?000 × 2,?000/);
-  assert.equal(await p.locator('.sheet-options tr.sheet-best').count(), 1, 'the chosen size is marked among the options');
+  // the workbook as delivered: Mild Steel 2500×1250, a 150, b 100, n 500, kerf 3, margin 5, rotation on → 192 per sheet, 3 sheets
+  await p.fill('input[aria-label="Component 1 name"]', 'Bracket');
+  await p.selectOption('select[aria-label="Component 1 material"]', { label: 'Mild Steel' });
+  await p.fill('input[aria-label="Component 1 length (mm)"]', '150');
+  await p.fill('input[aria-label="Component 1 width (mm)"]', '100');
+  await p.fill('input[aria-label="Component 1 quantity"]', '500');
+  await p.waitForSelector('[data-testid=sheet-total]:has-text("3")');
+  assert.equal(await p.textContent('[data-testid=per-sheet]'), '192');
+  assert.match(await p.textContent('.sheet-group-answer'), /3 sheets of 2,?500 × 1,?250 mm/);
+  assert.match(await p.textContent('.sheet-facts'), /Parts on last sheet116/);
+  assert.match(await p.textContent('.sheet-facts'), /Material utilisation80\.0%/);
+  // the Layout sheet: 16 across × 12 down, numbered parts, the last sheet partly filled
+  await p.click('button:has-text("Show cutting layout")');
+  await p.waitForSelector('.sheet-svg');
+  assert.equal(await p.locator('.sheet-svg .sheet-svg-part').count(), 192);
+  assert.match(await p.textContent('.sheet-layout'), /16 across × 12 down/);
+  await p.fill('input[aria-label="Sheet number to view"]', '3');
+  await p.waitForFunction(() => document.querySelectorAll('.sheet-svg .sheet-svg-part').length === 116);
+  assert.equal(await p.locator('.sheet-svg .sheet-svg-empty').count(), 192 - 116, 'grey unused slots on the last sheet');
+  // rotation off keeps orientation 1 only; a bigger kerf changes the count, as in the workbook
+  await p.fill('input[aria-label="Spacing / kerf between parts (mm)"]', '10');
+  await p.waitForFunction(() => document.querySelector('[data-testid=per-sheet]')?.textContent === '165'); // INT(2500/160)=15 × INT(1250/110)=11
+  await p.click('button:has-text("Back to the defaults")');
+  await p.waitForFunction(() => document.querySelector('[data-testid=per-sheet]')?.textContent === '192');
   // the list is remembered in this browser
   await p.reload();
   await p.waitForSelector('.sheet-table');
-  assert.equal(await p.inputValue('input[aria-label="Component 1 name"]'), 'Base plate');
-  assert.equal(await p.textContent('[data-testid=sheet-total]'), '2');
+  assert.equal(await p.inputValue('input[aria-label="Component 1 name"]'), 'Bracket');
+  assert.equal(await p.textContent('[data-testid=sheet-total]'), '3');
 
   const s = await api('POST', '/api/session', { user_id: 2, password: PASSWORD });
   const made = await api('POST', '/api/tickets', { title: 'Folder link job', project_id: PROJECT_ID, file_location: '\\\\SERVER\\Projects\\P-1042\\CAD files' }, s.cookie);
