@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { PASSWORD_MIN, ROLE_LABEL, seesWholeBoard, type JobType, type Project, type User } from '@board/shared';
+import { PASSWORD_MIN, ROLE_LABEL, allows, canChangeJob, hasBoardAccess, type Capability, type JobType, type Project, type User } from '@board/shared';
 import { AppContext, type AppState, type Meta } from './context.ts';
 import { del, post, setUnauthenticatedHandler } from './lib/api.ts';
 import { setTimeZone } from './lib/format.ts';
 import { navigate, setJob, useLocation } from './lib/router.ts';
 import { invalidate, startLive, stopLive, useLiveState, useQuery } from './lib/store.ts';
 import { toast, toastError } from './lib/toasts.ts';
+import { setActionPermissions } from './lib/actions.ts';
 import { Badge, ErrorBox, Spinner } from './components/bits.tsx';
 import { DialogHost, Toasts } from './components/Overlays.tsx';
 import { QuickCreate } from './components/QuickCreate.tsx';
@@ -26,6 +27,7 @@ import { Search } from './views/Search.tsx';
 import { Today } from './views/Today.tsx';
 import { Workload } from './views/Workload.tsx';
 import { ReviewQueue } from './views/ReviewQueue.tsx';
+import { Tools } from './views/Tools.tsx';
 import { Projects } from './views/Projects.tsx';
 import { ReviewWorkspaceView } from './views/ReviewWorkspace.tsx';
 
@@ -38,6 +40,7 @@ const NAV = [
   { path: '/review', label: 'Review', key: 'v' },
   { path: '/workload', label: 'Workload', key: 'w' },
   { path: '/reports', label: 'Reports', key: 'r' },
+  { path: '/tools', label: 'Tools', key: 'o' },
 ];
 
 /** A reviewer's board is the review queue and nothing else (decision #29). */
@@ -54,6 +57,7 @@ const VIEWS: Record<string, () => any> = {
   '/search': Search,
   '/activity': ActivityFeed,
   '/admin': Admin,
+  '/tools': Tools,
   '/review': ReviewQueue,
   '/projects': Projects,
 };
@@ -214,7 +218,9 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
   const { path, params } = useLocation();
   const [creating, setCreating] = useState(false);
   const live = useLiveState();
-  const whole = seesWholeBoard(me);
+  // reviewers see only the review queue (decision #29) unless the admin gave them a job capability (decision #31)
+  const whole = hasBoardAccess(meta.permissions, me);
+  const can = (cap: Capability) => allows(meta.permissions, me, cap);
   // reviewers don't see projects (decision #29)
   const projects = useQuery<{ projects: Project[] }>(whole ? '/api/projects' : null);
   const nav = whole ? NAV : REVIEWER_NAV;
@@ -226,6 +232,7 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
     startLive(me.id, meta.version);
     return stopLive;
   }, []);
+  useEffect(() => setActionPermissions(meta.permissions), [meta.permissions]);
   useEffect(() => {
     if (path === '/') navigate(home, { replace: true, keepJob: whole });
     else if (!whole && !REVIEWER_PATHS.test(path)) navigate('/review', { replace: true });
@@ -248,7 +255,7 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
       const k = e.key.toLowerCase();
       if (k === 'n') {
         e.preventDefault();
-        if (whole) setCreating(true);
+        if (whole && can('create')) setCreating(true);
         return;
       }
       const to = nav.find((n) => n.key === k);
@@ -256,7 +263,7 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [whole, meta.permissions]);
 
   const state = useMemo<AppState | null>(() => {
     if (!users.data || !types.data || (whole && !projects.data)) return null;
@@ -268,10 +275,12 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
     return {
       me: byId.get(me.id) ?? me,
       users: all,
-      engineers: all.filter((u) => u.role === 'engineer'),
+      workers: all.filter((u) => allows(meta.permissions, u, 'claim')),
       jobTypes: types.data.job_types,
       projects: projectList,
       meta,
+      can,
+      canChange: (t) => canChangeJob(meta.permissions, me, t),
       user: (id) => (id == null ? undefined : byId.get(id)),
       jobType: (id) => (id == null ? undefined : jt.get(id)),
       project: (id) => (id == null ? undefined : pr.get(id)),
@@ -342,7 +351,7 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
           </button>
           <Bell />
           <ThemePicker />
-          {whole && (
+          {whole && can('create') && (
             <button className="btn btn-primary new-job" onClick={() => setCreating(true)} title="New job (N)">
               + New job
             </button>

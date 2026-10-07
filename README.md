@@ -2,7 +2,7 @@
 
 ### The workboard for the mechanical design team
 
-*Catalogue edition, version 1.4.0*
+*Catalogue edition, version 1.5.0*
 
 One shared board for every design job: who is on it, what it is waiting for, when it is due and how it ended. It runs on a single PC on the office network. Everyone else opens it in a web browser.
 
@@ -52,6 +52,7 @@ Every page has a one-key shortcut. Press <kbd>?</kbd> anywhere for the full list
 | **A7** | **Team activity** | name menu | Every change to every job, newest first. History cannot be edited or deleted. | You want to know who did what, and when. |
 | **A8** | **Drawing review** | <kbd>V</kbd> | Jobs with drawings in board review; a workspace per job with the signed reference and the submitted drawing side by side (independent page, zoom and rotation), revision notes, comments, pass or return, handover and signature. | You check drawings before they are printed and signed. |
 | **A9** | **Projects** | <kbd>P</kbd> | Every project with its open and total jobs, and all of a project's jobs. Projects are added by the team when their first job comes in; none are preset. | You want everything for one project, or to add a new one. |
+| **A10** | **Tools** | <kbd>O</kbd> | Calculators for the team. First: the **sheet calculator**, the team's Sheet Requirement Calculator workbook as a page: per component (material, length, width, number) the parts per sheet in a straight grid with kerf and edge margin, the sheets to buy, parts on the last sheet, utilisation and waste, with the cutting layout drawn to scale. Materials and stock sizes are kept under Admin → Tools. | You are ordering sheet for a job. |
 
 | | |
 |---|---|
@@ -82,17 +83,17 @@ A job needs a title and a project. Everything else can be added as the job devel
 |---|---|
 | **Job number** | Assigned automatically, never reused. |
 | **Title** | Up to 200 characters. |
-| **Project** | Required for every new job. Chosen from the team's project list, or added there and then (**+ Add a project…**). A job can move to another project; jobs from before 1.4.0 show as *No project* until one is picked. |
+| **Project** | Required for every new job. Chosen from the team's project list, or added there and then (**+ Add a project…**). Shown above the title on every card and job row in its own colour, so the project is read first. A job can move to another project; jobs from before 1.4.0 show as *No project* until one is picked. |
 | **Description** and **notes** | Free text. Edits by two people are merged, see C3. |
 | **Priority** | Urgent, high, normal or low. An urgent job notifies everyone. |
 | **Estimate** | Eight buckets from under 15 minutes to over 2 days. |
 | **Due date** | Optional. A date alone becomes overdue after local midnight; a time can be added. |
-| **Owner** | One engineer, or nobody yet. |
+| **Owner** | One person whose role may hold jobs (engineers out of the box; see E10), or nobody yet. |
 | **Requester** | Who asked for the work. |
 | **Job type** | Sixteen to start with: CAD Modification, New CAD Design, Drawing, Drawing Revision, STEP/IGES Cleanup, Geometry Repair, FEA, CFD, Design Calculation, Engineering Analysis, Manufacturing Support, BOM, Documentation, Prototype Support, Design Review, General. Admins can add and retire types. |
 | **Tags** | Typed freely while editing a job. |
 | **Reference** | A drawing number, purchase order, or anything people will search for. |
-| **File location** | A folder or file path, with a **Copy path** button for pasting into File Explorer. |
+| **File location** | A folder or file path, with **Copy** for pasting into File Explorer and **Go to location**, which opens the folder in Explorer where the browser allows folder links (an Edge policy; see the For IT guide). |
 | **Waiting for** | Required when a job moves to Waiting or Blocked. |
 | **Comments** | Conversation on the job, signed with the author's name. |
 | **History** | Every change: who, what, when. Append-only. |
@@ -158,6 +159,8 @@ Behind the admin PIN, unlocked per browser for 12 hours. The PIN starts as `1234
 | **E7** | **Admin PIN** | Change it. If it is forgotten, put an empty file named `RESET-ADMIN-PIN` next to `start.bat` and restart. |
 | **E9** | **Passwords** | Everyone signs in with their own password, created at their first sign-in and changeable from the account menu. Admins reset a forgotten one (the person creates a new one next time). If everyone is locked out, an empty file named `RESET-PASSWORDS` next to `start.bat` clears them all on the next start. |
 | **E8** | **Demo data** | Twelve example jobs across every column, removable in one click without touching real jobs. |
+| **E10** | **Roles** | What engineers, managers and reviewers may do with jobs: create, claim and be assigned, edit any job. Shipped rules: engineers everything, managers create and edit, reviewers nothing. Board review is separate and unaffected. |
+| **E11** | **Tools data** | The materials and standard sheet sizes behind the sheet calculator (the workbook's Materials sheet), and the defaults for its kerf, edge margin and rotation inputs. |
 
 ![The sign-in screen: pick your name, then enter or create your password; the theme can be chosen before signing in](assets/screenshots/sign-in.png)
 
@@ -260,6 +263,7 @@ Copy `config.example.json` to `config.json` next to `start.bat`, edit it, restar
 
 | Version | What it brought |
 |---|---|
+| **1.5.0** | The project name stands out on cards and job rows. Admin-set role capabilities (create, claim and be assigned, edit any job) for engineers, managers and reviewers, leaving board review untouched. **Go to location** beside a job's file path. A **Tools** page with the team's sheet calculator workbook as a page, its materials and sheet sizes editable by the admin. |
 | **1.4.0** | Projects: every job belongs to a project, chosen or added from the New job form; a Projects page with each project's jobs; project filter, search, card and job-panel display; Project column in import and export. No preset list: projects are added as they are needed. |
 | **1.3.0** | Reviewer access: engineers hand each drawing to one or more reviewers (and can change them later). A reviewer sees only the drawings handed to them, with the job number and title: no board, workload, reports, search, other jobs, team activity or Admin. The manager keeps full access. |
 | **1.2.0** | Password sign-in for everyone, current and new: each person creates their own password at their first sign-in, changes it from the account menu, and an admin can reset a forgotten one. A `RESET-PASSWORDS` file on the host PC clears them all. Restores keep the current passwords. |

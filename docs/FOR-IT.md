@@ -40,6 +40,21 @@ Get-NetFirewallApplicationFilter | Where-Object Program -like '*\node.exe' |
 
 Or in **Windows Defender Firewall with Advanced Security → Inbound Rules**, delete the "node.exe" or "Node.js JavaScript Runtime" rules with a red Block icon.
 
+## Opening folders from the board
+
+A job's **File location** has a **Go to location** button that links to the folder as a `file://` address (for example `file://FILESERVER/Projects/P-1042`). Browsers refuse to open such links from a web page unless told to, so without the setting below the button does nothing and people use **Copy** instead.
+
+**Microsoft Edge** has a policy for exactly this case, intranet file links: `IntranetFileLinksEnabled`. With it on, Edge opens the folder in File Explorer when the link is clicked (the board's address must count as an intranet site, which a plain PC name or private IP does). Set it by Group Policy (*Microsoft Edge → Allow Internet Explorer mode… → "Allow file URL links to open in Windows Explorer from intranet sites"*; the policy name in the ADMX is **IntranetFileLinksEnabled**) or with the registry value:
+
+```reg
+Windows Registry Editor Version 5.00
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Edge]
+"IntranetFileLinksEnabled"=dword:00000001
+```
+
+Google Chrome has no equivalent policy; Firefox needs `capability.policy` settings in a policy file. Nothing is needed on the host PC: the link is followed by each person's own browser and opens the folder with their own permissions.
+
 ## Nice to have
 
 - A **reserved IP address** (DHCP reservation) or a **DNS name** for the host PC, so the address colleagues bookmark never changes.

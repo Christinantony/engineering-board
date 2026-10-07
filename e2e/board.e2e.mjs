@@ -972,3 +972,97 @@ test('projects: add one from the New job form, find its jobs, show it on the boa
   await c.selectOption('.panel-body .field-project select', { label: 'Pump skid' });
   await c.waitForSelector('.tl-item:has-text("changed project: Spiral array → Pump skid")');
 });
+
+const SHIPPED_RULES = {
+  engineer: { create: true, claim: true, edit: true },
+  manager: { create: true, claim: false, edit: true },
+  reviewer: { create: false, claim: false, edit: false },
+};
+
+test('roles: the admin lets managers claim, the manager claims from a card, and the project name stands out on it', async () => {
+  const s = await api('POST', '/api/session', { user_id: 1, password: PASSWORD });
+  const u = await api('POST', '/api/admin/unlock', { pin: '1234' }, s.cookie);
+  const made = await api('POST', '/api/tickets', { title: 'Manager claims this', project_id: PROJECT_ID }, s.cookie);
+  const job = (await made.r.json()).ticket;
+
+  const c = await login('Christin');
+  await c.goto(`${BASE}/admin?s=roles`);
+  await c.fill('input[aria-label="Admin PIN"]', '1234');
+  await c.press('input[aria-label="Admin PIN"]', 'Enter');
+  await c.waitForSelector('.roles-table');
+  const managerClaim = c.locator('input[aria-label="Managers: Claim and be assigned jobs"]');
+  assert.equal(await managerClaim.isChecked(), false, 'the shipped rule: managers do not claim');
+  await managerClaim.check();
+  await c.click('button:has-text("Save capabilities")');
+  await c.waitForSelector('.toast:has-text("Role capabilities saved")');
+
+  const j = await login('Jeffin');
+  const card = j.locator('.card', { hasText: 'Manager claims this' }).first();
+  await card.locator('.btn-claim').waitFor();
+  // the project name is set apart from the bold title: uppercase, heavier, and its own colour
+  const styles = await card.evaluate((el) => {
+    const p = getComputedStyle(el.querySelector('.card-project'));
+    const t = getComputedStyle(el.querySelector('.card-title'));
+    return { transform: p.textTransform, color: p.color, titleColor: t.color, weight: Number(p.fontWeight) };
+  });
+  assert.equal(styles.transform, 'uppercase');
+  assert.notEqual(styles.color, styles.titleColor);
+  assert.ok(styles.weight >= 700, `project weight ${styles.weight}`);
+  await card.locator('.btn-claim').click();
+  await card.locator('.btn-claim').waitFor({ state: 'detached' });
+  await j.waitForFunction((id) => document.querySelector(`[data-card="${id}"]`)?.closest('[data-col]')?.dataset.col === 'claimed', job.id);
+
+  // tidy: hand the job back and restore the shipped rules (refused while the manager still holds it)
+  const refused = await api('PUT', '/api/admin/permissions', SHIPPED_RULES, `${s.cookie}; ${u.cookie}`);
+  assert.equal(refused.r.status, 409);
+  assert.equal((await api('POST', `/api/tickets/${job.id}/release`, {}, s.cookie)).r.status, 200);
+  assert.equal((await api('PUT', '/api/admin/permissions', SHIPPED_RULES, `${s.cookie}; ${u.cookie}`)).r.status, 200);
+  await j.reload();
+  await j.waitForSelector('.card');
+  assert.equal(await j.locator('.card:has-text("Manager claims this") .btn-claim').count(), 0, 'back to the shipped rules: no Claim for the manager');
+});
+
+test('tools: the sheet calculator gives the workbook\'s answer and draws its layout; Go to location links to the job folder', async () => {
+  const p = await login('Paul');
+  await p.keyboard.press('o');
+  await p.waitForSelector('.tool-card:has-text("Sheet calculator")');
+  await p.click('.tool-card:has-text("Sheet calculator")');
+  await p.waitForSelector('.sheet-table');
+  // the workbook as delivered: Mild Steel 2500×1250, a 150, b 100, n 500, kerf 3, margin 5, rotation on → 192 per sheet, 3 sheets
+  await p.fill('input[aria-label="Component 1 name"]', 'Bracket');
+  await p.selectOption('select[aria-label="Component 1 material"]', { label: 'Mild Steel' });
+  await p.fill('input[aria-label="Component 1 length (mm)"]', '150');
+  await p.fill('input[aria-label="Component 1 width (mm)"]', '100');
+  await p.fill('input[aria-label="Component 1 quantity"]', '500');
+  await p.waitForSelector('[data-testid=sheet-total]:has-text("3")');
+  assert.equal(await p.textContent('[data-testid=per-sheet]'), '192');
+  assert.match(await p.textContent('.sheet-group-answer'), /3 sheets of 2,?500 × 1,?250 mm/);
+  assert.match(await p.textContent('.sheet-facts'), /Parts on last sheet116/);
+  assert.match(await p.textContent('.sheet-facts'), /Material utilisation80\.0%/);
+  // the Layout sheet: 16 across × 12 down, numbered parts, the last sheet partly filled
+  await p.click('button:has-text("Show cutting layout")');
+  await p.waitForSelector('.sheet-svg');
+  assert.equal(await p.locator('.sheet-svg .sheet-svg-part').count(), 192);
+  assert.match(await p.textContent('.sheet-layout'), /16 across × 12 down/);
+  await p.fill('input[aria-label="Sheet number to view"]', '3');
+  await p.waitForFunction(() => document.querySelectorAll('.sheet-svg .sheet-svg-part').length === 116);
+  assert.equal(await p.locator('.sheet-svg .sheet-svg-empty').count(), 192 - 116, 'grey unused slots on the last sheet');
+  // rotation off keeps orientation 1 only; a bigger kerf changes the count, as in the workbook
+  await p.fill('input[aria-label="Spacing / kerf between parts (mm)"]', '10');
+  await p.waitForFunction(() => document.querySelector('[data-testid=per-sheet]')?.textContent === '165'); // INT(2500/160)=15 × INT(1250/110)=11
+  await p.click('button:has-text("Back to the defaults")');
+  await p.waitForFunction(() => document.querySelector('[data-testid=per-sheet]')?.textContent === '192');
+  // the list is remembered in this browser
+  await p.reload();
+  await p.waitForSelector('.sheet-table');
+  assert.equal(await p.inputValue('input[aria-label="Component 1 name"]'), 'Bracket');
+  assert.equal(await p.textContent('[data-testid=sheet-total]'), '3');
+
+  const s = await api('POST', '/api/session', { user_id: 2, password: PASSWORD });
+  const made = await api('POST', '/api/tickets', { title: 'Folder link job', project_id: PROJECT_ID, file_location: '\\\\SERVER\\Projects\\P-1042\\CAD files' }, s.cookie);
+  const job = (await made.r.json()).ticket;
+  await p.goto(`${BASE}/board?job=${job.id}`);
+  await p.waitForSelector('.panel-title');
+  assert.equal(await p.getAttribute('a:has-text("Go to location")', 'href'), 'file://SERVER/Projects/P-1042/CAD%20files');
+  assert.equal(await p.locator('button:has-text("Copy")').count() > 0, true, 'Copy stays beside it');
+});

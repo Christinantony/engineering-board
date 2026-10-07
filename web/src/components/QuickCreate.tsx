@@ -15,7 +15,7 @@ import { useLocation } from '../lib/router.ts';
 let lastProject: number | null = null;
 
 export function QuickCreate({ onClose }: { onClose: () => void }) {
-  const { me, jobTypes, openJob, project: projectById } = useApp();
+  const { me, jobTypes, openJob, project: projectById, can } = useApp();
   const { path, params } = useLocation();
   // on a project's page, new jobs go to that project
   const pagePj = path === '/projects' ? Number(params.get('project')) || null : null;
@@ -35,7 +35,7 @@ export function QuickCreate({ onClose }: { onClose: () => void }) {
   // one key per form: a retried submit returns the same job instead of a duplicate
   const key = useRef(newKey());
   const titleRef = useRef<HTMLInputElement | null>(null);
-  const canClaim = me.role === 'engineer';
+  const canClaim = can('claim');
 
   useEffect(() => {
     titleRef.current?.focus();

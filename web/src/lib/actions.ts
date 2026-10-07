@@ -1,11 +1,17 @@
 // Mutations used across the UI. Each one reports failures with a toast,
 // refreshes affected views, and (for moves) offers Undo.
 
-import { REASON_STATUSES, ASSIGNED_STATUSES, STATUS_LABEL, type Status, type Ticket, type User } from '@board/shared';
+import { DEFAULT_PERMISSIONS, REASON_STATUSES, ASSIGNED_STATUSES, STATUS_LABEL, allows, type RolePermissions, type Status, type Ticket, type User } from '@board/shared';
 import { ApiError, newKey, patch, post } from './api.ts';
 import { ask } from './dialogs.ts';
 import { TICKET_KEYS, invalidate, setCached } from './store.ts';
 import { toast, toastError } from './toasts.ts';
+
+// the current role rules (Admin → Roles), set by the shell when /api/meta loads
+let perms: RolePermissions = DEFAULT_PERMISSIONS;
+export const setActionPermissions = (p: RolePermissions) => {
+  perms = p;
+};
 
 function refreshAfter(t?: Ticket) {
   if (t) setCached(`/api/tickets/${t.id}`, (prev: any) => (prev ? { ...prev, ticket: t } : prev));
@@ -44,7 +50,7 @@ export async function moveTicket(
       reason = ans.reason;
       status = ans.status;
     }
-    if (ASSIGNED_STATUSES.includes(target) && t.assigned_to == null && me.role !== 'engineer') {
+    if (ASSIGNED_STATUSES.includes(target) && t.assigned_to == null && !allows(perms, me, 'claim')) {
       const uid = await ask({ type: 'assign', ticket: t, title: `Who should take ${t.job_number}?` });
       if (uid == null) return null;
       cur = (await patch<{ ticket: Ticket }>(`/api/tickets/${t.id}`, { version: t.version, assigned_to: uid })).ticket;

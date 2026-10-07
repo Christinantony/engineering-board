@@ -1,5 +1,5 @@
 import { createServer, type Server } from 'node:http';
-import { STATUSES, PRIORITIES, ESTIMATE_BUCKETS, STATUS_LABEL, seesWholeBoard, type User } from '@board/shared';
+import { STATUSES, PRIORITIES, ESTIMATE_BUCKETS, STATUS_LABEL, hasBoardAccess, type Capability, type User } from '@board/shared';
 import { v, signInSchema, createPasswordSchema, changePasswordSchema } from '@board/shared';
 import { openDb, migrate, pendingMigrations, run, all, tx } from './db/connection.ts';
 import { createReadStream } from 'node:fs';
@@ -44,6 +44,17 @@ import {
 import { createUser, getUser, listUsers, requireUser, updateUser } from './domain/users.ts';
 import { createJobType, listJobTypes, updateJobType } from './domain/jobTypes.ts';
 import { createProject, listProjects } from './domain/projects.ts';
+import { getPermissions, requireCapability, setPermissions } from './domain/permissions.ts';
+import {
+  createMaterial,
+  createSheetSize,
+  deleteSheetSize,
+  seedTools,
+  setSheetSettings,
+  sheetCalculatorData,
+  updateMaterial,
+  updateSheetSize,
+} from './domain/tools.ts';
 import {
   addComment,
   archiveTicket,
@@ -108,7 +119,7 @@ import { jobsNeedingSync, markSyncPending, revisionLog, settleSyncs, syncProject
 /** Default maximum PDF upload for drawing review (merged signed scans can be large). */
 export const DEFAULT_REVIEW_UPLOAD_MAX_MB = 200;
 
-export const APP_VERSION = '1.4.0';
+export const APP_VERSION = '1.5.0';
 
 export interface AppOptions {
   dbPath: string;
@@ -180,6 +191,7 @@ export function createApp(opts: AppOptions): App {
     if (opts.resetAdminPin) resetPin(ctx);
     if (opts.resetPasswords) clearAllPasswords(ctx);
     seedBase(ctx);
+    seedTools(ctx);
   } catch (e) {
     ctx.db.close(); // don't hold the file open (and locked on Windows) after a failed start
     throw e;
@@ -250,27 +262,34 @@ export function createApp(opts: AppOptions): App {
       if (!user) throw new HttpError(401, 'unauthenticated', 'Please sign in first.');
       return h(req, user);
     });
+  const REVIEWER_ONLY = 'Reviewers see only the drawings handed to them for review.';
   function requireAdmin(req: Pick<Request, 'cookies'>): User {
     const user = currentUser(req);
     if (!user) throw new HttpError(401, 'unauthenticated', 'Please sign in first.');
-    if (!seesWholeBoard(user)) throw forbidden('Reviewers see only the drawings handed to them for review.');
+    if (!hasBoardAccess(getPermissions(ctx), user)) throw forbidden(REVIEWER_ONLY);
     if (!readAdmin(ctx, req.cookies[ADMIN_COOKIE], user.id))
       throw new HttpError(403, 'admin_locked', 'Unlock the admin area with the PIN first.');
     return user;
   }
   const admin = (method: string, path: string, h: (req: Request, user: User) => unknown) =>
     router.add(method, path, (req) => h(req, requireAdmin(req)));
-  const REVIEWER_ONLY = 'Reviewers see only the drawings handed to them for review.';
-  /** Board-wide reads: reviewers see only the drawings handed to them (decision #29). */
+  /**
+   * Board-wide reads: reviewers see only the drawings handed to them (decision
+   * #29), unless the admin has given reviewers a job capability (decision #31).
+   */
   const board = (method: string, path: string, h: (req: Request, user: User) => unknown) =>
     authed(method, path, (req, user) => {
-      if (!seesWholeBoard(user)) throw forbidden(REVIEWER_ONLY);
+      if (!hasBoardAccess(getPermissions(ctx), user)) throw forbidden(REVIEWER_ONLY);
       return h(req, user);
     });
-  /** Job editing routes: reviewers look, comment and review, but don't change jobs (decision #24). */
-  const worker = (method: string, path: string, h: (req: Request, user: User) => unknown) =>
+  /**
+   * Job-changing routes: board access plus, when given, the capability the admin
+   * set for the role (Admin → Roles). Per-job rules (your own job) are checked in domain/tickets.ts.
+   */
+  const worker = (method: string, path: string, h: (req: Request, user: User) => unknown, cap?: Capability) =>
     authed(method, path, (req, user) => {
-      if (!seesWholeBoard(user)) throw forbidden('Reviewers review the drawings handed to them; they cannot create or change jobs.');
+      if (!hasBoardAccess(getPermissions(ctx), user)) throw forbidden('Reviewers review the drawings handed to them; they cannot create or change jobs.');
+      if (cap) requireCapability(ctx, user, cap);
       return h(req, user);
     });
 
@@ -286,6 +305,7 @@ export function createApp(opts: AppOptions): App {
     pin_is_default: pinIsDefault(ctx),
     workday: { hours_per_day: opts.workday?.hoursPerDay ?? 8, working_days: opts.workday?.workingDays ?? [1, 2, 3, 4, 5, 6] },
     demo_present: hasDemoData(ctx),
+    permissions: getPermissions(ctx),
   }));
   pub('GET', '/api/users', (req) => ({ users: listUsers(ctx, req.query.get('all') === '1') }));
   pub('GET', '/api/session', (req) => ({ user: currentUser(req) }));
@@ -326,6 +346,7 @@ export function createApp(opts: AppOptions): App {
 
   // ---- reference data ----
   authed('GET', '/api/job-types', () => ({ job_types: listJobTypes(ctx) }));
+  board('GET', '/api/tools/sheet', () => sheetCalculatorData(ctx));
   board('GET', '/api/tags', () => ({
     tags: all<{ name: string; count: number }>(
       ctx.db,
@@ -337,7 +358,7 @@ export function createApp(opts: AppOptions): App {
   board('GET', '/api/tickets', (req) => listTickets(ctx, parseFilters(req.query)));
   // ---- projects (decision #30): added by the team when needed, none preset ----
   board('GET', '/api/projects', () => ({ projects: listProjects(ctx) }));
-  worker('POST', '/api/projects', (req, user) => new Reply(201, { project: createProject(ctx, user, req.body ?? {}) }));
+  worker('POST', '/api/projects', (req, user) => new Reply(201, { project: createProject(ctx, user, req.body ?? {}) }), 'create');
 
   worker('POST', '/api/tickets', (req, user) => {
     const key = req.headers['idempotency-key'];
@@ -345,7 +366,7 @@ export function createApp(opts: AppOptions): App {
     // every job created on the board belongs to a project (decision #30)
     const { ticket, replayed } = createTicket(ctx, user, req.body ?? {}, k, { requireProject: true });
     return new Reply(replayed ? 200 : 201, { ticket, replayed });
-  });
+  }, 'create');
   board('GET', '/api/tickets/:id', (req) => ({ ticket: getTicket(ctx, id(req)), activity: ticketActivity(ctx, id(req)) }));
   worker('PATCH', '/api/tickets/:id', (req, user) => ({ ticket: updateTicket(ctx, user, id(req), req.body ?? {}) }));
   worker('POST', '/api/tickets/:id/move', (req, user) => ({ ticket: moveTicket(ctx, user, id(req), req.body ?? {}) }));
@@ -491,7 +512,7 @@ export function createApp(opts: AppOptions): App {
     res.write(`retry: 3000\nevent: hello\ndata: ${JSON.stringify({ time: ctx.now().toISOString(), version: APP_VERSION })}\n\n`);
     // a reviewer hears only about jobs with drawings handed to them (decision #29)
     const hears = (e: { type: string; id?: number }) =>
-      seesWholeBoard(user) || e.type === 'reload' || e.type === 'users' || (e.type === 'ticket' && e.id != null && reviewerTicketIds(ctx, user).has(e.id));
+      hasBoardAccess(getPermissions(ctx), user) || e.type === 'reload' || e.type === 'users' || e.type === 'permissions' || (e.type === 'ticket' && e.id != null && reviewerTicketIds(ctx, user).has(e.id));
     const unsubscribe = ctx.events.subscribe((e) => {
       if (hears(e)) res.write(`data: ${JSON.stringify(e)}\n\n`);
     });
@@ -536,6 +557,16 @@ export function createApp(opts: AppOptions): App {
     clearPassword(ctx, u.id);
     return { user: getUser(ctx, u.id) };
   });
+  // who may do what with jobs (decision #31)
+  admin('GET', '/api/admin/permissions', () => ({ permissions: getPermissions(ctx) }));
+  admin('PUT', '/api/admin/permissions', (req) => ({ permissions: setPermissions(ctx, req.body ?? {}) }));
+  // tools reference data (decision #32)
+  admin('POST', '/api/admin/materials', (req) => new Reply(201, { material: createMaterial(ctx, req.body ?? {}) }));
+  admin('PATCH', '/api/admin/materials/:id', (req) => ({ material: updateMaterial(ctx, id(req), req.body ?? {}) }));
+  admin('POST', '/api/admin/sheet-sizes', (req) => new Reply(201, { size: createSheetSize(ctx, req.body ?? {}) }));
+  admin('PATCH', '/api/admin/sheet-sizes/:id', (req) => ({ size: updateSheetSize(ctx, id(req), req.body ?? {}) }));
+  admin('DELETE', '/api/admin/sheet-sizes/:id', (req) => deleteSheetSize(ctx, id(req)));
+  admin('PUT', '/api/admin/tools/sheet-settings', (req) => ({ settings: setSheetSettings(ctx, req.body ?? {}) }));
   admin('POST', '/api/admin/job-types', (req) => new Reply(201, { job_type: createJobType(ctx, req.body ?? {}) }));
   admin('PATCH', '/api/admin/job-types/:id', (req) => ({ job_type: updateJobType(ctx, id(req), req.body ?? {}) }));
   admin('POST', '/api/admin/demo', () => {

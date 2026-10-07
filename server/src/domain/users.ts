@@ -1,5 +1,6 @@
 import type { Role, User } from '@board/shared';
-import { createUserSchema, updateUserSchema } from '@board/shared';
+import { allows, createUserSchema, updateUserSchema } from '@board/shared';
+import { getPermissions, openJobsHeldBy } from './permissions.ts';
 import { all, get, run, tx } from '../db/connection.ts';
 import { bool, conflict, int, notFound, nowIso, type Ctx } from '../lib/core.ts';
 import { reindexWhere } from './search.ts';
@@ -79,13 +80,9 @@ export function updateUser(ctx: Ctx, id: number, input: unknown): User {
     const u = requireUser(ctx, id);
     if (data.name && get(ctx.db, 'SELECT 1 FROM users WHERE name = ? AND id <> ?', data.name, id))
       throw conflict(`A user called "${data.name}" already exists`);
-    if (data.role && data.role !== 'engineer' && u.role === 'engineer') {
-      // managers and reviewers cannot hold claimed work; refuse rather than silently unassign
-      const n = get<{ n: number }>(
-        ctx.db,
-        `SELECT COUNT(*) n FROM tickets WHERE assigned_to = ? AND status NOT IN ('done','cancelled') AND archived = 0`,
-        id,
-      )!.n;
+    if (data.role && data.role !== u.role && !allows(getPermissions(ctx), { role: data.role }, 'claim')) {
+      // a role that can't hold claimed work (Admin → Roles); refuse rather than silently unassign
+      const n = openJobsHeldBy(ctx, id);
       if (n > 0) throw conflict(`${u.name} still has ${n} open job(s). Reassign them before changing the role.`);
     }
     const next = {

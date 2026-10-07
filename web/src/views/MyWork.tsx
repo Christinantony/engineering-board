@@ -21,16 +21,16 @@ interface MyWorkData {
 }
 
 export function MyWork() {
-  const { me, engineers } = useApp();
+  const { me, workers, can } = useApp();
   const { params } = useLocation();
-  const active = engineers.filter((u) => u.active);
+  const active = workers.filter((u) => u.active);
   const requested = Number(params.get('user')) || null;
-  const uid = requested ?? (me.role === 'engineer' ? me.id : active[0]?.id);
-  const whose = engineers.find((u) => u.id === uid);
+  const uid = requested ?? (can('claim') ? me.id : active[0]?.id);
+  const whose = workers.find((u) => u.id === uid);
   const q = useQuery<MyWorkData>(uid ? `/api/my-work?user=${uid}` : null);
   const own = uid === me.id;
 
-  if (!uid) return <ErrorBox message="There are no active engineers yet." />;
+  if (!uid) return <ErrorBox message="Nobody can hold jobs yet: add people under Admin → Team, or give a role the claim capability under Admin → Roles." />;
   if (q.error && !q.data) return <ErrorBox message={q.error.message} retry={q.refresh} />;
   if (!q.data) return <Spinner label="Loading work" />;
   const d = q.data;

@@ -123,7 +123,7 @@ describe('export, import, backup and restore', () => {
     assert.equal(p.rows[3].status, 'waiting');
     assert.deepEqual(p.rows[4].errors, ['No title']);
     assert.match(p.rows[5].errors[0], /isn't a date/);
-    assert.match(p.rows[6].warnings[0], /No engineer called "Zara"/);
+    assert.match(p.rows[6].warnings[0], /Nobody called "Zara"/);
     assert.equal((await christin.get('/api/tickets?archived=include')).body.total, before);
     // only admins can import
     assert.equal((await raw(jeffin, 'POST', '/api/admin/import/preview', sheet)).status, 403);

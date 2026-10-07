@@ -10,7 +10,7 @@ Pick your name, then enter your password. The browser remembers you, so you won'
 
 **Your first sign-in:** you don't have a password yet, so the board asks you to create one (at least 6 characters; a short phrase with spaces is fine). Only you should know it: nobody else, not even the admin, can see it. To change it later, use **your name → Change password**; other browsers signed in as you are asked to sign in again. If you forget it, ask whoever looks after the board to reset it under Admin → Team, then sign in and create a new one.
 
-Engineers and the manager can create jobs, edit them and comment. **Engineers** claim and do jobs. The **manager** can't claim, but can assign jobs to an engineer. **Reviewers** check the drawings an engineer hands to them in [drawing review](#drawing-review). A reviewer sees only those drawings, with the job's number and title: not the board, Today, My work, the dashboard, workload, reports, search or any other job. Nothing is ever deleted: every change is kept in each job's history.
+Out of the box, engineers and the manager create jobs, edit them and comment; **engineers** claim and do jobs; the **manager** can't claim, but assigns jobs to an engineer. **Reviewers** check the drawings an engineer hands to them in [drawing review](#drawing-review). A reviewer sees only those drawings, with the job's number and title: not the board, Today, My work, the dashboard, workload, reports, search or any other job. Whoever looks after the board can change what each role may do with jobs (create, claim and be assigned, edit any job) under **Admin → Roles**, for example so that jobs can be created for the manager or a reviewer too; a reviewer given such a capability also sees the board. Drawing review itself never changes with those settings. Nothing is ever deleted: every change is kept in each job's history.
 
 ## Themes
 
@@ -58,7 +58,7 @@ Press <kbd>N</kbd> or click **+ New job**. A job needs a title and its **project
 
 Click a card to open its panel on the right. Every field saves as you finish with it (press <kbd>Enter</kbd> on one-line fields, <kbd>Ctrl</kbd>+<kbd>Enter</kbd> in notes and the description, or just click elsewhere). <kbd>Esc</kbd> undoes the edit you're in.
 
-- **File location**: paste a folder or file path, for example `\\fileserver\projects\P-1042\CAD`. **Copy path** puts it on the clipboard so you can paste it into File Explorer. (Browsers aren't allowed to open network folders directly.)
+- **File location**: paste a folder or file path, for example `\\fileserver\projects\P-1042\CAD`. **Copy** puts it on the clipboard so you can paste it into File Explorer. **Go to location** opens the folder in File Explorer, if your browser is allowed to open folder links from the board: browsers block them unless IT turns that on (Edge has a setting for it; see the [For IT](FOR-IT.md#opening-folders-from-the-board) guide). If nothing happens when you press it, use Copy.
 - **Reference**: a drawing number, PO or anything people will search for.
 - **Requester**, **job type**, **tags** and **notes** help find and report on work later.
 - **Comments** at the bottom are for conversation; they land in the job's history with your name.
@@ -139,6 +139,17 @@ If the job's **File location** is its project folder, the board keeps there:
 - `REVISION_LOG.md`: every drawing and attempt, with what changed, comments and responses, the outcome, who and when, handover and signature, and clean-up.
 
 After a drawing passes, the board removes the earlier attempts' PDFs (the history keeps their notes, comments and decisions, and says *Intermediate PDF removed after board review*). It never touches signed scans, CAD files or anything it didn't write. If the share can't be reached, the review screen says so and the board keeps trying; its own copies stay viewable. **Revision log** on the review screen shows the log for one job at any time.
+
+## Tools
+
+**Tools** (<kbd>O</kbd>) holds small calculators for the team. The first is the **sheet calculator**, the team's *Sheet Requirement Calculator* workbook as a board page, same inputs and same sums:
+
+- One row per component: its **material**, **length a**, **width b** and **number n**. Add as many rows as you need; each is worked out on its own, and the total per material is shown at the top.
+- The three workbook settings apply to every row: **spacing / kerf** between adjacent parts, **edge margin** unusable on every side of the sheet, and **allow rotation by 90°**. They start at the defaults the admin keeps (3 mm, 5 mm, rotation on) and can be changed for a calculation; **Back to the defaults** restores them.
+- For each row: parts per sheet in each orientation and the one used, **sheets required**, parts on the last sheet, total area of parts, sheet area purchased, material utilisation and waste. Where a material has more than one stock size, each is tried and the one needing the fewest sheets is chosen.
+- **Show cutting layout** draws the workbook's Layout sheet to scale: the sheet, the usable area inside the margin, numbered parts, grey unused slots on a partly filled sheet, and a sheet-number box to step through the sheets.
+
+It is a straight-grid estimate, as the workbook says: a nesting program may save a little more. Rows missing a material, size or number are listed as not counted. The list is remembered in your browser; **Print** gives a copy for the purchase request. The materials and stock sizes come from **Admin → Tools**.
 
 ## Other pages
 

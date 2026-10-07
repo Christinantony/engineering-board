@@ -53,7 +53,7 @@ export function FilterBar({
   shown?: number;
   total?: number;
 }) {
-  const { me, engineers, jobTypes, projects } = useApp();
+  const { me, workers, jobTypes, projects, can } = useApp();
   const set = (patch: Partial<Filters>) => onChange({ ...value, ...patch });
   const n = activeCount(value);
   const mineOnly = value.assignee.length === 1 && value.assignee[0] === me.id;
@@ -75,13 +75,13 @@ export function FilterBar({
 
   return (
     <div className="filterbar" role="toolbar" aria-label="Filters">
-      {me.role === 'engineer' && (
+      {can('claim') && (
         <button className={`fchip${mineOnly ? ' on' : ''}`} aria-pressed={mineOnly} onClick={() => set({ assignee: mineOnly ? [] : [me.id] })}>
           Mine
         </button>
       )}
       <div className="fgroup" aria-label="Assignee">
-        {engineers
+        {workers
           .filter((u) => u.active)
           .map((u) => {
             const on = value.assignee.includes(u.id);

@@ -19,7 +19,7 @@ export function JobRow({
   showUpdated?: boolean;
   handle?: any;
 }) {
-  const { me, user, jobType, openJob, project } = useApp();
+  const { user, jobType, openJob, project, can } = useApp();
   const due = dueLabel(t);
   const open = t.status !== 'done' && t.status !== 'cancelled';
   const waiting = t.status === 'waiting' || t.status === 'blocked';
@@ -68,7 +68,7 @@ export function JobRow({
         <span className="jobrow-who">
           {t.assigned_to != null ? (
             <Badge user={user(t.assigned_to)} size="sm" />
-          ) : open && me.role === 'engineer' ? (
+          ) : open && can('claim') ? (
             <button
               className="btn btn-claim btn-sm"
               onClick={(e: any) => {
