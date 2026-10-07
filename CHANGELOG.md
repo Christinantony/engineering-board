@@ -189,3 +189,14 @@
 - **Decisions affected:** #32 rewritten to describe the workbook's method (same decision, now exact). No runtime dependency (#1).
 - **Validation:** On Node 22.22.0: typecheck; 198 backend tests, including the workbook's example formula for formula, rotation off, a part that only fits one way, one that fits none, totals per material and skipped rows; build; 15 package checks; 39 browser tests in real Chromium, with the calculator test rewritten around the workbook's example and its layout drawing (192 parts drawn, 116 on the last sheet with 76 grey slots, kerf 10 → 165 per sheet).
 - **Follow-ups / open issues:** the stock sizes are the workbook's placeholders; replace them under Admin → Tools with the supplier's real sizes. Thickness could return later as a note on a row if the team wants it on the printout.
+
+### 2026-10-07 22:45 IST | Claude | branch: claude/readme-1.5.0
+- **What:** The README and its screenshots now describe 1.5.0.
+  - **Screenshots re-shot** with `node scripts/screenshots.mjs` against a fresh demo board, so every picture is 1.5.0 (the caption said 1.2.0 and 1.3.0). The script now also takes the sheet calculator (the workbook's own example, Mild Steel 150 × 100 × 500 → 192 per sheet, 3 sheets, plus a second component on Aluminium), its cutting layout (sheet 3 of 3, 116 parts), Admin → Roles and Admin → Tools, and gives the demo bracket job a file location so the job panel shows **Copy** and **Go to location**.
+  - **New pictures in the README:** A10 Tools (calculator and layout), A7 Team activity (the image existed but wasn't shown), E10 Admin → Roles, E11 Admin → Tools.
+  - **Text:** ten pages, not nine; B3 rewritten around the three role capabilities and their shipped defaults, pointing to Admin → Roles; E8 and E9 back in order; E10 and E11 say what the admin pages say (claim can't be taken from a role still holding jobs; materials are retired, not deleted; stock sizes are the workbook's placeholders); schema version 10; 198 backend and 39 browser tests; the 1.5.0 release line says the calculator matches the workbook formula for formula; the code layout lists the domain modules added since 1.0 and `docs/tools/`.
+- **Why:** Christin asked for the README and its images to be brought up to date after 1.5.0 merged.
+- **Files:** `README.md`, `assets/screenshots/*.png` (all re-shot; new `tools-sheet.png`, `tools-layout.png`, `admin-roles.png`, `admin-tools.png`), `scripts/screenshots.mjs`, `HANDOFF.md`, `CHANGELOG.md`
+- **Decisions affected:** none. No code or runtime change.
+- **Validation:** On Node 22.22.0: typecheck and 198 backend tests pass; build; screenshots taken in Playwright's Chromium 153 and each new one checked by eye; every image the README links exists and every PNG in `assets/screenshots/` is linked.
+- **Follow-ups / open issues:** none.

@@ -53,6 +53,12 @@ if (!ebin.body?.user) throw new Error(`could not add the reviewer: ${ebin.r.stat
 await api('POST', '/api/session/password', { user_id: ebin.body.user.id, password: PASSWORD });
 await api('POST', '/api/admin/pin', { new_pin: '4821' }, admin);
 const pumpSkid = (await api('GET', '/api/projects', undefined, s.cookie)).body.projects.find((p) => p.name === 'Pump skid').id;
+// a file location on the bracket job, so its panel shows Copy and Go to location
+{
+  const list = await api('GET', '/api/tickets?q=Bracket%20redesign', undefined, s.cookie);
+  const t = list.body.tickets.find((x) => x.title === 'Bracket redesign');
+  await api('PATCH', `/api/tickets/${t.id}`, { version: t.version, file_location: '\\\\FILESERVER\\Projects\\P-1042\\CAD\\Motor bracket' }, s.cookie);
+}
 
 const browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH });
 const open = [];
@@ -105,6 +111,33 @@ const shot = (p, file, opts = {}) => p.screenshot({ path: `${OUT}/${file}.png`, 
     await settle(p, 900);
     await shot(p, file);
   }
+  // Tools: the sheet calculator with the workbook's own example and a second part, and its cutting layout
+  await p.goto(BASE + '/tools');
+  await p.waitForSelector('.tool-card');
+  await p.click('.tool-card:has-text("Sheet calculator")');
+  await p.waitForSelector('.sheet-table');
+  await p.fill('input[aria-label="Component 1 name"]', 'Bracket');
+  await p.selectOption('select[aria-label="Component 1 material"]', { label: 'Mild Steel' });
+  await p.fill('input[aria-label="Component 1 length (mm)"]', '150');
+  await p.fill('input[aria-label="Component 1 width (mm)"]', '100');
+  await p.fill('input[aria-label="Component 1 quantity"]', '500');
+  await p.waitForSelector('[data-testid=sheet-total]:has-text("3")');
+  await p.click('button:has-text("+ Add component")');
+  await p.waitForSelector('input[aria-label="Component 2 name"]');
+  await p.fill('input[aria-label="Component 2 name"]', 'Cover plate');
+  await p.selectOption('select[aria-label="Component 2 material"]', { label: 'Aluminium' });
+  await p.fill('input[aria-label="Component 2 length (mm)"]', '600');
+  await p.fill('input[aria-label="Component 2 width (mm)"]', '400');
+  await p.fill('input[aria-label="Component 2 quantity"]', '24');
+  await settle(p, 900);
+  await shot(p, 'tools-sheet');
+  await p.locator('button:has-text("Show cutting layout")').first().click();
+  await p.waitForSelector('.sheet-svg');
+  await p.fill('input[aria-label="Sheet number to view"]', '3');
+  await p.waitForFunction(() => document.querySelectorAll('.sheet-svg .sheet-svg-part').length === 116);
+  await p.locator('.sheet-layout').first().scrollIntoViewIfNeeded();
+  await settle(p, 600);
+  await p.locator('[data-testid=sheet-group]').first().screenshot({ path: `${OUT}/tools-layout.png` });
 }
 
 // notifications bell as Christin (urgent job, assignment, overdue reminders)
@@ -122,6 +155,13 @@ const shot = (p, file, opts = {}) => p.screenshot({ path: `${OUT}/${file}.png`, 
   await p.waitForSelector('.topbar');
   await settle(p, 900);
   await shot(p, 'admin');
+  // Admin → Roles (decision #31) and Admin → Tools (decision #32)
+  for (const [section, file] of [['roles', 'admin-roles'], ['tools', 'admin-tools']]) {
+    await p.goto(`${BASE}/admin?s=${section}`);
+    await p.waitForSelector('.admin-body');
+    await settle(p, 900);
+    await shot(p, file);
+  }
 }
 
 // drawing review: Christin submits a signed scan and two drawings, Ebin reviews

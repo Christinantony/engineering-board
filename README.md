@@ -8,7 +8,7 @@ One shared board for every design job: who is on it, what it is waiting for, whe
 
 ![The board: six columns from Inbox to Done, with the demo jobs](assets/screenshots/board.png)
 
-*Every picture in this file is a real screenshot of version 1.2.0 (1.3.0 for drawing review and Admin) running with its demo data, taken in Chromium by `scripts/screenshots.mjs`.*
+*Every picture in this file is a real screenshot of version 1.5.0 running with its demo data, taken in Chromium by `scripts/screenshots.mjs`.*
 
 | | |
 |---|---|
@@ -23,11 +23,11 @@ One shared board for every design job: who is on it, what it is waiting for, whe
 
 | Section | What you will find |
 |---|---|
-| [A. The pages](#a-the-pages) | Nine views, each with its shortcut key |
+| [A. The pages](#a-the-pages) | Ten pages, each with its shortcut key |
 | [B. The job record](#b-the-job-record) | Every field a job carries, and how a job moves |
 | [C. Working together](#c-working-together) | Claiming, live updates, edit merging, notifications |
 | [D. Finding things](#d-finding-things) | Search, filters, export |
-| [E. Administration](#e-administration) | Team, import, backups, restore, archive |
+| [E. Administration](#e-administration) | Team, roles, tools data, import, backups, restore, archive |
 | [F. Appearance](#f-appearance) | Three themes, keyboard, phone and tablet |
 | [G. Editions and installation](#g-editions-and-installation) | Windows, Linux, Docker |
 | [H. Specifications](#h-specifications) | Settings, limits, checks |
@@ -60,10 +60,18 @@ Every page has a one-key shortcut. Press <kbd>?</kbd> anywhere for the full list
 | **A2 Today** | **A4 Dashboard** |
 | ![Workload: estimated hours per engineer against the 8-hour reference line](assets/screenshots/workload.png) | ![Reports: completed per day, per engineer and per job type](assets/screenshots/reports.png) |
 | **A5 Workload** | **A6 Reports** |
-| ![A job opened from the board, with every field in the side panel](assets/screenshots/job-panel.png) | ![My work: one engineer's open jobs in their own order](assets/screenshots/my-work.png) |
+| ![A job opened from the board: its project in bold above the title on every card, and every field in the side panel, with Copy and Go to location beside the file path](assets/screenshots/job-panel.png) | ![My work: one engineer's open jobs in their own order](assets/screenshots/my-work.png) |
 | **A1 Board with a job open** | **A3 My work** |
 | ![Projects: every project with its open and total jobs, and all the jobs of the chosen project](assets/screenshots/projects.png) | ![New job: a title and its project, with "+ Add a project…" for a new one](assets/screenshots/new-job.png) |
 | **A9 Projects** | **New job, with its project** |
+| ![Team activity: every change to every job, newest first, filterable by person](assets/screenshots/activity.png) | ![Admin → Roles: what engineers, managers and reviewers may do with jobs](assets/screenshots/admin-roles.png) |
+| **A7 Team activity** | **E10 Admin → Roles** |
+
+**A10 Tools: the sheet calculator.** The team's *Sheet Requirement Calculator* workbook as a page, giving the workbook's own answers. Below, its example (Mild Steel 2500 × 1250, 150 × 100 mm × 500, kerf 3, margin 5): 192 per sheet, 3 sheets, 116 on the last, 80% utilisation. A second component on Aluminium adds its own sheets, totalled per material.
+
+![Sheet calculator: two components, the kerf, edge margin and rotation inputs, and the sheets required per component and per material](assets/screenshots/tools-sheet.png)
+
+![The cutting layout: sheet 3 of 3 drawn to scale, 16 across × 12 down, parts numbered, unused slots in grey](assets/screenshots/tools-layout.png)
 
 **A8 Drawing review.** The queue, and the workspace with the signed reference on the left and the submitted drawing on the right, each with its own page, zoom and rotation. The open comment blocks **Pass board review** until it is resolved.
 
@@ -110,11 +118,15 @@ Drag a card, press <kbd>Shift</kbd>+<kbd>←</kbd> / <kbd>→</kbd>, or use the 
 
 ### B3. Who may do what
 
-| | Create and edit | Comment | Claim and work | Assign to others |
+These are the shipped rules. An admin can change the three job capabilities per role under **Admin → Roles** (E10); board review is not part of that setting and stays as described below.
+
+| | Create jobs | Claim and be assigned jobs | Edit and move any job | Comment |
 |---|:---:|:---:|:---:|:---:|
 | **Engineer** | yes | yes | yes | yes |
-| **Manager** | yes | yes | no | yes |
-| **Reviewer** | no | drawings only | no | no |
+| **Manager** | yes | no | yes | yes |
+| **Reviewer** | no | no | no | drawings only |
+
+*Create jobs* also lets a role add projects. *Edit and move any job* covers every field, column, assigning others and archiving. A role with *claim* but not *edit* works only on the jobs it holds.
 
 Drawing review: engineers submit drawings, hand each one to one or more reviewers, mark prints handed over and record signatures; the manager and reviewers pass or return drawings (never their own submission) and record signatures. A reviewer sees only the drawings handed to them, with the job's number and title, and no other page of the board; the manager sees everything. Engineers can't review drawings. A job with drawings in board review is Done only when every drawing is physically signed.
 
@@ -157,14 +169,16 @@ Behind the admin PIN, unlocked per browser for 12 hours. The PIN starts as `1234
 | **E5** | **Restore** | From the list, or from an uploaded `.db` file (64 MiB by default, adjustable). The file is checked and prepared first; if anything fails the original data is put back. The current data is backed up before every restore, so a restore can itself be undone. Nobody is signed out. |
 | **E6** | **Archive** | Hide jobs finished more than N days ago from lists and reports. Never deletes. |
 | **E7** | **Admin PIN** | Change it. If it is forgotten, put an empty file named `RESET-ADMIN-PIN` next to `start.bat` and restart. |
-| **E9** | **Passwords** | Everyone signs in with their own password, created at their first sign-in and changeable from the account menu. Admins reset a forgotten one (the person creates a new one next time). If everyone is locked out, an empty file named `RESET-PASSWORDS` next to `start.bat` clears them all on the next start. |
 | **E8** | **Demo data** | Twelve example jobs across every column, removable in one click without touching real jobs. |
-| **E10** | **Roles** | What engineers, managers and reviewers may do with jobs: create, claim and be assigned, edit any job. Shipped rules: engineers everything, managers create and edit, reviewers nothing. Board review is separate and unaffected. |
-| **E11** | **Tools data** | The materials and standard sheet sizes behind the sheet calculator (the workbook's Materials sheet), and the defaults for its kerf, edge margin and rotation inputs. |
+| **E9** | **Passwords** | Everyone signs in with their own password, created at their first sign-in and changeable from the account menu. Admins reset a forgotten one (the person creates a new one next time). If everyone is locked out, an empty file named `RESET-PASSWORDS` next to `start.bat` clears them all on the next start. |
+| **E10** | **Roles** | What engineers, managers and reviewers may do with jobs: create, claim and be assigned, edit any job (see B3). Shipped rules: engineers everything, managers create and edit, reviewers nothing. Taking *claim* away from a role whose members still hold open jobs is refused until those jobs are reassigned. Board review is separate and unaffected. |
+| **E11** | **Tools data** | The materials and standard sheet sizes behind the sheet calculator (the workbook's Materials sheet: ten materials with its typical sizes, to be replaced with the supplier's real ones), and the defaults for its kerf, edge margin and rotation inputs. Materials are retired, never deleted. |
 
 ![The sign-in screen: pick your name, then enter or create your password; the theme can be chosen before signing in](assets/screenshots/sign-in.png)
 
 ![Admin → Team: role, badge colour, admin menu, active, and password reset per person](assets/screenshots/admin.png)
+
+![Admin → Tools: the materials and standard sheet sizes behind the sheet calculator](assets/screenshots/admin-tools.png)
 
 ## F. Appearance
 
@@ -243,9 +257,9 @@ Copy `config.example.json` to `config.json` next to `start.bat`, edit it, restar
 | **History** | Append-only, enforced by database triggers. Jobs cannot be deleted. |
 | **Concurrency** | Version-checked edits, atomic claiming, idempotent creation. |
 | **Search** | SQLite full-text with trigram matching, so any three letters match. |
-| **Upgrades** | Schema version 9. A backup is taken before a new version changes the database. A board refuses to start on data written by a newer version. |
+| **Upgrades** | Schema version 10. A backup is taken before a new version changes the database. A board refuses to start on data written by a newer version. |
 | **Network** | LAN only; no outbound traffic. Name picker plus a password (scrypt hash) and a signed cookie bound to it; admin behind a hashed PIN; five wrong passwords pause sign-in for 30 seconds. |
-| **Checked by** | 180 backend tests, 37 browser tests, 15 package checks, and a typecheck. |
+| **Checked by** | 198 backend tests, 39 browser tests, 15 package checks, and a typecheck. The sheet calculator is checked against the workbook's own example. |
 
 ## J. Documentation
 
@@ -263,7 +277,7 @@ Copy `config.example.json` to `config.json` next to `start.bat`, edit it, restar
 
 | Version | What it brought |
 |---|---|
-| **1.5.0** | The project name stands out on cards and job rows. Admin-set role capabilities (create, claim and be assigned, edit any job) for engineers, managers and reviewers, leaving board review untouched. **Go to location** beside a job's file path. A **Tools** page with the team's sheet calculator workbook as a page, its materials and sheet sizes editable by the admin. |
+| **1.5.0** | The project name stands out on cards and job rows. Admin-set role capabilities (create, claim and be assigned, edit any job) for engineers, managers and reviewers, leaving board review untouched. **Go to location** beside a job's file path. A **Tools** page with the team's *Sheet Requirement Calculator* workbook as a page, formula for formula, with its cutting layout drawn to scale; its materials and sheet sizes editable by the admin. |
 | **1.4.0** | Projects: every job belongs to a project, chosen or added from the New job form; a Projects page with each project's jobs; project filter, search, card and job-panel display; Project column in import and export. No preset list: projects are added as they are needed. |
 | **1.3.0** | Reviewer access: engineers hand each drawing to one or more reviewers (and can change them later). A reviewer sees only the drawings handed to them, with the job number and title: no board, workload, reports, search, other jobs, team activity or Admin. The manager keeps full access. |
 | **1.2.0** | Password sign-in for everyone, current and new: each person creates their own password at their first sign-in, changes it from the account menu, and an admin can reset a forgotten one. A `RESET-PASSWORDS` file on the host PC clears them all. Restores keep the current passwords. |
@@ -301,11 +315,13 @@ server/src/
   config.ts      config.json and environment variables, with plain-English errors
   http/          router, bodies, cookies, static files, error mapping
   db/            connection, transactions, migrations, seed data
-  domain/        tickets, rank, search, views, users, job types, auth,
-                 notifications, presence, backup, import and export
+  domain/        tickets, rank, search, views, reports, users, job types, auth,
+                 permissions, projects, tools, notifications, presence,
+                 backup, import and export (transfer), drawing review
+                 (reviews, reviewStore, projectFolder, pdf)
 server/test/     node:test suites against a real server and a real SQLite file
 e2e/             browser tests and the build and package check
 scripts/         build, package, lib (markdown, zip, guides), windows/, linux/
-assets/          README screenshots
-docs/            the guides, also built into the app
+assets/          README screenshots (scripts/screenshots.mjs)
+docs/            the guides, also built into the app; docs/tools/ holds the calculator's workbook
 ```

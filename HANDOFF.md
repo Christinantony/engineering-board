@@ -19,9 +19,9 @@ _(none)_
 - [x] The application source was not in this repo yet. **Answer:** Claude imported the full source and its history (phases 2 to 7) on branch `claude/import-app-source`, 2026-10-02.
 
 ## Notes for the next agent
-- **Where the project stands:** everything up to 1.4.0 (projects, decision #30) is on main. Branch `ccr-76842e6e-xbo8lh` proposes 1.5.0 (prominent project names, role capabilities #31, Go to location, Tools and the sheet calculator #32) for Christin's review.
+- **Where the project stands:** 1.5.0 (prominent project names, role capabilities #31, Go to location, Tools and the sheet calculator #32) is on main. The README and its screenshots describe 1.5.0.
 - **Releases:** `npm run package` writes `dist/EngineeringBoard-<version>.zip`. Bump `version` in `package.json` and `APP_VERSION` in `server/src/app.ts` together; `check:build` fails if they differ.
-- **README screenshots:** `assets/screenshots/` is written by `node scripts/screenshots.mjs` (build first; set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` if Playwright's own Chromium isn't installed). Re-run it after visible changes.
+- **README screenshots:** `assets/screenshots/` is written by `node scripts/screenshots.mjs` (build first; set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` if Playwright's own Chromium isn't installed). Re-run it after visible changes. It also shoots the sheet calculator (the workbook's example plus a second part), its cutting layout, Admin → Roles and Admin → Tools; every PNG in that folder is referenced from the README, so remove a shot from both places together.
 - **Guides:** edit the Markdown in `docs/`; the build turns them into the pages at `/guides/` and in the zip. `check:build` fails on a broken link between guides.
 - **Windows scripts** (`scripts/windows/*.bat`) can't be run in CI. Keep echo lines that show `%~dp0` outside `( )` blocks and quoted: a folder path containing `)` or `&` breaks them otherwise.
 - **Setup:** `npm install` installs the build and test tools (TypeScript, tsx, esbuild, React, Playwright). They are devDependencies only; the running board needs nothing but `node.exe` 22.16+ (decision #1).
