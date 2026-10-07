@@ -231,6 +231,8 @@ export function startLive(meId?: number, loadedVersion?: string) {
       else if (e.type === 'users') invalidate((k) => k.startsWith('/api/users') || k.startsWith('/api/admin/users') || TICKET_KEYS(k));
       else if (e.type === 'job_types') invalidate('/api/job-types');
       else if (e.type === 'projects') invalidate('/api/projects');
+      else if (e.type === 'permissions') invalidate((k) => k === '/api/meta' || k.startsWith('/api/admin/permissions'));
+      else if (e.type === 'tools') invalidate((k) => k.startsWith('/api/tools'));
       else if (e.type === 'reload') invalidate();
     } catch {
       /* ignore malformed event */

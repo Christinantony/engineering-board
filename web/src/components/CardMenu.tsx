@@ -27,7 +27,7 @@ export function CardMenu({
   onMove: (t: Ticket, columnId: string) => void;
   onClose: () => void;
 }) {
-  const { me, openJob } = useApp();
+  const { openJob, can } = useApp();
   const ref = useRef<HTMLDivElement | null>(null);
   const t = target.ticket;
   const closed = t.status === 'done' || t.status === 'cancelled';
@@ -81,12 +81,12 @@ export function CardMenu({
       <button role="menuitem" onClick={run(() => openJob(t.id))}>
         Open
       </button>
-      {!closed && t.assigned_to == null && me.role === 'engineer' && (
+      {!closed && t.assigned_to == null && can('claim') && (
         <button role="menuitem" onClick={run(() => void claimTicket(t))}>
           Claim
         </button>
       )}
-      {!closed && (
+      {!closed && can('edit') && (
         <button
           role="menuitem"
           onClick={run(async () => {

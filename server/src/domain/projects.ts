@@ -4,7 +4,8 @@
 // project and a project to all of its jobs. Names are unique regardless of
 // case and spacing; projects are never deleted (their jobs' history needs them).
 
-import { projectSchema, type Project, type User } from '@board/shared';
+import { allows, projectSchema, type Project, type User } from '@board/shared';
+import { getPermissions, PERMISSION_DENIED } from './permissions.ts';
 import { all, get, run, tx } from '../db/connection.ts';
 import { HttpError, badRequest, forbidden, notFound, nowIso, type Ctx } from '../lib/core.ts';
 
@@ -35,7 +36,7 @@ export function findProjectByName(ctx: Ctx, name: string): { id: number; name: s
 
 /** Add a project. A name that already exists (any case) is refused with the existing project. */
 export function createProject(ctx: Ctx, actor: User | null, input: unknown, opts: { demo?: boolean } = {}): Project {
-  if (actor && actor.role === 'reviewer') throw forbidden('Reviewers cannot add projects.');
+  if (actor && !allows(getPermissions(ctx), actor, 'create')) throw forbidden(PERMISSION_DENIED.create);
   const name = cleanProjectName(projectSchema(input).name);
   if (!name) throw badRequest('Give the project a name.');
   return tx(ctx.db, () => {

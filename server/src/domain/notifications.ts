@@ -16,7 +16,8 @@
 // A reviewer hears only about the drawings handed to them (decision #29):
 // being handed one, comments on it, and the print handed over to sign.
 
-import { canReview, seesWholeBoard, type Activity, type User } from '@board/shared';
+import { canReview, hasBoardAccess, seesWholeBoard, type Activity, type RolePermissions, type User } from '@board/shared';
+import { getPermissions } from './permissions.ts';
 import { all, get, run } from '../db/connection.ts';
 import { nowIso, type Ctx } from '../lib/core.ts';
 import { localDate } from '../lib/time.ts';
@@ -43,9 +44,9 @@ interface Row extends Activity {
 
 const WINDOW_DAYS = 14;
 
-function classify(a: Row, me: User): { kind: NoticeKind; detail: string | null } | null {
+function classify(a: Row, me: User, perms: RolePermissions): { kind: NoticeKind; detail: string | null } | null {
   if (a.user_id === me.id) return null; // never notify people about their own actions
-  if (!seesWholeBoard(me)) {
+  if (!hasBoardAccess(perms, me)) {
     // reviewers: only their own drawings (comments are checked per drawing by the caller)
     if (a.kind === 'review_assigned') return a.to_value === me.name ? { kind: 'review_submitted', detail: a.body } : null;
     if (a.kind === 'review_comment') return { kind: 'review_comment', detail: `${a.to_value}: ${a.body ?? ''}` };
@@ -83,6 +84,9 @@ function classify(a: Row, me: User): { kind: NoticeKind; detail: string | null }
     case 'review_handover':
       // the reminder goes to the reviewer who passed the drawing, and only them
       return a.to_value === me.name ? { kind: 'signature', detail: a.body } : null;
+    case 'review_assigned':
+      // a reviewer who also has the board (Admin → Roles) still hears about drawings handed to them
+      return a.to_value === me.name ? { kind: 'review_submitted', detail: a.body } : null;
     default:
       return null;
   }
@@ -135,8 +139,9 @@ export function notifications(ctx: Ctx, me: User, limit = 40) {
       me.id,
       me.id,
     );
+  const perms = getPermissions(ctx);
   for (const r of rows) {
-    const c = classify(r, me);
+    const c = classify(r, me, perms);
     if (!c) continue;
     if (!seesWholeBoard(me) && r.kind === 'review_comment' && !handedComment(r.from_value)) continue;
     items.push({

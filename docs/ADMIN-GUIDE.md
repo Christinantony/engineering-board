@@ -8,10 +8,34 @@ Open **your name (top right) → Admin** and enter the admin PIN. The Admin area
 
 **Admin → Team** lists everyone who can sign in.
 
-- **Add a person** with a name, initials and badge colour, as an engineer, a manager or a reviewer. Engineers claim and do jobs; managers create, edit, assign and comment but can't claim. **Reviewers** (and the manager) pass or return drawings in board review and sign the prints. A reviewer sees only the drawings an engineer hands to them (the job number and title, the drawings, revision notes, review comments and history), and nothing else on the board: no board, workload, reports, search, team activity or Admin. They can't create, claim or change jobs. The manager still sees everything. Engineers can't review drawings. Someone with open jobs must have them reassigned before they stop being an engineer.
+- **Add a person** with a name, initials and badge colour, as an engineer, a manager or a reviewer. Out of the box, engineers claim and do jobs; managers create, edit, assign and comment but can't claim (change this under [Roles](#roles)). **Reviewers** (and the manager) pass or return drawings in board review and sign the prints. A reviewer sees only the drawings an engineer hands to them (the job number and title, the drawings, revision notes, review comments and history), and nothing else on the board: no board, workload, reports, search, team activity or Admin. They can't create, claim or change jobs. The manager still sees everything. Engineers can't review drawings. Someone with open jobs must have them reassigned before moving to a role that can't hold jobs.
 - **Password**: everyone signs in with their own password, which they create the first time they sign in (**Not created yet** until then). Nobody else can see or set it. If someone forgets theirs, **Reset** clears it: they are signed out everywhere and create a new password the next time they sign in. Until they do, anyone on the network who picks their name could create it, so tell them straight away. If *everyone* is locked out, see [Troubleshooting](TROUBLESHOOTING.md#forgotten-passwords).
 - **Admin menu** (the tick box) shows the Admin entry to people who look after the board. It grants nothing by itself: the PIN does.
 - **Active**: untick it for someone who leaves. Their name disappears from the pickers but stays on every job and in the history. People can't be deleted, so history never loses its author. Their open jobs keep them as owner until you reassign them; the Today and Workload pages make those easy to spot.
+
+## Roles
+
+**Admin → Roles** decides what each role may do with jobs, with a tick box per role and capability:
+
+- **Create jobs** (also lets the role add projects).
+- **Claim and be assigned jobs**: the role can claim jobs, be assigned them, and work on the jobs assigned to them (move them between columns, edit their fields, order their My work list). People in such a role appear in the assignee lists, My work and Workload.
+- **Edit and move any job**: every job, whoever holds it: fields, columns, assigning others, archiving and reopening.
+
+Anyone who can see the board can comment. The board ships with engineers allowed everything, managers allowed to create and edit but not claim, and reviewers allowed nothing; **Back to the original rules** restores that. Tick **Claim** for managers when jobs are created for the manager too. Taking **Claim** away from a role whose members still hold open jobs is refused until those jobs are reassigned.
+
+**Board review is separate and never changes here.** Engineers submit drawings, the manager and reviewers pass or return them, and a reviewer sees only the drawings handed to them. Giving reviewers a job capability also shows them the board (so jobs can be created for them); their review screen still lists only their drawings.
+
+Everyone sees a change straight away: the board refreshes itself.
+
+## Tools
+
+**Admin → Tools** holds the reference data behind the **Tools** page. For the sheet calculator:
+
+- **Materials**: name, optional density (kg/m³, used for the sheet mass) and order. Retiring a material hides it from new calculations.
+- **Standard sheet sizes**: length × width in mm per material. Leave the thickness empty for a size stocked in every thickness, or give it to list what is stocked per thickness; components of that thickness then use only those sizes. Sizes can be removed.
+- **Settings**: the usable share of a sheet (allowance for scrap and offcuts when counting by area; 85% to start) and the cut width (added to each part when counting how many fit on a sheet).
+
+The board starts with mild steel, two stainless grades and aluminium in common sheet sizes so the calculator works on day one; edit the list to match what the team buys.
 
 ## Drawing review and project folders
 

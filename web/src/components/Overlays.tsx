@@ -114,14 +114,14 @@ function ReasonDialog({ spec, done }: { spec: any; done: (v: any) => void }) {
 }
 
 function AssignDialog({ spec, done }: { spec: any; done: (v: any) => void }) {
-  const { engineers } = useApp();
+  const { workers } = useApp();
   useEscape(() => done(null));
   return (
     <div>
       <h2 className="dialog-title" id="dialog-title">{spec.title}</h2>
       <p className="muted dialog-sub">{spec.ticket.title}</p>
       <div className="assign-grid">
-        {engineers
+        {workers
           .filter((u) => u.active)
           .map((u, i) => (
             <button key={u.id} className="assign-option" autoFocus={i === 0} onClick={() => done(u.id)}>

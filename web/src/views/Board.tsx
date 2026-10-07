@@ -45,7 +45,7 @@ interface Drag {
 type Overrides = Map<number, { status: Status; board_rank: number }>;
 
 export function Board({ filter }: { filter?: (t: Ticket) => boolean }) {
-  const { me, openJob } = useApp();
+  const { me, openJob, can } = useApp();
   const q = useTicketQuery('/api/tickets?view=board');
   const [overrides, setOverrides] = useState<Overrides>(new Map());
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -251,7 +251,7 @@ export function Board({ filter }: { filter?: (t: Ticket) => boolean }) {
       const r = e.target.closest('[data-card]').getBoundingClientRect();
       setMenu({ ticket: t, x: r.left + 24, y: r.top + 24 });
     } else if (key === 'c' || key === 'C') {
-      if (t.assigned_to == null && me.role === 'engineer' && t.status !== 'done' && t.status !== 'cancelled') {
+      if (t.assigned_to == null && can('claim') && t.status !== 'done' && t.status !== 'cancelled') {
         e.preventDefault();
         e.stopPropagation();
         void claimTicket(t).then(() => refocus(t.id));

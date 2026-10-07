@@ -41,10 +41,42 @@ export const ROLE_LABEL: Record<Role, string> = { engineer: 'Engineer', manager:
 /** Who may pass or return drawings in board review (never engineers). */
 export const canReview = (u: { role: Role; active: boolean }) => u.active && (u.role === 'manager' || u.role === 'reviewer');
 /**
- * Reviewers see only the drawings handed to them (decision #29). Everyone else
- * (engineers and the manager) sees the whole board.
+ * Drawing review visibility (decision #29): reviewers see only the drawings
+ * handed to them; engineers and the manager see every drawing. This is about
+ * the review process only and is not changed by the role capabilities below.
  */
 export const seesWholeBoard = (u: { role: Role }) => u.role !== 'reviewer';
+
+/**
+ * Job capabilities per role (decision #31), set by the admin under Admin → Roles.
+ *  - create: make new jobs (and add projects)
+ *  - claim:  claim jobs, be assigned jobs, and work on the jobs assigned to you
+ *            (move them between columns, edit their fields, order your My work list)
+ *  - edit:   edit, move, assign, archive and reopen any job
+ * Commenting needs only board access. Board review (who submits drawings, who
+ * passes or returns them, what a reviewer sees) is separate and never changes.
+ */
+export const CAPABILITIES = ['create', 'claim', 'edit'] as const;
+export type Capability = (typeof CAPABILITIES)[number];
+export const CAPABILITY_LABEL: Record<Capability, string> = { create: 'Create jobs', claim: 'Claim and be assigned jobs', edit: 'Edit and move any job' };
+export type RolePermissions = Record<Role, Record<Capability, boolean>>;
+/** The rules the board shipped with (decision #11): engineers do the work, the manager runs the board, reviewers only review. */
+export const DEFAULT_PERMISSIONS: RolePermissions = {
+  engineer: { create: true, claim: true, edit: true },
+  manager: { create: true, claim: false, edit: true },
+  reviewer: { create: false, claim: false, edit: false },
+};
+export const allows = (perms: RolePermissions, u: { role: Role }, cap: Capability): boolean => !!perms[u.role]?.[cap];
+/**
+ * Who sees the Kanban board, its pages and the job panel: everyone but
+ * reviewers, unless the admin has given reviewers a job capability (jobs are
+ * sometimes created for them too). Review visibility stays as seesWholeBoard.
+ */
+export const hasBoardAccess = (perms: RolePermissions, u: { role: Role }): boolean =>
+  u.role !== 'reviewer' || CAPABILITIES.some((c) => allows(perms, u, c));
+/** Can this person change this job: edit any job, or claim-holders on the job assigned to them. */
+export const canChangeJob = (perms: RolePermissions, u: { id: number; role: Role }, t: { assigned_to: number | null }): boolean =>
+  allows(perms, u, 'edit') || (allows(perms, u, 'claim') && t.assigned_to === u.id);
 
 /**
  * Estimate buckets. `minutes` is the planning value stored in the database

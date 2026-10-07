@@ -3,6 +3,7 @@
 
 import { all, get } from '../db/connection.ts';
 import { badRequest, nowIso, type Ctx } from '../lib/core.ts';
+import { claimingRoles } from './permissions.ts';
 import { addDays, startOfLocalDayIso } from '../lib/time.ts';
 
 const isDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
@@ -17,6 +18,7 @@ const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.le
 const round1 = (x: number | null) => (x == null ? null : Math.round(x * 10) / 10);
 
 export function report(ctx: Ctx, from: string, to: string) {
+  const holders = claimingRoles(ctx);
   if (!isDate(from) || !isDate(to)) throw badRequest('from and to must be dates (YYYY-MM-DD)');
   if (from > to) throw badRequest('from must be on or before to');
   const start = startOfLocalDayIso(from, ctx.tz);
@@ -69,7 +71,7 @@ export function report(ctx: Ctx, from: string, to: string) {
         active: u.active === 1,
       };
     })
-    .filter((r) => r.role === 'engineer' && (r.active || r.completed > 0))
+    .filter((r) => (holders.includes(r.role) && r.active) || r.completed > 0)
     .sort((a, b) => b.completed - a.completed || a.name.localeCompare(b.name));
 
   const types = all<{ id: number; name: string }>(ctx.db, 'SELECT id, name FROM job_types');

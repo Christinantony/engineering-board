@@ -6,6 +6,8 @@ import {
   REASON_STATUSES,
   STATUSES,
   STATUS_LABEL,
+  allows,
+  canChangeJob,
   commentSchema,
   createTicketSchema,
   createBoardTicketSchema,
@@ -20,6 +22,7 @@ import {
 } from '@board/shared';
 import { randomUUID } from 'node:crypto';
 import { all, get, run, tx, type Db, type Param } from '../db/connection.ts';
+import { PERMISSION_DENIED, getPermissions } from './permissions.ts';
 import { HttpError, badRequest, bool, conflict, forbidden, notFound, nowIso, type Ctx } from '../lib/core.ts';
 import { dueAtIso, localDate, startOfLocalDayIso, addDays } from '../lib/time.ts';
 import { boardScope, bottomRank, myScope, rankFor } from './rank.ts';
@@ -161,10 +164,15 @@ function userName(ctx: Ctx, id: number | null): string | null {
 
 function requireAssignable(ctx: Ctx, userId: number): User {
   const u = getUser(ctx, userId);
-  if (!u) throw badRequest('That engineer does not exist');
+  if (!u) throw badRequest('That person does not exist');
   if (!u.active) throw badRequest(`${u.name} is inactive and cannot be assigned work`);
-  if (u.role !== 'engineer') throw badRequest(`${u.name} is a ${u.role}; only engineers can be assigned jobs`);
+  if (!allows(getPermissions(ctx), u, 'claim')) throw badRequest(`${u.name} is a ${u.role}; ${u.role}s cannot be assigned jobs (Admin → Roles)`);
   return u;
+}
+
+/** Changing a job needs "edit", or "claim" on a job assigned to you (decision #31). */
+function requireChange(ctx: Ctx, actor: User, row: { assigned_to: number | null }) {
+  if (!canChangeJob(getPermissions(ctx), actor, row)) throw forbidden(PERMISSION_DENIED.edit);
 }
 
 function nextJobNumber(ctx: Ctx): string {
@@ -259,7 +267,7 @@ export function createTicket(
   opts: { requireProject?: boolean } = {},
 ): { ticket: Ticket; replayed: boolean } {
   const data = (opts.requireProject ? createBoardTicketSchema : createTicketSchema)(input);
-  if (data.claim && actor.role !== 'engineer') throw forbidden('Only engineers can claim jobs');
+  if (data.claim && !allows(getPermissions(ctx), actor, 'claim')) throw forbidden(PERMISSION_DENIED.claim);
   return tx(ctx.db, () => {
     if (idempotencyKey) {
       const prev = get<{ ticket_id: number }>(ctx.db, 'SELECT ticket_id FROM idempotency WHERE key = ?', idempotencyKey);
@@ -338,6 +346,7 @@ export function updateTicket(ctx: Ctx, actor: User, id: number, input: unknown):
   const data = updateTicketSchema(input);
   return tx(ctx.db, () => {
     const row = getRow(ctx, id);
+    requireChange(ctx, actor, row);
     if (data.version !== row.version) {
       throw conflict(`${row.job_number} was changed by someone else. Your view has been refreshed — please re-apply your edit.`, {
         current: getTicket(ctx, id),
@@ -425,6 +434,7 @@ export function moveTicket(ctx: Ctx, actor: User, id: number, input: unknown): T
   const data = moveTicketSchema(input);
   return tx(ctx.db, () => {
     let row = getRow(ctx, id);
+    requireChange(ctx, actor, row);
     if (row.archived) throw conflict(`${row.job_number} is archived. Restore it first.`);
     if (data.from_status && data.from_status !== row.status) {
       const who = userName(ctx, lastActorFor(ctx, id));
@@ -441,8 +451,8 @@ export function moveTicket(ctx: Ctx, actor: User, id: number, input: unknown): T
     if (target !== from) {
       // assignment requirements
       if (ASSIGNED_STATUSES.includes(target) && row.assigned_to == null) {
-        if (actor.role !== 'engineer') {
-          throw new HttpError(409, 'needs_assignee', `Assign ${row.job_number} to an engineer before moving it to ${STATUS_LABEL[target]}.`);
+        if (!allows(getPermissions(ctx), actor, 'claim')) {
+          throw new HttpError(409, 'needs_assignee', `Assign ${row.job_number} to someone before moving it to ${STATUS_LABEL[target]}.`);
         }
         applyAssignment(ctx, actor, row, actor.id);
         row = getRow(ctx, id);
@@ -509,7 +519,7 @@ function lastActorFor(ctx: Ctx, ticketId: number): number | null {
 // ---------------------------------------------------------------------------
 
 export function claimTicket(ctx: Ctx, actor: User, id: number): Ticket {
-  if (actor.role !== 'engineer') throw forbidden('Only engineers can claim jobs');
+  if (!allows(getPermissions(ctx), actor, 'claim')) throw forbidden(PERMISSION_DENIED.claim);
   if (!actor.active) throw forbidden('Inactive users cannot claim jobs');
   return tx(ctx.db, () => {
     const row = getRow(ctx, id);
@@ -544,6 +554,7 @@ export function claimTicket(ctx: Ctx, actor: User, id: number): Ticket {
 export function releaseTicket(ctx: Ctx, actor: User, id: number): Ticket {
   return tx(ctx.db, () => {
     const row = getRow(ctx, id);
+    requireChange(ctx, actor, row);
     if (row.assigned_to == null) throw conflict(`${row.job_number} is not assigned to anyone.`, { current: getTicket(ctx, id) });
     if (CLOSED_STATUSES.includes(row.status)) throw conflict(`${row.job_number} is closed.`);
     applyAssignment(ctx, actor, row, null);
@@ -584,6 +595,7 @@ export function addComment(ctx: Ctx, actor: User, id: number, input: unknown): A
 export function archiveTicket(ctx: Ctx, actor: User, id: number): Ticket {
   return tx(ctx.db, () => {
     const row = getRow(ctx, id);
+    requireChange(ctx, actor, row);
     if (row.archived) return getTicket(ctx, id);
     if (!CLOSED_STATUSES.includes(row.status))
       throw conflict(`Only done or cancelled jobs can be archived. ${row.job_number} is ${STATUS_LABEL[row.status].toLowerCase()}.`);
@@ -598,6 +610,7 @@ export function archiveTicket(ctx: Ctx, actor: User, id: number): Ticket {
 export function restoreTicket(ctx: Ctx, actor: User, id: number): Ticket {
   return tx(ctx.db, () => {
     const row = getRow(ctx, id);
+    requireChange(ctx, actor, row);
     if (!row.archived) return getTicket(ctx, id);
     run(ctx.db, 'UPDATE tickets SET archived = 0, board_rank = ? WHERE id = ?', rankFor(ctx, boardScope(row.status), id), id);
     log(ctx, id, actor.id, 'restored');

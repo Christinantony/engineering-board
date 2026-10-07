@@ -39,7 +39,7 @@ Everyone signs in with their own password (decision #28). A new person, or one w
 | GET/POST/DELETE | `/api/session` | POST `{user_id, password}` sets a signed cookie (1 year). The cookie is bound to the current password: changing or resetting it signs that person out everywhere. Cookies from versions before 1.2.0 are no longer accepted. |
 | POST | `/api/session/password` | `{user_id, password}`: create the first password (409 if one exists) and sign in. |
 | POST | `/api/me/password` | `{current_password, new_password}`: change your own password. This browser gets a new cookie; other browsers are signed out. |
-| GET | `/api/meta` | Version, time zone, today's date, statuses, estimate buckets, and whether the default PIN is still set. |
+| GET | `/api/meta` | Version, time zone, today's date, statuses, estimate buckets, whether the default PIN is still set, and `permissions`: what each role may do with jobs (`create`, `claim`, `edit` per role; Admin → Roles, decision #31). |
 | GET | `/api/health` | Liveness check. |
 
 ## Projects
@@ -135,6 +135,16 @@ Roles: engineers upload and submit, mark handovers and respond to comments; the 
 
 Every mutating review route returns the updated workspace. After it commits, the board removes intermediate PDFs (after a pass) and updates the project folder in the background; `sync.state` is `ok`, `pending`, `failed` (with `detail`) or `no_folder`.
 
+## Role capabilities
+
+What each role may do with jobs is a setting (decision #31): `{engineer, manager, reviewer}` each with `create`, `claim` and `edit`. `POST /api/tickets` and `POST /api/projects` need `create`; claiming, being assigned, releasing your own job and auto-claiming on a move need `claim`; changing a job (PATCH, move, archive, restore, release) needs `edit`, or `claim` when the job is assigned to you. A refusal is 403 with a message naming Admin → Roles. A reviewer whose role has any capability also passes the board-wide routes below (they see the board); their review visibility is unchanged. Comments need only board access.
+
+## Tools
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/tools/sheet` | `{materials, sizes, settings}` for the sheet calculator. Anyone with board access. The calculation runs in the browser (`shared/src/sheets.ts`). |
+
 ## Admin (unlock with the PIN first)
 
 | Method | Path |
@@ -144,6 +154,10 @@ Every mutating review route returns the updated workspace. After it commits, the
 | POST | `/api/admin/pin` `{new_pin}` |
 | GET/POST | `/api/admin/users`; PATCH `/api/admin/users/:id` `{name?, initials?, color?, role?, is_admin?, active?}`. `role` is `engineer`, `manager` or `reviewer`. |
 | DELETE | `/api/admin/users/:id/password`: reset a forgotten password. The person is signed out everywhere and creates a new one at their next sign-in (409 if they have none). |
+| GET/PUT | `/api/admin/permissions` `{engineer: {create, claim, edit}, manager: {…}, reviewer: {…}}`. PUT answers 409 when it would take `claim` from a role whose members hold open jobs. |
+| POST/PATCH | `/api/admin/materials`, `/api/admin/materials/:id` `{name?, density?, sort_order?, active?}` |
+| POST/PATCH/DELETE | `/api/admin/sheet-sizes`, `/api/admin/sheet-sizes/:id` `{material_id, thickness?, length, width}`; `thickness` null means every thickness. |
+| PUT | `/api/admin/tools/sheet-settings` `{utilisation (0.1–1), kerf (mm)}` |
 | POST | `/api/admin/job-types`; PATCH `/api/admin/job-types/:id` |
 | POST/DELETE | `/api/admin/demo`: load or clear the demo jobs |
 | GET | `/api/admin/info`: database size and counts, backup folder, list of backups |

@@ -126,7 +126,7 @@ export function TagsSection() {
   );
 }
 
-function RenameInput({ value, label, onSave }: { value: string; label: string; onSave: (v: string) => Promise<unknown> }) {
+export function RenameInput({ value, label, onSave }: { value: string; label: string; onSave: (v: string) => Promise<unknown> }) {
   const [v, setV] = useState(value);
   return (
     <input

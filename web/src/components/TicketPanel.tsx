@@ -163,6 +163,7 @@ function PathField({
     const ok = await copyText(value);
     toast(ok ? 'Path copied. Paste it into File Explorer.' : 'Could not copy. Select the text and press Ctrl+C.', { kind: ok ? 'success' : 'error' });
   };
+  const folder = folderUrl(value);
   return (
     <div className="path-field">
       <EditText value={value} onSave={onSave} label={label} placeholder={placeholder} className="mono-ish" />
@@ -171,6 +172,11 @@ function PathField({
           Copy
         </button>
       )}
+      {folder && (
+        <a className="btn btn-quiet" href={folder} target="_blank" rel="noreferrer noopener" onClick={goHint} title="Open this folder in File Explorer (the browser must allow folder links; see the For IT guide)">
+          Go to location
+        </a>
+      )}
       {/^https?:\/\//.test(value) && (
         <a className="btn btn-quiet" href={value} target="_blank" rel="noreferrer noopener">
           Open
@@ -178,6 +184,28 @@ function PathField({
       )}
     </div>
   );
+}
+
+/**
+ * A Windows folder or file path as a file: link that Explorer can open:
+ * \\SERVER\share\dir becomes file://SERVER/share/dir, and D:\Projects becomes file:///D:/Projects.
+ * Browsers only follow such links from an http page when IT allows it (Edge's
+ * IntranetFileLinksEnabled policy; see docs/FOR-IT.md), so Copy stays next to it.
+ */
+export function folderUrl(path: string): string | null {
+  const p = path.trim();
+  if (/^file:/i.test(p)) return p;
+  if (/^\\\\[^\\/]+[\\/]/.test(p)) return encodeURI('file:' + p.replace(/\\/g, '/'));
+  if (/^[A-Za-z]:[\\/]/.test(p)) return encodeURI('file:///' + p.replace(/\\/g, '/'));
+  return null;
+}
+
+let hinted = false;
+/** Once per page: a browser that blocks folder links gives no sign, so say what to do. */
+function goHint() {
+  if (hinted) return;
+  hinted = true;
+  toast('Opening the folder in File Explorer. If nothing opens, this browser blocks folder links: use Copy and paste the path into Explorer, or ask IT to allow them (For IT guide).', { timeout: 9000 });
 }
 
 /** Drawings in board review on this job, with a way into the review screen. */
@@ -239,8 +267,10 @@ function nextStep(t: Ticket): { label: string; to: Status } | null {
 }
 
 function PanelContent({ t, activity, onClose }: { t: Ticket; activity: Activity[]; onClose: () => void }) {
-  const { me, user, engineers, jobTypes, jobType } = useApp();
+  const { me, user, workers, jobTypes, jobType, can, canChange } = useApp();
   const save = (fields: Record<string, unknown>, base?: Record<string, unknown>) => updateTicket(t, fields, base);
+  // your role's capabilities (Admin → Roles): edit any job, or claim-holders on their own job
+  const editable = canChange(t);
   const assignee = user(t.assigned_to);
   const closed = t.status === 'done' || t.status === 'cancelled';
   const review = useQuery<ReviewWorkspace>(`/api/tickets/${t.id}/review`).data;
@@ -290,6 +320,12 @@ function PanelContent({ t, activity, onClose }: { t: Ticket; activity: Activity[
       </div>
 
       <AlsoViewing jobId={t.id} />
+      {!editable && (
+        <p className="panel-readonly muted">
+          {can('claim') ? 'You can change jobs assigned to you. Claim this one to work on it.' : 'Your role can view and comment on jobs, but not change them (Admin → Roles).'}
+        </p>
+      )}
+      <fieldset className="panel-editable" disabled={!editable}>
       <EditText value={t.title} onSave={(v, b) => save({ title: v }, { title: b })} className="panel-title" label="Title" required />
 
       {(t.status === 'waiting' || t.status === 'blocked') && (
@@ -304,14 +340,16 @@ function PanelContent({ t, activity, onClose }: { t: Ticket; activity: Activity[
         </div>
       )}
 
+      </fieldset>
       <ReviewSummary t={t} />
 
       <div className="panel-actions">
-        {t.assigned_to == null && !closed && me.role === 'engineer' && (
+        {t.assigned_to == null && !closed && can('claim') && (
           <button className="btn btn-claim" onClick={() => void claimTicket(t)}>
             Claim
           </button>
         )}
+        <fieldset className="panel-editable" disabled={!editable}>
         {step && !t.archived && (
           <button className="btn btn-primary" onClick={() => void moveTicket(me, t, step.to, {}, { undo: { status: t.status, reason: t.waiting_for } })}>
             {step.label}
@@ -337,8 +375,10 @@ function PanelContent({ t, activity, onClose }: { t: Ticket; activity: Activity[
             Reopen
           </button>
         )}
+        </fieldset>
       </div>
 
+      <fieldset className="panel-editable" disabled={!editable}>
       <dl className="fields">
         <div className={`field${t.project_id == null ? ' field-missing' : ''}`}>
           <dt className="field-label">Project</dt>
@@ -387,7 +427,7 @@ function PanelContent({ t, activity, onClose }: { t: Ticket; activity: Activity[
               }}
             >
               <option value="">Unassigned</option>
-              {engineers
+              {workers
                 .filter((u) => u.active || u.id === t.assigned_to)
                 .map((u) => (
                   <option key={u.id} value={u.id}>
@@ -533,6 +573,7 @@ function PanelContent({ t, activity, onClose }: { t: Ticket; activity: Activity[
           className="notes"
         />
       </section>
+      </fieldset>
 
       <section className="panel-section">
         <h3 className="section-title">History</h3>

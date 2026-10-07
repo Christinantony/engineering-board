@@ -12,6 +12,7 @@ import { reindexTicket } from './search.ts';
 import { createTicket, getTicket, listTickets, moveTicket, type TicketFilters } from './tickets.ts';
 import { cleanProjectName, createProject, listProjects } from './projects.ts';
 import { listUsers } from './users.ts';
+import { claimingRoles } from './permissions.ts';
 
 // ---------------------------------------------------------------------------
 // Export
@@ -318,7 +319,8 @@ export function previewImport(ctx: Ctx, csv: string, opts: ImportOptions = {}) {
     throw badRequest(`No title column found. Name one column "title" (or Job, Task, Name). Columns found: ${headers.join(', ')}`);
 
   const users = listUsers(ctx);
-  const engineers = users.filter((u) => u.role === 'engineer');
+  const canHold = claimingRoles(ctx);
+  const engineers = users.filter((u) => canHold.includes(u.role));
   const types = listJobTypes(ctx);
   const order = opts.date_order ?? 'DMY';
   const createTypes = opts.create_job_types ?? true;
@@ -353,9 +355,9 @@ export function previewImport(ctx: Ctx, csv: string, opts: ImportOptions = {}) {
     const aRaw = get('assignee');
     if (aRaw) {
       assignee = findUser(aRaw);
-      if (!assignee) warnings.push(`No engineer called "${aRaw}"; left unassigned`);
-      else if (assignee.role !== 'engineer') {
-        warnings.push(`${assignee.name} is a manager; left unassigned`);
+      if (!assignee) warnings.push(`Nobody called "${aRaw}"; left unassigned`);
+      else if (!canHold.includes(assignee.role)) {
+        warnings.push(`${assignee.name} is a ${assignee.role}, and ${assignee.role}s cannot be assigned jobs; left unassigned`);
         assignee = undefined;
       } else if (!assignee.active) {
         warnings.push(`${assignee.name} is inactive; left unassigned`);

@@ -8,14 +8,18 @@ import { invalidate, useQuery } from '../../lib/store.ts';
 import { toastError } from '../../lib/toasts.ts';
 import { ErrorBox, Spinner } from '../../components/bits.tsx';
 import { TeamSection } from './Team.tsx';
+import { RolesSection } from './Roles.tsx';
+import { ToolsDataSection } from './ToolsData.tsx';
 import { JobTypesSection, TagsSection } from './Lists.tsx';
 import { ImportSection } from './Import.tsx';
 import { BackupSection, ExportSection, ArchiveSection, PinSection, DemoSection, AboutSection } from './Data.tsx';
 
 const SECTIONS = [
   { id: 'team', label: 'Team', C: TeamSection },
+  { id: 'roles', label: 'Roles', C: RolesSection },
   { id: 'job-types', label: 'Job types', C: JobTypesSection },
   { id: 'tags', label: 'Tags', C: TagsSection },
+  { id: 'tools', label: 'Tools', C: ToolsDataSection },
   { id: 'import', label: 'Import from Excel', C: ImportSection },
   { id: 'export', label: 'Export', C: ExportSection },
   { id: 'backups', label: 'Backups and restore', C: BackupSection },

@@ -3,6 +3,7 @@
 import { PRIORITY_RANK, type Ticket, type WorkloadRow } from '@board/shared';
 import { all, get } from '../db/connection.ts';
 import { badRequest, nowIso, type Ctx } from '../lib/core.ts';
+import { claimingRoles } from './permissions.ts';
 import { addDays, endOfWeek, localDate, startOfLocalDayIso } from '../lib/time.ts';
 import { recentActivity, ticketsWhere } from './tickets.ts';
 
@@ -32,6 +33,7 @@ export function horizonEnd(ctx: Ctx, h: Horizon): string {
  * unestimated jobs are counted, never guessed.
  */
 export function workload(ctx: Ctx, h: Horizon = 'today') {
+  const holders = claimingRoles(ctx);
   const end = horizonEnd(ctx, h);
   const now = nowIso(ctx);
   const rows = all<WorkloadRow>(
@@ -52,11 +54,12 @@ export function workload(ctx: Ctx, h: Horizon = 'today') {
          (t.status NOT IN ('waiting','blocked')) AS workable
        FROM tickets t WHERE ${ASSIGNED_OPEN}
      ) t ON t.assigned_to = u.id
-     WHERE u.role = 'engineer' AND (u.active = 1 OR t.id IS NOT NULL)
+     WHERE (u.role IN (${holders.map(() => '?').join(',')}) AND u.active = 1) OR t.id IS NOT NULL
      GROUP BY u.id
      ORDER BY u.active DESC, u.name`,
     now,
     end,
+    ...holders,
   );
   const unclaimed = get<{ n: number; minutes: number; unestimated: number }>(
     ctx.db,

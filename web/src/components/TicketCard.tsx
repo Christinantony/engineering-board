@@ -15,7 +15,7 @@ interface Props {
 }
 
 export function TicketCard({ t, dragging, ghost, onPointerDown, onOpen }: Props) {
-  const { me, user, jobType, project } = useApp();
+  const { user, jobType, project, can } = useApp();
   const assignee = user(t.assigned_to);
   const due = dueLabel(t);
   const open = !['done', 'cancelled'].includes(t.status);
@@ -49,13 +49,13 @@ export function TicketCard({ t, dragging, ghost, onPointerDown, onOpen }: Props)
     >
       <div className="card-top">
         <span className="jobno">{t.job_number}</span>
-        {project(t.project_id) && (
-          <span className="card-project" title={`Project: ${project(t.project_id)!.name}`}>
-            {project(t.project_id)!.name}
-          </span>
-        )}
         {assignee ? <Badge user={assignee} /> : <span className="unassigned-label">Unassigned</span>}
       </div>
+      {project(t.project_id) && (
+        <div className="card-project" title={`Project: ${project(t.project_id)!.name}`}>
+          {project(t.project_id)!.name}
+        </div>
+      )}
       <div className="card-title">{t.title}</div>
 
       {waiting && t.waiting_for && (
@@ -84,9 +84,9 @@ export function TicketCard({ t, dragging, ghost, onPointerDown, onOpen }: Props)
         </div>
       )}
 
-      {unassigned && !ghost && (
+      {unassigned && !ghost && (can('claim') || can('edit')) && (
         <div className="card-actions">
-          {me.role === 'engineer' ? (
+          {can('claim') ? (
             <button
               className="btn btn-claim"
               onPointerDown={(e: any) => e.stopPropagation()}

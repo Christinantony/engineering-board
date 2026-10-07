@@ -4092,3 +4092,187 @@ button.rv-stat:hover {
     max-height: 240px;
   }
 }
+
+/* ---------- project name stands out (1.5.0) ---------- */
+.card-project {
+  flex: none;
+  display: block;
+  margin: 4px 0 2px;
+  font-family: var(--font-tech);
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--project-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.jobrow-project {
+  font-family: var(--font-tech);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--project-ink);
+}
+.jobrow-sub.muted .jobrow-project {
+  color: var(--project-ink);
+}
+:root {
+  --project-ink: #0e7490;
+}
+:root[data-theme='charcoal'] {
+  --project-ink: #67d3ea;
+}
+:root[data-theme='midnight'] {
+  --project-ink: #5ee0cf;
+}
+
+/* ---------- role capabilities: read-only job panel ---------- */
+fieldset.panel-editable {
+  display: contents;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.panel-readonly {
+  margin: 0 0 6px;
+  padding: 8px 10px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  font-size: 13px;
+}
+.roles-table th[scope='row'] {
+  text-align: left;
+  white-space: nowrap;
+}
+.roles-table td {
+  text-align: center;
+}
+.roles-table input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+}
+
+/* ---------- tools ---------- */
+.tools-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+.tool-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 16px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+.tool-card:hover {
+  border-color: var(--ink-2);
+}
+.tool-name {
+  font-weight: 700;
+  font-size: 16px;
+}
+.sheet-calc {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+}
+.sheet-calc h2 {
+  font-size: 17px;
+  margin: 0 0 4px;
+}
+.sheet-table .field-input {
+  min-width: 90px;
+}
+.sheet-table .field-input.narrow {
+  width: 96px;
+  min-width: 70px;
+}
+.sheet-table td:first-child .field-input {
+  min-width: 160px;
+}
+.sheet-total {
+  display: inline-block;
+  min-width: 36px;
+  margin-left: 8px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--primary-bg);
+  color: var(--primary-ink);
+  font-family: var(--font-tech);
+  text-align: center;
+}
+.sheet-group {
+  margin: 14px 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+.sheet-group-nofit {
+  border-color: var(--error-ink);
+}
+.sheet-group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 16px;
+  margin-bottom: 8px;
+}
+.sheet-group-head h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.sheet-group-answer {
+  font-size: 15px;
+}
+.sheet-group-answer strong {
+  font-size: 20px;
+  font-family: var(--font-tech);
+}
+.sheet-detail,
+.sheet-options {
+  margin-top: 8px;
+}
+.sheet-sum td {
+  font-weight: 600;
+  border-top: 1px solid var(--line-strong);
+}
+.sheet-best td {
+  font-weight: 600;
+}
+.sheet-method {
+  margin-top: 12px;
+}
+.sheet-method summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+}
+.density-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.materials-list li {
+  grid-template-columns: minmax(180px, 320px) auto auto auto;
+}
+@media print {
+  .topbar,
+  .sheet-inputs .inline-form,
+  .sheet-table td:last-child,
+  .sheet-table th:last-child,
+  .view-head .btn {
+    display: none !important;
+  }
+}
