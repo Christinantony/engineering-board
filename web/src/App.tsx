@@ -240,6 +240,7 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
 
   const openJob = useCallback((id: number | null) => setJob(id), []);
   const newJob = useCallback(() => setCreating(true), []);
+  const closeCreate = useCallback(() => setCreating(false), []);
 
   // keyboard shortcuts (never while typing)
   useEffect(() => {
@@ -403,7 +404,7 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
 
         {jobId && <TicketPanel id={jobId} onClose={() => setJob(null)} />}
       </div>
-      {creating && <QuickCreate onClose={() => setCreating(false)} />}
+      {creating && <QuickCreate onClose={closeCreate} />}
       <DialogHost />
       <Toasts />
     </AppContext.Provider>

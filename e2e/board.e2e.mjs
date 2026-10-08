@@ -1126,3 +1126,27 @@ test('PDF tools: the stamp preview follows the settings, stamped and negative fi
   await p.waitForSelector('[data-testid=word-unavailable]');
   assert.equal(await p.locator('button:has-text("Convert to PDF")').isDisabled(), true);
 });
+
+test('the New job form keeps the cursor where you are typing while the board refreshes in the background', async () => {
+  const p = await login('Christin');
+  await p.keyboard.press('n');
+  await p.waitForSelector('#qc-title');
+  await p.fill('#qc-title', 'Cursor stays put');
+  // move on to another field and keep typing while other people's changes and the presence refresh arrive
+  await p.click('.quick-create .link-btn');
+  const other = p.locator('.quick-create input[placeholder="Who asked?"]');
+  await other.focus();
+  await other.type('Prod');
+  const s = await api('POST', '/api/session', { user_id: 2, password: PASSWORD });
+  for (let i = 0; i < 3; i++) {
+    await api('POST', '/api/tickets', { title: `Background change ${i}`, project_id: PROJECT_ID }, s.cookie);
+    await p.waitForTimeout(2500);
+    await other.type('u');
+  }
+  await p.waitForTimeout(6500);
+  await other.type('ction');
+  const focused = await p.evaluate(() => document.activeElement?.id || document.activeElement?.getAttribute('aria-label'));
+  assert.notEqual(focused, 'qc-title', 'the cursor was not pulled back to the title');
+  assert.equal(await other.inputValue(), 'Produuuction');
+  await p.keyboard.press('Escape');
+});
