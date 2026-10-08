@@ -11,6 +11,7 @@ import { navigate, useLocation } from '../lib/router.ts';
 import { useQuery } from '../lib/store.ts';
 import { toast } from '../lib/toasts.ts';
 import { ErrorBox, Spinner } from '../components/bits.tsx';
+import { PdfTools } from './tools/PdfTools.tsx';
 
 interface Data {
   materials: SheetMaterial[];
@@ -23,6 +24,11 @@ const TOOLS = [
     id: 'sheets',
     name: 'Sheet calculator',
     blurb: 'How many standard sheets a component needs: parts per sheet in a straight grid with kerf and edge margin, sheets to buy, parts on the last sheet, utilisation, waste, and the cutting layout.',
+  },
+  {
+    id: 'pdf',
+    name: 'PDF tools',
+    blurb: 'Stamp drawings with a diagonal mark, turn a vector PDF into its colour negative, combine PDFs by page size (A4, A3), and convert Word documents to PDF with the host PC\'s Word.',
   },
 ];
 
@@ -45,6 +51,8 @@ export function Tools() {
       </header>
       {tool?.id === 'sheets' ? (
         <SheetCalculator />
+      ) : tool?.id === 'pdf' ? (
+        <PdfTools />
       ) : (
         <div className="tools-grid">
           {TOOLS.map((t) => (

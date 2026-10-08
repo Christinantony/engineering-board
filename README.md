@@ -2,7 +2,7 @@
 
 ### The workboard for the mechanical design team
 
-*Catalogue edition, version 1.5.0*
+*Catalogue edition, version 1.6.0*
 
 One shared board for every design job: who is on it, what it is waiting for, when it is due and how it ended. It runs on a single PC on the office network. Everyone else opens it in a web browser.
 
@@ -53,6 +53,7 @@ Every page has a one-key shortcut. Press <kbd>?</kbd> anywhere for the full list
 | **A8** | **Drawing review** | <kbd>V</kbd> | Jobs with drawings in board review; a workspace per job with the signed reference and the submitted drawing side by side (independent page, zoom and rotation), revision notes, comments, pass or return, handover and signature. | You check drawings before they are printed and signed. |
 | **A9** | **Projects** | <kbd>P</kbd> | Every project with its open and total jobs, and all of a project's jobs. Projects are added by the team when their first job comes in; none are preset. | You want everything for one project, or to add a new one. |
 | **A10** | **Tools** | <kbd>O</kbd> | Calculators for the team. First: the **sheet calculator**, the team's Sheet Requirement Calculator workbook as a page: per component (material, length, width, number) the parts per sheet in a straight grid with kerf and edge margin, the sheets to buy, parts on the last sheet, utilisation and waste, with the cutting layout drawn to scale. Materials and stock sizes are kept under Admin → Tools. | You are ordering sheet for a job. |
+| **A11** | **PDF tools** | <kbd>O</kbd> → PDF tools | The team's PDF scripts, one tab each: **Stamp** (a diagonal mark across every page, with a live preview of the first page while you adjust text, size, angle, opacity, position and colour), **Negative** (a vector PDF's colour negative, kept vector), **Combine by size** (A4 and A3 files merged into one PDF each) and **Word to PDF** (through Microsoft Word on the host PC). The first three run in your browser; results download singly or as one zip. | You are preparing drawings and documents to send out. |
 
 | | |
 |---|---|
@@ -277,6 +278,7 @@ Copy `config.example.json` to `config.json` next to `start.bat`, edit it, restar
 
 | Version | What it brought |
 |---|---|
+| **1.6.0** | PDF tools on the Tools page: Stamp with a live preview, Negative, Combine by size and Word to PDF, from the team's four scripts. |
 | **1.5.0** | The project name stands out on cards and job rows. Admin-set role capabilities (create, claim and be assigned, edit any job) for engineers, managers and reviewers, leaving board review untouched. **Go to location** beside a job's file path. A **Tools** page with the team's *Sheet Requirement Calculator* workbook as a page, formula for formula, with its cutting layout drawn to scale; its materials and sheet sizes editable by the admin. |
 | **1.4.0** | Projects: every job belongs to a project, chosen or added from the New job form; a Projects page with each project's jobs; project filter, search, card and job-panel display; Project column in import and export. No preset list: projects are added as they are needed. |
 | **1.3.0** | Reviewer access: engineers hand each drawing to one or more reviewers (and can change them later). A reviewer sees only the drawings handed to them, with the job number and title: no board, workload, reports, search, other jobs, team activity or Admin. The manager keeps full access. |

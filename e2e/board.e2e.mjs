@@ -5,6 +5,8 @@
 
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { readFile as readFileAsync } from 'node:fs/promises';
+import { makePdf } from './fixtures/pdf.mjs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
@@ -1065,4 +1067,62 @@ test('tools: the sheet calculator gives the workbook\'s answer and draws its lay
   await p.waitForSelector('.panel-title');
   assert.equal(await p.getAttribute('a:has-text("Go to location")', 'href'), 'file://SERVER/Projects/P-1042/CAD%20files');
   assert.equal(await p.locator('button:has-text("Copy")').count() > 0, true, 'Copy stays beside it');
+});
+
+test('PDF tools: the stamp preview follows the settings, stamped and negative files download, PDFs combine by size, Word needs the host', async () => {
+  const { PDFDocument } = await import('pdf-lib');
+  const p = await login('Paul');
+  await p.goto(`${BASE}/tools?tool=pdf`);
+  await p.waitForSelector('.pdf-tabs a.on:has-text("Stamp")');
+  // stamp: a live preview of the first page, re-drawn when a setting changes
+  await p.setInputFiles('[data-testid=pick-stamp]', [
+    { name: 'GA-001.pdf', mimeType: 'application/pdf', buffer: makePdf(2, { labels: ['GA-001', 'GA-001 sheet 2'] }) },
+    { name: 'GA-002.pdf', mimeType: 'application/pdf', buffer: makePdf(1, { labels: ['GA-002'] }) },
+  ]);
+  await p.waitForSelector('[data-testid=stamp-preview][data-state=ready]', { timeout: 20000 });
+  const before = await p.locator('.stamp-canvas').evaluate((c) => c.toDataURL());
+  await p.fill('#stamp-text', 'CHECK PRINT');
+  await p.waitForSelector('[data-testid=stamp-preview][data-state=busy]');
+  await p.waitForSelector('[data-testid=stamp-preview][data-state=ready]', { timeout: 20000 });
+  const after = await p.locator('.stamp-canvas').evaluate((c) => c.toDataURL());
+  assert.notEqual(before, after, 'the preview changed with the text');
+  await p.fill('input[aria-label="Angle value"]', '0');
+  await p.waitForSelector('[data-testid=stamp-preview][data-state=ready]', { timeout: 20000 });
+  await p.click('button:has-text("Stamp 2 files")');
+  await p.waitForSelector('.toast:has-text("Done: 2 files")');
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('[data-testid=pdf-results] li:has-text("GA-001.pdf") button:has-text("Download")')]);
+  assert.equal(dl.suggestedFilename(), 'GA-001.pdf');
+  const stamped = await PDFDocument.load(await readFileAsync(await dl.path()));
+  assert.equal(stamped.getPageCount(), 2);
+  const [zip] = await Promise.all([p.waitForEvent('download'), p.click('button:has-text("Download all")')]);
+  assert.equal(zip.suggestedFilename(), 'stamped_output.zip');
+  assert.equal((await readFileAsync(await zip.path())).subarray(0, 2).toString(), 'PK');
+
+  // negative
+  await p.click('.pdf-tabs a:has-text("Negative")');
+  await p.setInputFiles('[data-testid=pick-negative]', { name: 'BRK-023.pdf', mimeType: 'application/pdf', buffer: makePdf(1, { labels: ['BRK-023'] }) });
+  await p.click('button:has-text("Make negative")');
+  await p.waitForSelector('[data-testid=pdf-results] li:has-text("BRK-023_negative.pdf")');
+  assert.match(await p.textContent('[data-testid=pdf-results]'), /1 page/);
+
+  // combine by size: A4 and A3 files, in either orientation, and one that is neither
+  await p.click('.pdf-tabs a:has-text("Combine by size")');
+  await p.setInputFiles('[data-testid=pick-combine]', [
+    { name: 'p1.pdf', mimeType: 'application/pdf', buffer: makePdf(2, { size: [595.28, 841.89] }) },
+    { name: 'p2.pdf', mimeType: 'application/pdf', buffer: makePdf(1, { size: [1190.55, 841.89] }) },
+    { name: 'p3.pdf', mimeType: 'application/pdf', buffer: makePdf(1, { size: [842, 595] }) },
+    { name: 'p4.pdf', mimeType: 'application/pdf', buffer: makePdf(1, { size: [612, 792] }) },
+  ]);
+  await p.click('button:has-text("Combine by size")');
+  await p.waitForSelector('[data-testid=combine-details]');
+  assert.deepEqual(await p.locator('[data-testid=combine-details] tbody td:last-child').allTextContents(), ['A4', 'A3', 'A4', 'other']);
+  const names = await p.locator('[data-testid=pdf-results] .pdf-file-name').allTextContents();
+  assert.deepEqual(names, ['combined_A4.pdf', 'combined_A3.pdf', 'combined_other.pdf']);
+  const [a4] = await Promise.all([p.waitForEvent('download'), p.click('[data-testid=pdf-results] li:has-text("combined_A4.pdf") button:has-text("Download")')]);
+  assert.equal((await PDFDocument.load(await readFileAsync(await a4.path()))).getPageCount(), 3);
+
+  // Word to PDF needs Word on the host PC: not here
+  await p.click('.pdf-tabs a:has-text("Word to PDF")');
+  await p.waitForSelector('[data-testid=word-unavailable]');
+  assert.equal(await p.locator('button:has-text("Convert to PDF")').isDisabled(), true);
 });

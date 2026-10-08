@@ -151,6 +151,17 @@ After a drawing passes, the board removes the earlier attempts' PDFs (the histor
 
 It is a straight-grid estimate, as the workbook says: a nesting program may save a little more. Rows missing a material, size or number are listed as not counted. The list is remembered in your browser; **Print** gives a copy for the purchase request. The materials and stock sizes come from **Admin → Tools**.
 
+### PDF tools
+
+The team's four PDF scripts, on one page with a tab each. The first three work inside your browser: the files never leave your PC, and nothing is installed. Results are downloaded one by one, or all at once as a `.zip`.
+
+- **Stamp**: writes a diagonal mark across every page of each PDF. It starts as the stamp script's `[DRAFT]` (45°, 12% of the page width, 30% black). Choose the files, and the first page of the first file shows the stamp as it will be written; change the text, size, angle, opacity, position or colour and the preview follows. **Back to the script's stamp** restores the original. The settings are remembered in your browser. Stamped files keep their names (download them into a folder of your choice, or all together as `stamped_output.zip`).
+- **Negative**: turns a vector PDF into its colour negative and keeps it vector, as the negative script does: lines stay lines and text stays text; the page is painted black first (untick **Paint the page black first** to leave it unpainted); grey and RGB images are inverted; gradients, CMYK and indexed images and annotation appearances are left alone. Each result is `…_negative.pdf`, with the script's count of pages, forms and images.
+- **Combine by size**: sorts PDFs by the size of their first page, A4 or A3 in either orientation (5 pt tolerance), and combines every file of a size into one PDF in the order you chose them: `combined_A4.pdf`, `combined_A3.pdf` and `combined_other.pdf`. The table shows how each file was classified.
+- **Word to PDF**: converts `.doc` and `.docx` files to PDF with Microsoft Word on the host PC, as the DOC to PDF script does. The document is sent to the board, Word exports it (print quality, document properties and tags kept, no bookmarks) and the PDF comes back for download. It needs Word installed on the host PC, which runs Windows; the tab says so when it isn't.
+
+Encrypted PDFs are refused: save them again without security first.
+
 ## Other pages
 
 | Page | Key | What it's for |

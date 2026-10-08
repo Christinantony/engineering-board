@@ -35,6 +35,8 @@ Everyone sees a change straight away: the board refreshes itself.
 - **Standard sheet sizes**: sheet length × width in mm per material. The list starts with the workbook's typical stock sizes (mild steel, stainless steel and aluminium 2500 × 1250; copper and brass 2000 × 1000; plywood, MDF and acrylic 2440 × 1220; FR4 1220 × 1020; PTFE 1200 × 1000), which the workbook itself calls placeholders: replace them with what your supplier delivers. A material may have several sizes; the calculator then uses the one needing the fewest sheets.
 - **Defaults** for the workbook's three inputs, prefilled for every new calculation: spacing / kerf (3 mm), edge margin (5 mm) and rotation (allowed). People can change them for a calculation.
 
+**PDF tools** need nothing from the admin, except **Word to PDF**: it uses Microsoft Word on the host PC, driven through PowerShell, one document at a time, the way the team's DOC to PDF script does. If Word isn't installed on the host (or the host isn't Windows), the tab says so and the other three tools still work, since they run in each person's browser. The upload limit is the drawing-review one (`reviewUploadMaxMB`). Nothing is kept: the document and its PDF are deleted from the host as soon as the PDF has been sent back.
+
 ## Drawing review and project folders
 
 The board writes into a job's project folder (its **File location**) only under `BoardReview\<JOB>\` and to `REVISION_LOG.md`. It writes as the Windows user running the board, so that user needs write access to the project shares. If a share is offline or read-only, the review screen shows what failed, the board keeps its own copies, and it retries every few minutes (or press **Try again**).

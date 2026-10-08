@@ -286,6 +286,37 @@ export async function streamPdfUpload(req: Request, storeDir: string, maxBytes: 
   }
 }
 
+/** Stream any file to a private directory under `dir`, keeping the given file name. Nothing is checked but the size. */
+export async function streamFileUpload(req: Request, dir: string, filename: string, maxBytes: number, what: string): Promise<void> {
+  checkUploadHeaders(req, maxBytes, what);
+  const path = join(dir, filename);
+  let file: Awaited<ReturnType<typeof open>> | undefined;
+  let bytes = 0;
+  try {
+    file = await open(path, 'wx', 0o600);
+    for await (const chunk of req.raw.iterator({ destroyOnReturn: false })) {
+      const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      bytes += data.length;
+      if (bytes > maxBytes) throw uploadTooLarge(maxBytes);
+      let written = 0;
+      while (written < data.length) {
+        const part = await file.write(data, written, data.length - written);
+        if (!part.bytesWritten) throw new Error('The upload could not be written to disk.');
+        written += part.bytesWritten;
+      }
+    }
+    if (!bytes) throw new HttpError(400, 'bad_request', `Choose ${what} to upload.`);
+    await file.sync();
+    await file.close();
+    file = undefined;
+    req.upload = { path, dir, bytes };
+  } catch (e) {
+    await file?.close().catch(() => {});
+    rmSync(dir, { recursive: true, force: true });
+    throw e;
+  }
+}
+
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
