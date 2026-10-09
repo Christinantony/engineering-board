@@ -143,6 +143,8 @@ What each role may do with jobs is a setting (decision #31): `{engineer, manager
 
 | Method | Path | Notes |
 |---|---|---|
+| GET | `/api/tools/pdf/status` | `{word_to_pdf: 'available' \| 'not_windows' \| 'no_word'}`: whether the host PC can convert Word documents. |
+| POST | `/api/tools/word-to-pdf?name=<file.docx>` | Body: the document (`application/octet-stream`, up to `reviewUploadMaxMB`). Answers the PDF (`application/pdf`, `Content-Disposition: attachment`) or 400 `not_word` (not .doc/.docx), 501 `word_unavailable`, 500/504 `word_failed`. Conversions run one at a time. Stamp, negative and combine-by-size run in the browser and have no API. |
 | GET | `/api/tools/sheet` | `{materials, sizes, settings}` for the sheet calculator: materials `{id, name, sort_order, active}`, sizes `{id, material_id, length, width, active}`, settings `{kerf, margin, rotate}` (the workbook's input defaults). Anyone with board access. The calculation runs in the browser (`shared/src/sheets.ts`, the workbook formula for formula). |
 
 ## Admin (unlock with the PIN first)

@@ -37,14 +37,21 @@ export function QuickCreate({ onClose }: { onClose: () => void }) {
   const titleRef = useRef<HTMLInputElement | null>(null);
   const canClaim = can('claim');
 
+  // Focus the title once, when the form opens. (It used to run again whenever the
+  // shell re-rendered, every few seconds with presence and notification refreshes,
+  // and dragged the cursor back to the title while someone typed elsewhere.)
   useEffect(() => {
     titleRef.current?.focus();
+  }, []);
+  const close = useRef(onClose);
+  close.current = onClose;
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') close.current();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  }, []);
 
   async function submit(claim: boolean) {
     if (!title.trim()) {

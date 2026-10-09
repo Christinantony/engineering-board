@@ -69,3 +69,21 @@ export function openPdf(url: string): Promise<PdfDoc> {
 }
 
 export const fileUrl = (sha: string) => `/api/review-files/${sha}`;
+
+/** Open a PDF held in memory (the PDF tools' previews). Not cached: destroy it when done. */
+export function openPdfBytes(bytes: Uint8Array): Promise<PdfDoc> {
+  return pdfjs().then(async (m) => {
+    const task = m.getDocument({
+      data: bytes.slice(),
+      wasmUrl: `${__PDFJS_BASE__}wasm/`,
+      standardFontDataUrl: `${__PDFJS_BASE__}standard_fonts/`,
+      cMapUrl: `${__PDFJS_BASE__}cmaps/`,
+      cMapPacked: true,
+      iccUrl: `${__PDFJS_BASE__}iccs/`,
+      enableXfa: false,
+    });
+    const doc = await task.promise;
+    // the document proxy has no destroy() of its own in this pdf.js: the loading task frees it
+    return Object.assign(doc, { destroy: () => task.destroy() });
+  });
+}

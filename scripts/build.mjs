@@ -30,12 +30,15 @@ const serverOpts = {
 };
 
 const webOpts = {
-  entryPoints: { app: 'web/src/main.tsx', theme: 'web/src/theme-init.ts' },
+  entryPoints: { app: 'web/src/main.tsx' },
   bundle: true,
   platform: 'browser',
   format: 'esm',
   target: ['chrome110', 'edge110', 'firefox115', 'safari16'],
   outdir: 'dist/app/web/assets',
+  // pdf-lib (the PDF tools) is a dynamic import, so with splitting it becomes its own chunk, fetched only when those tools open
+  splitting: true,
+  chunkNames: 'chunk-[hash]',
   tsconfig: 'web/tsconfig.json',
   jsx: 'automatic',
   minify: !watch,
@@ -44,6 +47,10 @@ const webOpts = {
   define: { 'process.env.NODE_ENV': JSON.stringify(watch ? 'development' : 'production'), __PDFJS_BASE__: JSON.stringify(pdfjsBase) },
   logLevel: 'info',
 };
+
+// the theme script runs before first paint as a plain <script>, so it is built on its own, without splitting
+const themeOpts = { ...webOpts, entryPoints: { theme: 'web/src/theme-init.ts' }, format: 'iife', splitting: false };
+delete themeOpts.chunkNames;
 
 function writeStatic() {
   mkdirSync('dist/app/web', { recursive: true });
@@ -64,11 +71,11 @@ if (only !== '--server-only') writeStatic();
 
 if (watch) {
   const ctxs = [];
-  if (only !== '--server-only') ctxs.push(await context(webOpts));
+  if (only !== '--server-only') ctxs.push(await context(webOpts), await context(themeOpts));
   if (only !== '--web-only') ctxs.push(await context(serverOpts));
   await Promise.all(ctxs.map((c) => c.watch()));
   console.log('watching… (reload the browser after changes)');
 } else {
-  if (only !== '--server-only') await build(webOpts);
+  if (only !== '--server-only') await Promise.all([build(webOpts), build(themeOpts)]);
   if (only !== '--web-only') await build(serverOpts);
 }

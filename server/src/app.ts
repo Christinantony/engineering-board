@@ -16,6 +16,7 @@ import {
   checkUploadHeaders,
   streamUpload,
   streamPdfUpload,
+  streamFileUpload,
   DEFAULT_RESTORE_UPLOAD_MAX_MB,
   cookie,
   errorToReply,
@@ -45,6 +46,7 @@ import { createUser, getUser, listUsers, requireUser, updateUser } from './domai
 import { createJobType, listJobTypes, updateJobType } from './domain/jobTypes.ts';
 import { createProject, listProjects } from './domain/projects.ts';
 import { getPermissions, requireCapability, setPermissions } from './domain/permissions.ts';
+import { WordQueue, cleanWordName, convertWithWord, probeWord, type WordConverter, type WordStatus } from './domain/wordToPdf.ts';
 import {
   createMaterial,
   createSheetSize,
@@ -119,7 +121,7 @@ import { jobsNeedingSync, markSyncPending, revisionLog, settleSyncs, syncProject
 /** Default maximum PDF upload for drawing review (merged signed scans can be large). */
 export const DEFAULT_REVIEW_UPLOAD_MAX_MB = 200;
 
-export const APP_VERSION = '1.5.0';
+export const APP_VERSION = '1.6.0';
 
 export interface AppOptions {
   dbPath: string;
@@ -144,6 +146,8 @@ export interface AppOptions {
   reviewUploadMaxMB?: number;
   /** Retry project-folder copies and clean-ups in the background (off in tests). */
   reviewMaintenance?: boolean;
+  /** Word to PDF: the converter and whether it is available (tests inject a fake; the default is Word on the host). */
+  wordToPdf?: { convert: WordConverter; status: WordStatus | Promise<WordStatus> };
 }
 
 export interface App {
@@ -245,6 +249,11 @@ export function createApp(opts: AppOptions): App {
   };
 
   const presence = new Presence(ctx.events, () => ctx.now().getTime());
+  // Word to PDF (decision #33): the host PC's Word, one conversion at a time
+  const word = opts.wordToPdf ?? { convert: convertWithWord, status: probeWord() };
+  let wordStatus: WordStatus = 'not_windows';
+  void Promise.resolve(word.status).then((s) => (wordStatus = s));
+  const wordQueue = new WordQueue(word.convert, join(dirname(opts.dbPath), 'tmp'));
   const router = new Router();
   const id = (req: Request) => v.int({ min: 1 })(req.params.id, 'id');
 
@@ -347,6 +356,29 @@ export function createApp(opts: AppOptions): App {
   // ---- reference data ----
   authed('GET', '/api/job-types', () => ({ job_types: listJobTypes(ctx) }));
   board('GET', '/api/tools/sheet', () => sheetCalculatorData(ctx));
+  board('GET', '/api/tools/pdf/status', () => ({ word_to_pdf: wordStatus }));
+  // the upload is streamed before the handler runs (see the request branch below)
+  board('POST', '/api/tools/word-to-pdf', async (req) => {
+    const up = req.upload!;
+    const name = cleanWordName(req.query.get('name'));
+    try {
+      if (wordStatus !== 'available')
+        throw new HttpError(501, 'word_unavailable', wordStatus === 'not_windows' ? 'Word to PDF needs Microsoft Word on the host PC, which runs Windows.' : 'Microsoft Word is not installed on the host PC, so Word documents cannot be converted here.');
+      const pdf = await wordQueue.run(up.path, name);
+      const out = name.replace(/\.[^.]+$/, '') + '.pdf';
+      req.res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="${out.replace(/[^\w .()-]/g, '_')}"`, 'X-Content-Type-Options': 'nosniff' });
+      await new Promise<void>((resolve, reject) => {
+        const s = createReadStream(pdf);
+        s.on('error', reject);
+        req.res.on('finish', resolve);
+        req.res.on('close', resolve);
+        s.pipe(req.res);
+      });
+      return HANDLED;
+    } finally {
+      rmSync(up.dir, { recursive: true, force: true });
+    }
+  });
   board('GET', '/api/tags', () => ({
     tags: all<{ name: string; count: number }>(
       ctx.db,
@@ -660,6 +692,14 @@ export function createApp(opts: AppOptions): App {
         checkUploadHeaders(req, uploadMaxBytes);
         if (raw.headers.expect?.toLowerCase() === '100-continue') res.writeContinue();
         await streamUpload(req, dirname(ctx.dbPath), uploadMaxBytes);
+      } else if (req.path === '/api/tools/word-to-pdf' && req.method === 'POST') {
+        const who = currentUser(req); // before reading any bytes
+        if (!who) throw new HttpError(401, 'unauthenticated', 'Please sign in first.');
+        if (!hasBoardAccess(getPermissions(ctx), who)) throw forbidden(REVIEWER_ONLY);
+        const name = cleanWordName(req.query.get('name'));
+        checkUploadHeaders(req, reviewMaxBytes, 'a Word document (.doc or .docx)');
+        if (raw.headers.expect?.toLowerCase() === '100-continue') res.writeContinue();
+        await streamFileUpload(req, wordQueue.newDir(), name, reviewMaxBytes, 'a Word document (.doc or .docx)');
       } else if (req.path === '/api/review/uploads' && req.method === 'POST') {
         const who = currentUser(req); // before reading any bytes
         if (!who) throw new HttpError(401, 'unauthenticated', 'Please sign in first.');
