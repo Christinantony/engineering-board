@@ -243,7 +243,7 @@ export interface CallRow {
  id: number; item_id: number; user_id: number | null; at: string;
  outcome: string; note: string; next_due: string | null;
 }
-const DATE = /^\\d{4}-\\d{2}-\\d{2}$/;
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
 function followupDate(v: unknown): string | null {
  if (v === null || v === '') return null;
  if (typeof v !== 'string' || !DATE.test(v) || Number.isNaN(Date.parse(v)) || new Date(v).toISOString().slice(0,10) !== v) throw badRequest('Choose a valid follow-up date (YYYY-MM-DD).');
