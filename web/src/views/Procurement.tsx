@@ -547,7 +547,7 @@ interface FollowupItem extends ProcurementItem {
 interface CallRecord {id:number;user_id:number|null;at:string;outcome:string;note:string;next_due:string|null}
 function FollowupControl() {
  const q = useQuery<{items:FollowupItem[]}>('/api/procurement/followups');
- const { user, users } = useApp();
+ const { user, users, meta } = useApp();
  const [opened,setOpened] = useState<number|null>(null);
  const [owner,setOwner] = useState('');
  const [action,setAction] = useState('');
@@ -557,7 +557,7 @@ function FollowupControl() {
  const [callDate,setCallDate] = useState('');
  const history = useQuery<{calls:CallRecord[]}>(opened ? `/api/procurement/items/${opened}/followups` : null);
  const items = q.data?.items ?? [];
- const today = new Date().toISOString().slice(0,10);
+ const today = meta.today;
  const sorted = items;
  const choose = (i:FollowupItem) => {setOpened(i.id);setOwner(i.owner_id == null?'':String(i.owner_id));setAction(i.next_action);setDue(i.next_due??'');setOutcome('progress');setNotes('');setCallDate(i.next_due??'');};
  const save = async(i:FollowupItem) => {try {
