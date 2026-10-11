@@ -254,7 +254,7 @@ function followupInput(ctx: Ctx, raw: unknown) {
  const d = raw as Record<string, unknown>;
  if (!Number.isSafeInteger(d.version) || Number(d.version) < 0) throw badRequest('Follow-up version is required.');
  if (typeof d.next_action !== 'string' || d.next_action.length > 300) throw badRequest('Next action must be 300 characters or less.');
- if (d.owner_id != null && (!Number.isSafeInteger(d.owner_id) || !get(ctx.db, 'SELECT id FROM users WHERE id = ? AND active = 1', d.owner_id))) throw badRequest('Select an active owner.');
+ if (d.owner_id != null && (typeof d.owner_id !== 'number' || !Number.isSafeInteger(d.owner_id) || !get(ctx.db, 'SELECT id FROM users WHERE id = ? AND active = 1', d.owner_id))) throw badRequest('Select an active owner.');
  return { version: Number(d.version), next_action: d.next_action.trim(), owner_id: d.owner_id == null ? null : Number(d.owner_id), next_due: followupDate(d.next_due) };
 }
 /** One action per item. An absent row is version zero; writes are guarded against stale screens. */
@@ -275,12 +275,14 @@ export function setFollowup(ctx: Ctx, actor: User, itemId: number, input: unknow
 export function recordFollowupCall(ctx: Ctx, actor: User, itemId: number, input: unknown) {
  if (!input || typeof input !== 'object' || Array.isArray(input)) throw badRequest('Invalid call details.');
  const d = input as Record<string, unknown>;
- if (!['progress','delayed','ready','unreachable','other'].includes(String(d.outcome))) throw badRequest('Choose a call outcome.');
+ if (typeof d.outcome !== 'string' || !['progress','delayed','ready','unreachable','other'].includes(d.outcome)) throw badRequest('Choose a call outcome.');
  if (typeof d.note !== 'string' || !d.note.trim() || d.note.length > 1000) throw badRequest('Enter call notes (up to 1000 characters).');
+ const outcome = d.outcome as string;
+ const note = d.note as string;
  const nextDue = followupDate(d.next_due);
  return tx(ctx.db, () => {
   const item = liveItem(ctx,itemId);
-  const id = Number(run(ctx.db,'INSERT INTO procurement_calls (item_id,user_id,at,outcome,note,next_due) VALUES (?,?,?,?,?,?)',itemId,actor.id,nowIso(ctx),d.outcome,d.note.trim(),nextDue).lastInsertRowid);
+  const id = Number(run(ctx.db,'INSERT INTO procurement_calls (item_id,user_id,at,outcome,note,next_due) VALUES (?,?,?,?,?,?)',itemId,actor.id,nowIso(ctx),outcome,note.trim(),nextDue).lastInsertRowid);
   changed(ctx,item.project_id);
   return get<CallRow>(ctx.db,'SELECT * FROM procurement_calls WHERE id = ?',id);
  });
