@@ -1,7 +1,7 @@
 // Drawing review queue: every job with drawings in board review.
 
 import { useEffect, useState } from 'react';
-import { seesWholeBoard, type ReviewQueueRow, type ReviewWorkspace } from '@board/shared';
+import { hasBoardAccess, seesWholeBoard, type ReviewQueueRow, type ReviewWorkspace } from '@board/shared';
 import { useApp } from '../context.ts';
 import { when } from '../lib/format.ts';
 import { navigate, replaceParams, useLocation } from '../lib/router.ts';
@@ -35,8 +35,9 @@ export function rowStatus(r: ReviewQueueRow): { label: string; tone: string } {
 export const folderName = (f: string) => f.trim().replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? '';
 
 export function ReviewQueue() {
-  const { me, user } = useApp();
+  const { me, user, meta } = useApp();
   const whole = seesWholeBoard(me);
+  const register = hasBoardAccess(meta.permissions, me);
   const { params } = useLocation();
   const tab = (TABS.some((t) => t.id === params.get('tab')) ? params.get('tab') : 'awaiting') as Tab;
   const [q, setQ] = useState(params.get('q') ?? '');
@@ -69,7 +70,7 @@ export function ReviewQueue() {
 
   return (
     <div className="view review-queue">
-      <header className="view-head">
+      <header className="view-head view-head-row">
         <div>
           <h1>Drawing review</h1>
           <p className="view-lede">
@@ -78,6 +79,11 @@ export function ReviewQueue() {
               : 'The drawings engineers have handed to you for review. Passing board review is an internal check: the printed drawing still needs its physical signature.'}
           </p>
         </div>
+        {register && (
+          <button className="btn" onClick={() => navigate('/review/register')} title="Every drawing number with its latest signed revision (G)">
+            Drawing register
+          </button>
+        )}
       </header>
 
       {!!c?.to_sign_mine && (

@@ -8,7 +8,7 @@ export type DialogSpec =
   | { type: 'assign'; ticket: Ticket; title: string }
   | { type: 'confirm'; title: string; body: string; confirm: string; danger?: boolean }
   | { type: 'conflict'; field: string; jobNumber: string; mine: string; theirs: string; canCombine: boolean }
-  | { type: 'text'; title: string; body: string; label: string; confirm: string; required?: boolean; danger?: boolean }
+  | { type: 'text'; title: string; body: string; label: string; confirm: string; required?: boolean; danger?: boolean; /** Pre-filled text. */ value?: string }
   | { type: 'password' }
   | { type: 'help' };
 

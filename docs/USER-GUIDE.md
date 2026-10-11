@@ -100,6 +100,7 @@ Open the job and press **Submit for board review…** (or **Review → the job �
 
 - **Signed reference scan**: for a revision, attach the signed, scanned set of the previous revision. It is usually one merged PDF for the whole set. Attach the file from the project folder: the board keeps its own copy and never touches yours.
 - **Drawings**: attach each drawing as **its own single-page PDF**, named with its part number (for example `BRK-023.pdf`). The file name becomes the drawing number; correct it in the form if needed. A PDF with more than one page is refused: export each sheet on its own.
+- **Revision**: the revision written on the drawing (A, B, C, 02…). It is filled in for you when the file name ends with it (`BRK-023 Rev C.pdf`, `BRK-023_revC.pdf`), and a corrected drawing keeps the one it had. Leave it empty if the drawing has none. It is what the [drawing register](#drawing-register) shows; **Add** or **Change** next to **Revision** in the review screen corrects it until the drawing is signed.
 - For each drawing, say **what changed and why** (or, for a new drawing, its purpose), and choose **Revision** or **New drawing**. A revision needs a signed reference scan on the job.
 - **Hand to reviewers**: tick everyone who should review these drawings; one or several. Only they (and the manager) see them. To send one drawing to different people, press **Choose for this drawing** under it. A corrected drawing goes back to the same reviewers unless you change them.
 
@@ -130,13 +131,23 @@ A drawing can't be reviewed by the person who submitted it.
 
 **The job becomes Done by itself when every drawing is recorded as signed**, and it can't be moved to Done before that. If a PDF changes after it passed, it needs a new board review decision and a new print: the earlier handover doesn't carry over.
 
+### Drawing register
+
+**Review → Drawing register** (or <kbd>G</kbd> anywhere) lists every drawing number that has been through board review, across all jobs:
+
+- **Latest signed**: the newest physically signed revision of that drawing, when and by whom, the job it came from, and the reviewed PDF.
+- **In review now**: a revision still going through review on an open job, and its state.
+- **Jobs**: how many jobs the drawing has been through.
+
+Press a drawing number for its whole history: each job it went through, newest first, with the revision, the state, how many attempts it took, who passed and signed it, the revision notes and the PDF. Narrow the list to **Signed**, **In review now** or **Never signed**, to one project, or by typing part of a drawing number, job, revision or note. A drawing number is the same drawing whatever its capitals. Reviewers don't see the register: their Review page stays the drawings handed to them.
+
 ### Project folder copies and the revision log
 
 If the job's **File location** is its project folder, the board keeps there:
 
 - `BoardReview\<JOB>\<drawing>\attempt N.pdf`: drawings under review.
 - `BoardReview\<JOB>\<drawing> - board reviewed (attempt N).pdf`: the exact PDF that passed (an internally reviewed copy, not an officially approved one).
-- `REVISION_LOG.md`: every drawing and attempt, with what changed, comments and responses, the outcome, who and when, handover and signature, and clean-up.
+- `REVISION_LOG.md`: every drawing (with its revision) and attempt, with what changed, comments and responses, the outcome, who and when, handover and signature, and clean-up.
 
 After a drawing passes, the board removes the earlier attempts' PDFs (the history keeps their notes, comments and decisions, and says *Intermediate PDF removed after board review*). It never touches signed scans, CAD files or anything it didn't write. If the share can't be reached, the review screen says so and the board keeps trying; its own copies stay viewable. **Revision log** on the review screen shows the log for one job at any time.
 
@@ -203,7 +214,8 @@ It also reminds you of your own jobs that are overdue or due today. Opening the 
 |---|---|---|
 | Anywhere | <kbd>N</kbd> | New job |
 | | <kbd>F</kbd> or <kbd>/</kbd> | Search |
-| | <kbd>B</kbd> <kbd>T</kbd> <kbd>M</kbd> <kbd>P</kbd> <kbd>D</kbd> <kbd>W</kbd> <kbd>R</kbd> | Board, Today, My work, Projects, Dashboard, Workload, Reports |
+| | <kbd>B</kbd> <kbd>T</kbd> <kbd>M</kbd> <kbd>P</kbd> <kbd>D</kbd> <kbd>V</kbd> <kbd>W</kbd> <kbd>R</kbd> <kbd>O</kbd> | Board, Today, My work, Projects, Dashboard, Review, Workload, Reports, Tools |
+| | <kbd>G</kbd> | Drawing register |
 | | <kbd>?</kbd> | List of shortcuts |
 | | <kbd>Esc</kbd> | Close the panel, dialog or menu |
 | Board, with a card selected | <kbd>Tab</kbd> or arrow keys | Move between cards |

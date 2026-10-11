@@ -107,7 +107,7 @@ export function revisionLog(ctx: StoreCtx, folder: string, onlyTicket?: number):
     if (w.references.length)
       lines.push(`Signed reference scans: ${w.references.map((r) => `${r.filename} (${r.pages} pages, attached ${localDay(ctx, r.attached_at)} by ${name(r.attached_by)})`).join('; ')}`, '');
     for (const d of w.drawings) {
-      lines.push(`### ${d.identifier} · ${d.kind === 'new' ? 'new drawing' : 'revision'} · ${DRAWING_STATE_LABEL[d.state]}`, '');
+      lines.push(`### ${d.identifier}${d.revision ? ` Rev ${d.revision}` : ''} · ${d.kind === 'new' ? 'new drawing' : 'revision'} · ${DRAWING_STATE_LABEL[d.state]}`, '');
       if (d.ref_page && d.ref_reference_id) {
         const r = w.references.find((x) => x.id === d.ref_reference_id);
         if (r) lines.push(`- Reference page: page ${d.ref_page} of ${r.filename}`);

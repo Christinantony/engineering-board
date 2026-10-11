@@ -53,6 +53,7 @@ interface DrawingRow {
   id: number;
   ticket_id: number;
   identifier: string;
+  revision: string | null;
   kind: 'revision' | 'new';
   state: DrawingState;
   required: number;
@@ -288,6 +289,9 @@ export function localDay(ctx: Ctx, iso: string): string {
   return new Intl.DateTimeFormat('en-GB', { timeZone: ctx.tz, day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(iso));
 }
 
+/** Revisions are compared and shown in capitals: "c" and "C" are the same revision. */
+export const cleanRevision = (r: string | null | undefined) => (r == null ? r : r.toUpperCase());
+
 const stem = (filename: string) => filename.replace(/^.*[\\/]/, '').replace(/\.pdf$/i, '').trim();
 
 function fileRow(ctx: StoreCtx, sha: string) {
@@ -357,6 +361,7 @@ export function workspace(ctx: StoreCtx, ticketId: number, viewer?: User): Revie
     return {
       id: d.id,
       identifier: d.identifier,
+      revision: d.revision,
       kind: d.kind,
       state: d.state,
       required: bool(d.required),
@@ -592,9 +597,10 @@ export function submit(ctx: StoreCtx, actor: User, ticketId: number, input: unkn
         const id = Number(
           run(
             ctx.db,
-            `INSERT INTO review_drawings (ticket_id, identifier, kind, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO review_drawings (ticket_id, identifier, revision, kind, created_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
             ticketId,
             identifier,
+            cleanRevision(d.revision) ?? null,
             d.kind,
             actor.id,
             now,
@@ -631,6 +637,8 @@ export function submit(ctx: StoreCtx, actor: User, ticketId: number, input: unkn
         cleanup: 'none',
         cleanup_detail: null,
       };
+      // a resubmission may correct the revision; left out, it keeps the one it had
+      if (d.revision !== undefined && attemptNo > 1) sets.revision = cleanRevision(d.revision) ?? null;
       if (d.ref_sha256 && d.ref_page != null) {
         const refId = refBySha(d.ref_sha256);
         if (!refId) throw badRequest(`The reference chosen for ${identifier} is not attached to this job.`);
@@ -790,16 +798,25 @@ export function withdraw(ctx: StoreCtx, actor: User, drawingId: number, input: u
 }
 
 export function renameDrawing(ctx: StoreCtx, actor: User, drawingId: number, input: unknown): ReviewWorkspace {
-  const { identifier } = drawingEditSchema(input);
+  const data = drawingEditSchema(input);
+  if (data.identifier === undefined && data.revision === undefined) throw badRequest('Give a drawing number or a revision to change.');
   requireEngineer(actor, 'correct drawing numbers');
   const d = drawingRow(ctx, drawingId);
   tx(ctx.db, () => {
-    if (d.state === 'signed') throw conflict(`${d.identifier} is signed; its number can't change.`);
-    if (identifier === d.identifier) return;
-    if (get(ctx.db, 'SELECT 1 FROM review_drawings WHERE ticket_id = ? AND identifier = ? AND id <> ?', d.ticket_id, identifier, d.id))
-      throw conflict(`${identifier} is already a drawing in this job.`);
-    touchDrawing(ctx, d.id, { identifier });
-    event(ctx, d.ticket_id, actor.id, 'renamed', `${d.identifier} → ${identifier}`, d.id);
+    const identifier = data.identifier ?? d.identifier;
+    const revision = data.revision === undefined ? d.revision : (cleanRevision(data.revision) ?? null);
+    if (identifier === d.identifier && revision === d.revision) return;
+    if (d.state === 'signed') throw conflict(`${d.identifier} is signed; its number and revision can't change.`);
+    if (identifier !== d.identifier) {
+      if (get(ctx.db, 'SELECT 1 FROM review_drawings WHERE ticket_id = ? AND identifier = ? AND id <> ?', d.ticket_id, identifier, d.id))
+        throw conflict(`${identifier} is already a drawing in this job.`);
+      touchDrawing(ctx, d.id, { identifier });
+      event(ctx, d.ticket_id, actor.id, 'renamed', `${d.identifier} → ${identifier}`, d.id);
+    }
+    if (revision !== d.revision) {
+      touchDrawing(ctx, d.id, { revision });
+      event(ctx, d.ticket_id, actor.id, 'revision_set', revision ? `${identifier} is revision ${revision}${d.revision ? ` (was ${d.revision})` : ''}` : `${identifier}: revision cleared (was ${d.revision})`, d.id);
+    }
     reindexTicket(ctx, d.ticket_id);
     bumpTicket(ctx, d.ticket_id, actor);
   });

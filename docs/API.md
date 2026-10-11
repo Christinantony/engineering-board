@@ -119,7 +119,7 @@ Roles: engineers upload and submit, mark handovers and respond to comments; the 
 | GET | `/api/reviews?tab=awaiting\|returned\|signature\|done\|all&q=` | The queue: `{rows: ReviewQueueRow[], counts}`. |
 | GET | `/api/tickets/:id/review` | The workspace: `{ticket, submissions, references[], drawings[] (with attempts[] and comments[]), events[], sync, signatures_pending}`. |
 | GET | `/api/tickets/:id/review/log` | The job's revision log as Markdown. |
-| POST | `/api/tickets/:id/review/submissions` | `{references?: [{sha256, filename}], drawings: [{sha256, filename, identifier?, kind: "revision"\|"new", notes, ref_sha256?, ref_page?, reviewer_ids?}]}`. A drawing whose number matches an existing one becomes its next attempt. `reviewer_ids` (active reviewers or the manager) is required for a drawing new to the job; a resubmission keeps its reviewers when it is left out. Moves the job to Review. Returns 201 with the workspace. |
+| POST | `/api/tickets/:id/review/submissions` | `{references?: [{sha256, filename}], drawings: [{sha256, filename, identifier?, revision?, kind: "revision"\|"new", notes, ref_sha256?, ref_page?, reviewer_ids?}]}`. `revision` (1–20 letters, digits, dots or dashes; stored in capitals; `null` or empty for none) is kept by a resubmission that leaves it out. A drawing whose number matches an existing one becomes its next attempt. `reviewer_ids` (active reviewers or the manager) is required for a drawing new to the job; a resubmission keeps its reviewers when it is left out. Moves the job to Review. Returns 201 with the workspace. |
 | POST | `/api/tickets/:id/review/references` | `{sha256, filename}`: attach another signed scan (it becomes protected). |
 | POST | `/api/tickets/:id/review/sync` | Retry the project-folder copies now. |
 | PUT | `/api/review/drawings/:id/reference-page` | `{reference_id, page}`, or both `null` to clear. |
@@ -127,11 +127,20 @@ Roles: engineers upload and submit, mark handovers and respond to comments; the 
 | POST | `/api/review/drawings/:id/handover` | Passed → handed over. Creates the reviewer's reminder once; a repeat is 409. |
 | POST | `/api/review/drawings/:id/signed` | Handed over → signed. The last signature moves the job to Done. |
 | POST | `/api/review/drawings/:id/withdraw` | `{body?}`: awaiting or returned drawings only; it no longer counts towards the job. |
-| PATCH | `/api/review/drawings/:id` | `{identifier}`: correct the drawing number. |
+| PATCH | `/api/review/drawings/:id` | `{identifier?, revision?}` (at least one): correct the drawing number or its revision (`null` clears it). Engineers only; 409 once signed. |
 | PUT | `/api/review/drawings/:id/reviewers` | `{reviewer_ids: number[]}` (at least one): engineers change who a drawing is handed to. Not for signed or withdrawn drawings. Each drawing in the workspace lists its `reviewers`. |
 | POST | `/api/review/drawings/:id/comments` | `{body, attempt_id?}` |
 | POST | `/api/review/comments/:id/respond` | `{body}`: the engineer's correction response. |
 | POST | `/api/review/comments/:id/resolve` | A reviewer, the manager, or the comment's author. |
+
+### Drawing register (decision #35)
+
+Board-wide reads: reviewers get 403.
+
+| Method | Path | Notes |
+|---|---|---|
+| GET | `/api/drawings?q=&project=&filter=all\|signed\|in_review\|never_signed` | `{drawings: [{identifier, latest_signed, in_review, projects, records, signed_count, last_change}], total}`, newest change first. One entry per drawing number (case-insensitive) across jobs; withdrawn drawings are left out. `latest_signed` and `in_review` are records: `{drawing_id, identifier, revision, kind, state, state_label, ticket_id, job_number, title, job_status, archived, project_id, project, created_at, updated_at, attempts, passed_by, passed_at, handover_at, signed_by, signed_at, file: {filename, sha256, notes, available} \| null}`. `q` matches the number, job numbers and titles, projects, revisions and revision notes. |
+| GET | `/api/drawings/history?identifier=` | `{identifier, records[]}`: every record of that drawing number, withdrawn ones included, newest first. |
 
 Every mutating review route returns the updated workspace. After it commits, the board removes intermediate PDFs (after a pass) and updates the project folder in the background; `sync.state` is `ok`, `pending`, `failed` (with `detail`) or `no_folder`.
 

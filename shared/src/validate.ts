@@ -303,6 +303,8 @@ export const jobTypeSchema = v.object({
 const sha = v.string({ min: 64, max: 64, pattern: /^[0-9a-f]{64}$/, patternMessage: 'must be a file reference from an upload' });
 const filename = v.string({ min: 1, max: 255 });
 export const identifierField = v.string({ min: 1, max: 100, pattern: /^[^\\/:*?"<>|]+$/, patternMessage: 'cannot contain \\ / : * ? " < > |' });
+/** A drawing's revision as written on it: A, B, C, 02, P1… (decision #35). Empty clears it. */
+export const revisionField = v.nullable(v.string({ min: 1, max: 20, pattern: /^[A-Za-z0-9.\-]+$/, patternMessage: 'is letters, digits, dots or dashes (A, B, 02, P1)' }));
 
 export const reviewSubmissionSchema = v.object({
   references: v.withDefault(v.array(v.object({ sha256: sha, filename }), { max: 10 }), []),
@@ -312,6 +314,8 @@ export const reviewSubmissionSchema = v.object({
       filename,
       /** Defaults to the file name without ".pdf". */
       identifier: v.optional(identifierField),
+      /** The revision on the drawing (A, B, 02…). A resubmission keeps the previous one when omitted. */
+      revision: v.optional(revisionField),
       kind: v.withDefault(v.enum(['revision', 'new'] as const), 'revision'),
       notes: v.string({ min: 1, max: 5000 }),
       /** Optional reference bookmark chosen while preparing the submission. */
@@ -343,5 +347,6 @@ export const reviewCommentSchema = v.object({
   attempt_id: v.optional(v.nullable(v.int({ min: 1 }))),
 });
 export const reviewTextSchema = v.object({ body: v.withDefault(v.string({ max: 5000 }), '') });
-export const drawingEditSchema = v.object({ identifier: identifierField });
+/** Correct a drawing's number and/or its revision (at least one; checked in renameDrawing). */
+export const drawingEditSchema = v.object({ identifier: v.optional(identifierField), revision: v.optional(revisionField) });
 export const drawingReviewersSchema = v.object({ reviewer_ids: v.array(v.int({ min: 1 }), { max: 20 }) });

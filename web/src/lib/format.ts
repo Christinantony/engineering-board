@@ -14,6 +14,13 @@ export function localDate(d = new Date()): string {
   return `${p.year}-${p.month}-${p.day}`;
 }
 
+/** A day without the time: "12 Oct", or "12 Oct 2025" in another year. */
+export function localDay(iso: string): string {
+  const d = new Date(iso);
+  const sameYear = localDate(d).slice(0, 4) === localDate().slice(0, 4);
+  return fmt(sameYear ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' }).format(d);
+}
+
 function addDays(date: string, n: number) {
   const [y, m, d] = date.split('-').map(Number);
   return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
