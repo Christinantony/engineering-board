@@ -2,7 +2,7 @@
 // The board stays visible behind it.
 
 import { useEffect, useRef, useState } from 'react';
-import { ESTIMATE_BUCKETS, PRIORITIES, STATUS_LABEL, estimateLabel, type Activity, type ReviewWorkspace, type Status, type Ticket } from '@board/shared';
+import { ESTIMATE_BUCKETS, PRIORITIES, STATUS_LABEL, compareToEstimate, estimateLabel, formatDuration, parseDuration, type Activity, type ReviewWorkspace, type Status, type Ticket } from '@board/shared';
 import { useApp } from '../context.ts';
 import { addComment, archiveTicket, claimTicket, moveTicket, releaseTicket, updateTicket } from '../lib/actions.ts';
 import { copyText } from '../lib/clipboard.ts';
@@ -267,7 +267,7 @@ function nextStep(t: Ticket): { label: string; to: Status } | null {
 }
 
 function PanelContent({ t, activity, onClose }: { t: Ticket; activity: Activity[]; onClose: () => void }) {
-  const { me, user, workers, jobTypes, jobType, can, canChange } = useApp();
+  const { me, user, workers, jobTypes, jobType, can, canChange, meta } = useApp();
   const save = (fields: Record<string, unknown>, base?: Record<string, unknown>) => updateTicket(t, fields, base);
   // your role's capabilities (Admin → Roles): edit any job, or claim-holders on their own job
   const editable = canChange(t);
@@ -467,6 +467,7 @@ function PanelContent({ t, activity, onClose }: { t: Ticket; activity: Activity[
                 </option>
               ))}
             </select>
+            <TypicalHint jobTypeId={t.job_type_id} />
           </dd>
         </div>
         <div className="field">
@@ -534,18 +535,19 @@ function PanelContent({ t, activity, onClose }: { t: Ticket; activity: Activity[
           <dt className="field-label">Actual time</dt>
           <dd className="actual-row">
             <EditText
-              value={t.actual_minutes == null ? '' : String(t.actual_minutes)}
+              value={t.actual_minutes == null ? '' : formatDuration(t.actual_minutes)}
               onSave={async (v) => {
-                if (v !== '' && !/^\d+$/.test(v)) {
-                  toast('Actual time must be a whole number of minutes', { kind: 'error' });
+                const minutes = v === '' ? null : parseDuration(v, meta.workday.hours_per_day);
+                if (v !== '' && minutes == null) {
+                  toast('Type the time it took, such as 90, 1.5h or 3h 30m', { kind: 'error' });
                   return;
                 }
-                await save({ actual_minutes: v === '' ? null : Number(v) });
+                await save({ actual_minutes: minutes });
               }}
-              label="Actual minutes"
-              placeholder="Optional"
+              label="Actual time"
+              placeholder="e.g. 3h 30m"
             />
-            <span className="muted">min</span>
+            {t.actual_minutes != null && t.estimate_minutes != null && <EstimateOutcome estimate={t.estimate_minutes} actual={t.actual_minutes} />}
           </dd>
         </div>
       </dl>
@@ -759,3 +761,26 @@ function ActivityItem({ a }: { a: Activity }) {
 }
 
 export { clock };
+
+/** What this type of job usually takes, from finished jobs that recorded their time (decision #36). */
+function TypicalHint({ jobTypeId }: { jobTypeId: number | null }) {
+  const { jobType } = useApp();
+  const q = useQuery<{ typical: { job_type_id: number; jobs: number; median_minutes: number; label: string }[] }>(jobTypeId ? '/api/estimates/typical' : null);
+  const hit = q.data?.typical.find((x) => x.job_type_id === jobTypeId);
+  if (!hit) return null;
+  return (
+    <p className="estimate-hint muted small" data-testid="typical-hint">
+      {jobType(jobTypeId)?.name ?? 'This type'} usually takes {hit.label} (middle of the last {hit.jobs}: {formatDuration(hit.median_minutes)})
+    </p>
+  );
+}
+
+function EstimateOutcome({ estimate, actual }: { estimate: number; actual: number }) {
+  const o = compareToEstimate(estimate, actual);
+  const label = estimateLabel(estimate);
+  return (
+    <span className={`estimate-outcome outcome-${o}`} data-testid="estimate-outcome">
+      {o === 'within' ? `within the ${label} estimate` : o === 'longer' ? `longer than the ${label} estimate` : `shorter than the ${label} estimate`}
+    </span>
+  );
+}
