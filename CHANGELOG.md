@@ -227,3 +227,11 @@
 - **Decisions affected:** new decision #34. Node built-ins only (#1: `fs.statfsSync`, `fs.statSync`, `node:os`). No migration, no stored data.
 - **Validation:** On Node 22.22.0: typecheck; 219 backend tests (8 new: admin-only, the facts reported, the same-disk warning, no backup → Fix now → Back up now → OK, a 4-day-old backup → Check → the hourly run makes today's, the PIN check, a backup folder that can't be created reported as a failed daily backup, `sameDisk` for one folder and for `\\server\share`); build; 15 package checks; 42 browser tests (1 new: the checks in order, the same-disk warning, a backup made from the page, the notice on Team linking back).
 - **Follow-ups / open issues:** the version stays 1.6.0 until the last 1.7.0 branch; the README is updated there too. Not yet seen on Windows: the same-disk test relies on the volume serial number Node reports as `dev`, with the drive letter as the fallback.
+
+### 2026-10-11 23:10 IST | Claude | branch: claude/fix-last-signature
+- **What:** Fix: **a reviewer can record the last signature on a job.** Recording the last physical signature moves the job to Done, and that move ran as the person who signed. Reviewers have no job capabilities (decision #31), so a reviewer's signature on a job's last drawing was refused with "Your role cannot change this job", although every other signature worked. The move to Done is now made by the board's review rule (`moveTicket(..., { byReview: true })`), which skips the role check only for that automatic move; a reviewer still can't move jobs by hand.
+- **Why:** Found while writing the drawing-register tests for 1.7.0. Board review is meant to be outside the role setting (#31), and reviewers are the people who sign.
+- **Files:** `server/src/domain/tickets.ts`, `server/src/domain/reviews.ts`, `server/test/review.test.ts`, `CHANGELOG.md`
+- **Decisions affected:** none changed; this makes the code follow #31.
+- **Validation:** On Node 22.22.0: typecheck; 220 backend tests (1 new: a reviewer passes, the engineer hands over, the reviewer records the only signature, the job is Done, and the reviewer still gets 403 moving a job by hand; it fails without the fix with the 403 above); build; 15 package checks.
+- **Follow-ups / open issues:** until 1.7.0 is installed, have an engineer or the manager record the last signature on a job.

@@ -430,11 +430,17 @@ export function updateTicket(ctx: Ctx, actor: User, id: number, input: unknown):
 // Move (status change and/or reorder on the board)
 // ---------------------------------------------------------------------------
 
-export function moveTicket(ctx: Ctx, actor: User, id: number, input: unknown): Ticket {
+/**
+ * `byReview`: the board itself moves the job because a board-review rule says
+ * so (the last signature makes it Done). Board review is not governed by the
+ * role capabilities (decision #31), so the person whose action triggered it
+ * (a reviewer, say) needs no job capability for that move.
+ */
+export function moveTicket(ctx: Ctx, actor: User, id: number, input: unknown, opts: { byReview?: boolean } = {}): Ticket {
   const data = moveTicketSchema(input);
   return tx(ctx.db, () => {
     let row = getRow(ctx, id);
-    requireChange(ctx, actor, row);
+    if (!opts.byReview) requireChange(ctx, actor, row);
     if (row.archived) throw conflict(`${row.job_number} is archived. Restore it first.`);
     if (data.from_status && data.from_status !== row.status) {
       const who = userName(ctx, lastActorFor(ctx, id));
