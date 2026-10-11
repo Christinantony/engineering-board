@@ -762,7 +762,8 @@ export function markSigned(ctx: StoreCtx, actor: User, drawingId: number): Revie
     // The job is Done once every required drawing carries its physical signature.
     const t = ticketRow(ctx, d.ticket_id);
     if (signaturesPending(ctx, d.ticket_id) === 0 && !CLOSED_STATUSES.includes(t.status as never) && !t.archived) {
-      moveTicket(ctx, actor, d.ticket_id, { status: 'done', from_status: t.status as never });
+      // the board moves it, whoever signed (a reviewer can't move jobs themselves)
+      moveTicket(ctx, actor, d.ticket_id, { status: 'done', from_status: t.status as never }, { byReview: true });
     }
     bumpTicket(ctx, d.ticket_id, actor);
   });

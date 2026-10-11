@@ -331,6 +331,27 @@ describe('drawing review', () => {
     await settle();
   });
 
+  it('a reviewer may record the last signature: the board moves the job to Done, not the reviewer', async () => {
+    // reviewers have no job capabilities (decision #31), but board review isn't governed by them
+    const t = await newJob('Gusset plate', { file_location: '' });
+    const f = await uploaded(christin, makePdf(1, { labels: ['GUS-002 Rev A'] }), 'GUS-002.pdf');
+    let r = await christin.post(`/api/tickets/${t.id}/review/submissions`, { drawings: [{ reviewer_ids: REV, ...f, kind: 'new', notes: 'New gusset.' }] });
+    assert.equal(r.status, 201, JSON.stringify(r.body));
+    const d = r.body.drawings[0];
+    r = await ebin.post(`/api/review/drawings/${d.id}/decision`, { attempt_id: d.current_attempt_id, outcome: 'passed' });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    r = await christin.post(`/api/review/drawings/${d.id}/handover`);
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    r = await ebin.post(`/api/review/drawings/${d.id}/signed`);
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    const job = (await christin.get(`/api/tickets/${t.id}`)).body;
+    assert.equal(job.ticket.status, 'done');
+    assert.ok(job.activity.some((a: any) => a.kind === 'review_signed'));
+    // still no way for the reviewer to move a job by hand
+    assert.equal((await ebin.post(`/api/tickets/${t.id}/move`, { status: 'in_progress' })).status, 403);
+    await settle();
+  });
+
   it('reviews a new drawing without any signed reference; a revision needs one', async () => {
     const t = await newJob('Cable support', { file_location: '' });
     const cbl = await uploaded(christin, makePdf(1, { labels: ['CBL-007 Rev A'] }), 'CBL-007.pdf');
