@@ -119,6 +119,9 @@ test('an engineer submits a signed scan and single-page drawings; a multi-page d
   ]);
   await c.waitForSelector('.rw-file.error:has-text("TWO-SHEETS.pdf has 2 pages")');
   await c.click('button[aria-label="Remove TWO-SHEETS.pdf"]');
+  // the revision as written on the drawing, typed in lower case (decision #35)
+  await c.fill('input[aria-label="Revision of BRK-023.pdf"]', 'c');
+  assert.equal(await c.inputValue('input[aria-label="Revision of BRK-023.pdf"]'), 'C');
   await c.fill('textarea[aria-label="Notes for BRK-023.pdf"]', 'Mounting holes Ø8 → Ø10 for the revised fastener size.');
   await c.selectOption('select[aria-label="Type of SUP-011.pdf"]', 'new');
   await c.fill('textarea[aria-label="Notes for SUP-011.pdf"]', 'New support plate.');
@@ -131,6 +134,7 @@ test('an engineer submits a signed scan and single-page drawings; a multi-page d
   await c.waitForSelector('.toast:has-text("Submitted for board review")');
   await c.waitForSelector('.rw-item:has-text("BRK-023")');
   await c.waitForSelector('.rw-item:has-text("SUP-011")');
+  assert.match(await c.textContent('.rw-item:has-text("BRK-023")'), /Rev C/);
   assert.equal(await c.locator('[data-testid=action-bar]').getByText('Pass board review').count(), 0, 'engineers cannot pass drawings');
 });
 
@@ -270,4 +274,35 @@ test('comments block a pass; pass, handover reminder and signature complete the 
   await c.waitForSelector('.rv-chip:has-text("All drawings signed")');
   const t = await c.evaluate(async (id) => (await (await fetch(`/api/tickets/${id}`)).json()).ticket.status, jobId);
   assert.equal(t, 'done');
+});
+
+test('the drawing register lists the signed revisions with their history; reviewers cannot open it', async () => {
+  const c = await login('Christin');
+  await c.goto(`${BASE}/review`);
+  await c.waitForSelector('.rv-table, .empty');
+  await c.click('button:has-text("Drawing register")');
+  await c.waitForSelector('[data-testid=register]');
+  const brk = c.locator('tr.reg-row[data-drawing="BRK-023"]');
+  assert.match(await brk.textContent(), /Rev C/);
+  assert.match(await brk.textContent(), /Signed/);
+  assert.match(await c.textContent('tr.reg-row[data-drawing="SUP-011"]'), /No rev/);
+  // its history across jobs, with the reviewed PDF
+  await brk.locator('button.reg-id').click();
+  await c.waitForSelector('.reg-history .reg-entry:has-text("Physically signed")');
+  assert.match(await c.textContent('.reg-history'), /Mounting holes Ø8 → Ø10/);
+  assert.equal(await c.locator('.reg-history a:has-text("Open the PDF")').count(), 1);
+  // never signed: both of these are signed, so they drop out
+  await c.click('.reg-tools button:has-text("Never signed")');
+  await c.waitForSelector('tr.reg-row[data-drawing="BRK-023"]', { state: 'detached' });
+  assert.equal(await c.locator('tr.reg-row[data-drawing="SUP-011"]').count(), 0);
+  // G from anywhere opens it
+  await c.goto(`${BASE}/board`);
+  await c.waitForSelector('.card');
+  await c.keyboard.press('g');
+  await c.waitForSelector('h1:has-text("Drawing register")');
+  // a reviewer is sent back to their review queue (decision #29)
+  const e = await login('Ebin');
+  await e.goto(`${BASE}/review/register`);
+  await e.waitForFunction(() => location.pathname === '/review');
+  assert.equal(await e.locator('button:has-text("Drawing register")').count(), 0);
 });

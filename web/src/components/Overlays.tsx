@@ -158,7 +158,7 @@ function ConfirmDialog({ spec, done }: { spec: any; done: (v: any) => void }) {
 }
 
 function TextDialog({ spec, done }: { spec: any; done: (v: any) => void }) {
-  const [text, setText] = useState('');
+  const [text, setText] = useState<string>(spec.value ?? '');
   useEscape(() => done(null));
   const ok = !spec.required || text.trim().length > 0;
   return (

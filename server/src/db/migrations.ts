@@ -464,4 +464,15 @@ CREATE TABLE sheet_sizes (
 );
 `,
   },
+  {
+    id: 11,
+    name: 'drawing register: revision letters',
+    sql: /* sql */ `
+-- The drawing register (decision #35) lists every drawing number across jobs.
+-- A drawing may carry its revision (A, B, C, 02…), entered when it is
+-- submitted for board review; drawings from before 1.7.0 have none.
+ALTER TABLE review_drawings ADD COLUMN revision TEXT CHECK (revision IS NULL OR length(revision) BETWEEN 1 AND 20);
+CREATE INDEX idx_review_drawings_identifier ON review_drawings(identifier);
+`,
+  },
 ];

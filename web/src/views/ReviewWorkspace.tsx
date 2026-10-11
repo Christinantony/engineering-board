@@ -186,7 +186,10 @@ function DrawingSet({ w, selected, onSelect }: { w: ReviewWorkspace; selected: R
           return (
             <li key={d.id}>
               <button className={`rw-item${selected?.id === d.id ? ' sel' : ''}${d.state === 'withdrawn' ? ' withdrawn' : ''}`} onClick={() => onSelect(d.id)} aria-current={selected?.id === d.id}>
-                <span className="rw-item-id">{d.identifier}</span>
+                <span className="rw-item-id">
+                  {d.identifier}
+                  {d.revision && <span className="rw-item-rev"> Rev {d.revision}</span>}
+                </span>
                 <span className={`rv-chip rv-${d.kind === 'new' ? 'new' : 'revised'}`}>{d.kind === 'new' ? 'New' : 'Revised'}</span>
                 <span className="rw-item-sub muted small">
                   {a ? `Attempt ${a.number}` : ''} · {DRAWING_STATE_SHORT[d.state]}
@@ -352,6 +355,17 @@ function DrawingDetails({ w, d }: { w: ReviewWorkspace; d: ReviewDrawing }) {
     const name = await ask({ type: 'text', title: `Correct the drawing number of ${d.identifier}`, body: 'The drawing number comes from the file name. Correct it here if the file was named wrongly.', label: 'Drawing number', confirm: 'Save', required: true });
     if (name) await reviewAction('PATCH', `/api/review/drawings/${d.id}`, { identifier: name });
   };
+  const setRevision = async () => {
+    const r = await ask({
+      type: 'text',
+      title: `Revision of ${d.identifier}`,
+      body: 'The revision as written on the drawing: A, B, C, 02… Leave it empty if the drawing has none. It is shown in the drawing register.',
+      label: 'Revision',
+      value: d.revision ?? '',
+      confirm: 'Save',
+    });
+    if (r != null) await reviewAction('PATCH', `/api/review/drawings/${d.id}`, { revision: r.trim().toUpperCase() || null });
+  };
   return (
     <section className="rw-card">
       <h2>Drawing</h2>
@@ -362,6 +376,15 @@ function DrawingDetails({ w, d }: { w: ReviewWorkspace; d: ReviewDrawing }) {
           {me.role === 'engineer' && d.state !== 'signed' && (
             <button className="link-btn" onClick={() => void rename()}>
               Correct
+            </button>
+          )}
+        </dd>
+        <dt>Revision</dt>
+        <dd data-testid="drawing-revision">
+          {d.revision ?? <span className="muted">Not given</span>}{' '}
+          {me.role === 'engineer' && d.state !== 'signed' && (
+            <button className="link-btn" onClick={() => void setRevision()}>
+              {d.revision ? 'Change' : 'Add'}
             </button>
           )}
         </dd>
@@ -718,6 +741,8 @@ interface Pending {
 }
 interface PendingDrawing extends Pending {
   identifier: string;
+  /** The revision on the drawing (A, B, 02…); empty when it has none (decision #35). */
+  revision: string;
   kind: 'revision' | 'new';
   notes: string;
   /** Its own reviewers; null = the ones chosen for the whole submission. */
@@ -726,6 +751,8 @@ interface PendingDrawing extends Pending {
 
 let seq = 0;
 const stem = (n: string) => n.replace(/\.pdf$/i, '').trim();
+/** A revision written in the file name, such as "BRK-023 Rev C.pdf" or "BRK-023_revC.pdf". */
+const revisionInName = (n: string) => /[\s_-]rev\.?[\s_-]?([A-Za-z0-9]{1,4})$/i.exec(stem(n))?.[1]?.toUpperCase() ?? '';
 
 function SubmitPanel({ w, forDrawing, onClose }: { w: ReviewWorkspace; forDrawing: number | null; onClose: () => void }) {
   const [refs, setRefs] = useState<Pending[]>([]);
@@ -766,6 +793,7 @@ function SubmitPanel({ w, forDrawing, onClose }: { w: ReviewWorkspace; forDrawin
         file: f,
         progress: 0,
         identifier: id,
+        revision: revisionInName(f.name) || match?.revision || '',
         kind: match ? match.kind : hasRef ? 'revision' : 'new',
         notes: '',
         reviewers: !target && match?.reviewers.length ? match.reviewers : null,
@@ -790,6 +818,7 @@ function SubmitPanel({ w, forDrawing, onClose }: { w: ReviewWorkspace; forDrawin
         sha256: d.result!.sha256,
         filename: d.result!.filename,
         identifier: d.identifier.trim(),
+        revision: d.revision.trim() || null,
         kind: d.kind,
         notes: d.notes.trim(),
         reviewer_ids: reviewersOf(d),
@@ -853,6 +882,17 @@ function SubmitPanel({ w, forDrawing, onClose }: { w: ReviewWorkspace; forDrawin
                     <label>
                       <span className="field-label">Drawing number</span>
                       <input className="field-input" value={d.identifier} onChange={(e: any) => edit(d.key, { identifier: e.target.value })} aria-label={`Drawing number for ${d.file.name}`} />
+                    </label>
+                    <label>
+                      <span className="field-label">Revision</span>
+                      <input
+                        className="field-input"
+                        value={d.revision}
+                        maxLength={20}
+                        placeholder="A, B, 02…"
+                        onChange={(e: any) => edit(d.key, { revision: e.target.value.toUpperCase() })}
+                        aria-label={`Revision of ${d.file.name}`}
+                      />
                     </label>
                     <label>
                       <span className="field-label">Type</span>

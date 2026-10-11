@@ -30,6 +30,7 @@ import { ReviewQueue } from './views/ReviewQueue.tsx';
 import { Tools } from './views/Tools.tsx';
 import { Projects } from './views/Projects.tsx';
 import { ReviewWorkspaceView } from './views/ReviewWorkspace.tsx';
+import { DrawingRegister } from './views/DrawingRegister.tsx';
 
 const NAV = [
   { path: '/board', label: 'Board', key: 'b' },
@@ -58,6 +59,7 @@ const VIEWS: Record<string, () => any> = {
   '/activity': ActivityFeed,
   '/admin': Admin,
   '/tools': Tools,
+  '/review/register': DrawingRegister,
   '/review': ReviewQueue,
   '/projects': Projects,
 };
@@ -259,6 +261,11 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
         if (whole && can('create')) setCreating(true);
         return;
       }
+      // G: the drawing register, one level under Review (not for reviewers, decision #29)
+      if (k === 'g' && whole) {
+        navigate('/review/register', { keepJob: true });
+        return;
+      }
       const to = nav.find((n) => n.key === k);
       if (to) navigate(to.path, { keepJob: whole });
     };
@@ -423,6 +430,7 @@ const TITLES: Record<string, string> = {
   '/admin': 'Admin',
   '/review': 'Drawing review',
   '/projects': 'Projects',
+  '/review/register': 'Drawing register',
 };
 
 function View({ path }: { path: string }) {

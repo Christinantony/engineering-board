@@ -117,6 +117,7 @@ import {
   type QueueTab,
 } from './domain/reviews.ts';
 import { HealthState, hostHealth } from './domain/health.ts';
+import { drawingHistory, drawingRegister, type RegisterFilter } from './domain/register.ts';
 import { jobsNeedingSync, markSyncPending, revisionLog, settleSyncs, syncProjectFolder } from './domain/projectFolder.ts';
 
 /** Default maximum PDF upload for drawing review (merged signed scans can be large). */
@@ -498,6 +499,16 @@ export function createApp(opts: AppOptions): App {
   authed('POST', '/api/review/drawings/:id/comments', onDrawing((req, user) => addReviewComment(ctx, user, did(req), req.body ?? {})));
   authed('POST', '/api/review/comments/:id/respond', onDrawing((req, user) => respondToComment(ctx, user, did(req), req.body ?? {})));
   authed('POST', '/api/review/comments/:id/resolve', onDrawing((req, user) => resolveComment(ctx, user, did(req))));
+
+  // ---- drawing register (decision #35): board-wide, so not for reviewers (#29) ----
+  board('GET', '/api/drawings', (req) =>
+    drawingRegister(ctx, {
+      q: (req.query.get('q') ?? '').slice(0, 100),
+      project: req.query.get('project') ? v.int({ min: 1 })(req.query.get('project'), 'project') : null,
+      filter: (req.query.get('filter') ?? 'all') as RegisterFilter,
+    }),
+  );
+  board('GET', '/api/drawings/history', (req) => drawingHistory(ctx, (req.query.get('identifier') ?? '').slice(0, 100)));
 
   // ---- views ----
   board('GET', '/api/activity', (req) => {

@@ -307,6 +307,8 @@ export interface ReviewAttempt {
 export interface ReviewDrawing {
   id: number;
   identifier: string;
+  /** The drawing's revision (A, B, 02…), when the engineer gave one (decision #35). */
+  revision: string | null;
   kind: 'revision' | 'new';
   state: DrawingState;
   required: boolean;

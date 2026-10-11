@@ -12,6 +12,7 @@ export const SHORTCUTS: { group: string; items: [string, string][] }[] = [
       ['P', 'Projects'],
       ['D', 'Dashboard'],
       ['V', 'Drawing review'],
+      ['G', 'Drawing register'],
       ['W', 'Workload'],
       ['R', 'Reports'],
       ['O', 'Tools'],
