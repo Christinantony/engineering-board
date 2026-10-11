@@ -147,6 +147,32 @@ describe('release checklists', () => {
     assert.equal(r.body.ticket.status, 'done');
   });
 
+  it('doesn\'t stop an Excel import of finished work of a type with a checklist', async () => {
+    const csv = 'Job,Job type,Status,Assigned to\r\nOld housing drawing,Drawing,Done,Paul\r\nOld bracket drawing,Drawing,Review,Allen\r\n';
+    const res = await fetch(`${admin.base}/api/admin/import/commit?filename=old-jobs.csv`, {
+      method: 'POST',
+      headers: { 'content-type': 'text/csv', cookie: [...admin.cookies].map(([k, v]) => `${k}=${v}`).join('; ') },
+      body: csv,
+    });
+    const body = (await res.json()) as any;
+    assert.equal(res.status, 200, JSON.stringify(body));
+    const done = (await admin.get('/api/tickets?q=Old%20housing%20drawing')).body.tickets[0];
+    assert.equal(done.status, 'done');
+    assert.equal((await admin.get('/api/tickets?q=Old%20bracket%20drawing')).body.tickets[0].status, 'review');
+  });
+
+  it('lets demo data be removed after its jobs were ticked', async () => {
+    assert.equal((await admin.post('/api/admin/demo')).status, 200);
+    const demo = (await admin.get('/api/tickets?q=Bracket%20redesign')).body.tickets.find((t: any) => t.title === 'Bracket redesign');
+    const cur = (await admin.get(`/api/tickets/${demo.id}`)).body.ticket;
+    await admin.patch(`/api/tickets/${demo.id}`, { version: cur.version, job_type_id: drawing });
+    const item = (await admin.get(`/api/tickets/${demo.id}/checklist`)).body.checklist.items[0];
+    assert.equal((await admin.put(`/api/tickets/${demo.id}/checklist`, { item_id: item.id, checked: true })).status, 200);
+    const r = await admin.del('/api/admin/demo');
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.ok(r.body.removed > 0);
+  });
+
   it('is behind the job permissions: reviewers can\'t see or tick', async () => {
     const ebin = await h.as('Ebin');
     const t = await paul.create({ title: 'Private drawing', claim: true, job_type_id: drawing });

@@ -510,7 +510,8 @@ export function commitImport(
       );
       if (r.status !== 'inbox' && r.status !== 'claimed') {
         const owner = r.assignee_id ? users.get(r.assignee_id)! : actor;
-        moveTicket(ctx, owner, ticket.id, { status: r.status, reason: r.waiting_for || undefined });
+        // imported work is brought in as it is: the release checklist applies from now on (#38)
+        moveTicket(ctx, owner, ticket.id, { status: r.status, reason: r.waiting_for || undefined }, { skipChecklist: true });
       }
       created.push(getTicket(ctx, ticket.id).job_number);
     }

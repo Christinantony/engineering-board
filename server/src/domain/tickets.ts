@@ -441,8 +441,10 @@ export function updateTicket(ctx: Ctx, actor: User, id: number, input: unknown):
  * so (the last signature makes it Done). Board review is not governed by the
  * role capabilities (decision #31), so the person whose action triggered it
  * (a reviewer, say) needs no job capability for that move.
+ * `skipChecklist`: jobs brought in as they already are (demo data, an Excel
+ * import) aren't being released now, so the release checklist doesn't apply.
  */
-export function moveTicket(ctx: Ctx, actor: User, id: number, input: unknown, opts: { byReview?: boolean } = {}): Ticket {
+export function moveTicket(ctx: Ctx, actor: User, id: number, input: unknown, opts: { byReview?: boolean; skipChecklist?: boolean } = {}): Ticket {
   const data = moveTicketSchema(input);
   return tx(ctx.db, () => {
     let row = getRow(ctx, id);
@@ -462,7 +464,7 @@ export function moveTicket(ctx: Ctx, actor: User, id: number, input: unknown, op
     // the release checklist guards the way into Review and Done (decision #38);
     // the board's own move after the last signature has passed review already
     const guarded = (s: string) => (CHECKLIST_STATUSES as readonly string[]).includes(s);
-    if (guarded(target) && !guarded(from) && !opts.byReview) requireChecklistDone(ctx, id, row.job_number, target);
+    if (guarded(target) && !guarded(from) && !opts.byReview && !opts.skipChecklist) requireChecklistDone(ctx, id, row.job_number, target);
 
     if (target !== from) {
       // assignment requirements
