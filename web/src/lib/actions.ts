@@ -1,7 +1,7 @@
 // Mutations used across the UI. Each one reports failures with a toast,
 // refreshes affected views, and (for moves) offers Undo.
 
-import { DEFAULT_PERMISSIONS, REASON_STATUSES, ASSIGNED_STATUSES, STATUS_LABEL, allows, type RolePermissions, type Status, type Ticket, type User } from '@board/shared';
+import { DEFAULT_PERMISSIONS, REASON_STATUSES, ASSIGNED_STATUSES, STATUS_LABEL, allows, parseDuration, type RolePermissions, type Status, type Ticket, type User } from '@board/shared';
 import { ApiError, newKey, patch, post } from './api.ts';
 import { ask } from './dialogs.ts';
 import { TICKET_KEYS, invalidate, setCached } from './store.ts';
@@ -12,6 +12,48 @@ let perms: RolePermissions = DEFAULT_PERMISSIONS;
 export const setActionPermissions = (p: RolePermissions) => {
   perms = p;
 };
+// the board's working day, for "1d" in a time (config.json hoursPerDay)
+let hoursPerDay = 8;
+export const setActionWorkday = (h: number) => {
+  hoursPerDay = h;
+};
+
+/**
+ * Ask how long a finished job took (decision #36), for the person who held it.
+ * Optional: dismissing it changes nothing.
+ */
+function offerActualTime(me: User, t: Ticket) {
+  if (t.status !== 'done' || t.actual_minutes != null || t.assigned_to !== me.id) return;
+  toast(`How long did ${t.job_number} take?`, {
+    timeout: 15_000,
+    action: {
+      label: 'Add the time',
+      run: async () => {
+        const v = await ask({
+          type: 'text',
+          title: `Time spent on ${t.job_number}`,
+          body: 'Roughly how long it took, such as 90, 1.5h or 3h 30m. Reports compare it with the estimate, so the next estimate for this kind of job is closer.',
+          label: 'Actual time',
+          confirm: 'Save',
+          required: true,
+        });
+        if (v == null) return;
+        const minutes = parseDuration(v, hoursPerDay);
+        if (minutes == null) {
+          toast('Type the time it took, such as 90, 1.5h or 3h 30m. You can also add it in the job.', { kind: 'error' });
+          return;
+        }
+        try {
+          const cur = (await patch<{ ticket: Ticket }>(`/api/tickets/${t.id}`, { version: t.version, actual_minutes: minutes })).ticket;
+          refreshAfter(cur);
+          toast(`Time saved for ${t.job_number}`, { kind: 'success' });
+        } catch (err) {
+          handleConflict(err);
+        }
+      },
+    },
+  });
+}
 
 function refreshAfter(t?: Ticket) {
   if (t) setCached(`/api/tickets/${t.id}`, (prev: any) => (prev ? { ...prev, ticket: t } : prev));
@@ -78,6 +120,7 @@ export async function moveTicket(
           : undefined,
       });
     }
+    if (!opts.quiet && t.status !== 'done') offerActualTime(me, res.ticket);
     return res.ticket;
   } catch (err) {
     handleConflict(err);

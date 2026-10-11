@@ -1184,3 +1184,30 @@ test('admin health: the checks, a backup made from the page, and the notice on o
   await c.click('[data-testid=health-notice] button:has-text("Open Health")');
   await c.waitForSelector('.admin-section h2:has-text("Health")');
 });
+
+test('estimates: finishing your job offers to record its time, the panel reads "4h 30m", and Reports compare it with the estimate', async () => {
+  const s = await api('POST', '/api/session', { user_id: 2, password: PASSWORD }); // Paul
+  const types = (await (await fetch(BASE + '/api/job-types', { headers: { cookie: s.cookie } })).json()).job_types;
+  const fea = types.find((t) => t.name === 'FEA').id;
+  const made = await api('POST', '/api/tickets', { title: 'Timed FEA job', project_id: PROJECT_ID, claim: true, job_type_id: fea, estimate_minutes: 180 }, s.cookie);
+  const job = (await made.r.json()).ticket;
+  const p = await login('Paul');
+  await p.goto(`${BASE}/board?job=${job.id}`);
+  await p.waitForSelector('.panel-title');
+  await p.click('.panel button:has-text("Mark done")');
+  await p.waitForSelector(`.toast:has-text("How long did ${job.job_number} take?")`);
+  await p.click('.toast button:has-text("Add the time")');
+  await p.fill('#dialog-text', '4h 30m');
+  await p.click('.dialog button:has-text("Save")');
+  await p.waitForSelector(`.toast:has-text("Time saved for ${job.job_number}")`);
+  const saved = (await (await fetch(`${BASE}/api/tickets/${job.id}`, { headers: { cookie: s.cookie } })).json()).ticket;
+  assert.equal(saved.actual_minutes, 270);
+  await p.waitForFunction(() => document.querySelector('input[aria-label="Actual time"]')?.value === '4h 30m');
+  assert.match(await p.textContent('[data-testid=estimate-outcome]'), /longer than the 2–4 hr estimate/);
+  // typing a time in the panel the way people write it
+  await p.fill('input[aria-label="Actual time"]', '1.5h');
+  await p.press('input[aria-label="Actual time"]', 'Enter');
+  await p.waitForSelector('[data-testid=estimate-outcome]:has-text("shorter than the 2–4 hr estimate")');
+  await p.goto(`${BASE}/reports?r=week`);
+  await p.waitForSelector('[data-testid=estimate-accuracy] .accuracy-table td:has-text("FEA")');
+});

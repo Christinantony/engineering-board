@@ -5,6 +5,7 @@ import { all, get } from '../db/connection.ts';
 import { badRequest, nowIso, type Ctx } from '../lib/core.ts';
 import { claimingRoles } from './permissions.ts';
 import { addDays, startOfLocalDayIso } from '../lib/time.ts';
+import { estimateAccuracy } from './estimates.ts';
 
 const isDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
 
@@ -116,6 +117,8 @@ export function report(ctx: Ctx, from: string, to: string) {
       estimated_minutes: both.reduce((s, t) => s + t.estimate_minutes!, 0),
       actual_minutes: both.reduce((s, t) => s + t.actual_minutes!, 0),
     },
+    /** How close estimates were (decision #36): overall, by job type, by the person who held the job. */
+    estimate_accuracy: estimateAccuracy(ctx, done),
     by_engineer: byEngineer.map(({ role: _r, ...rest }) => rest),
     by_type: byType,
     per_day: perDay,

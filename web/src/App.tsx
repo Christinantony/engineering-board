@@ -6,7 +6,7 @@ import { setTimeZone } from './lib/format.ts';
 import { navigate, setJob, useLocation } from './lib/router.ts';
 import { invalidate, startLive, stopLive, useLiveState, useQuery } from './lib/store.ts';
 import { toast, toastError } from './lib/toasts.ts';
-import { setActionPermissions } from './lib/actions.ts';
+import { setActionPermissions, setActionWorkday } from './lib/actions.ts';
 import { Badge, ErrorBox, Spinner } from './components/bits.tsx';
 import { DialogHost, Toasts } from './components/Overlays.tsx';
 import { QuickCreate } from './components/QuickCreate.tsx';
@@ -235,6 +235,7 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
     return stopLive;
   }, []);
   useEffect(() => setActionPermissions(meta.permissions), [meta.permissions]);
+  useEffect(() => setActionWorkday(meta.workday.hours_per_day), [meta.workday.hours_per_day]);
   useEffect(() => {
     if (path === '/') navigate(home, { replace: true, keepJob: whole });
     else if (!whole && !REVIEWER_PATHS.test(path)) navigate('/review', { replace: true });

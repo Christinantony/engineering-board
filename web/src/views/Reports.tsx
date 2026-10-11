@@ -17,9 +17,22 @@ interface ReportData {
   lead_time_hours: { average: number | null; median: number | null };
   work_time_hours: { average: number | null; median: number | null; jobs: number };
   estimate_vs_actual: { jobs: number; estimated_minutes: number; actual_minutes: number };
+  estimate_accuracy: { done: number; with_actual: number; compared: number; overall: Accuracy | null; by_type: Accuracy[]; by_person: Accuracy[] };
   by_engineer: { user_id: number; name: string; completed: number; estimated_minutes: number; open_now: number }[];
   by_type: { job_type: string; completed: number; created: number }[];
   per_day: { date: string; completed: number }[];
+}
+
+interface Accuracy {
+  key: number | null;
+  name: string;
+  jobs: number;
+  estimated_minutes: number;
+  actual_minutes: number;
+  within: number;
+  longer: number;
+  shorter: number;
+  median_ratio: number | null;
 }
 
 function addDays(date: string, n: number) {
@@ -110,7 +123,6 @@ export function Reports() {
 function ReportBody({ r, user }: { r: ReportData; user: ReturnType<typeof useApp>['user'] }) {
   const maxDay = Math.max(1, ...r.per_day.map((d) => d.completed));
   const maxType = Math.max(1, ...r.by_type.map((t) => t.completed));
-  const eva = r.estimate_vs_actual;
   return (
     <>
       <div className="tally tally-quiet">
@@ -233,16 +245,107 @@ function ReportBody({ r, user }: { r: ReportData; user: ReturnType<typeof useApp
                 : 'No completed jobs went through In progress in this period.'}
             </dd>
           </div>
-          <div>
-            <dt>Estimate vs actual</dt>
-            <dd>
-              {eva.jobs
-                ? `${eva.jobs} ${eva.jobs === 1 ? 'job has' : 'jobs have'} an actual time recorded: estimated ${hours(eva.estimated_minutes)}, actual ${hours(eva.actual_minutes)} (${Math.round((eva.actual_minutes / Math.max(eva.estimated_minutes, 1)) * 100)}% of the estimate).`
-                : 'No completed jobs have an actual time recorded. That field is optional.'}
-            </dd>
-          </div>
         </dl>
       </section>
+
+      <EstimateAccuracy a={r.estimate_accuracy} />
     </>
+  );
+}
+
+const ratioText = (x: number | null) =>
+  x == null ? '—' : Math.abs(x - 1) < 0.05 ? 'on estimate' : x > 1 ? `${Math.round((x - 1) * 100)}% longer` : `${Math.round((1 - x) * 100)}% shorter`;
+
+function AccuracyTable({ rows, first }: { rows: Accuracy[]; first: string }) {
+  return (
+    <table className="table accuracy-table">
+      <thead>
+        <tr>
+          <th>{first}</th>
+          <th className="num">Jobs</th>
+          <th>Within / longer / shorter</th>
+          <th className="num">Usually</th>
+          <th className="num">Estimated</th>
+          <th className="num">Actual</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((x) => (
+          <tr key={`${x.key}`}>
+            <td>{x.name}</td>
+            <td className="num">{x.jobs}</td>
+            <td>
+              <span className="acc-bar" role="img" aria-label={`${x.within} within, ${x.longer} longer, ${x.shorter} shorter`}>
+                <span className="acc-within" style={{ flexGrow: x.within }} />
+                <span className="acc-longer" style={{ flexGrow: x.longer }} />
+                <span className="acc-shorter" style={{ flexGrow: x.shorter }} />
+              </span>
+              <span className="muted small">
+                {x.within} · {x.longer} · {x.shorter}
+              </span>
+            </td>
+            <td className="num">{ratioText(x.median_ratio)}</td>
+            <td className="num">{hours(x.estimated_minutes)}</td>
+            <td className="num">{hours(x.actual_minutes)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+/** How close estimates were (decision #36). */
+function EstimateAccuracy({ a }: { a: ReportData['estimate_accuracy'] }) {
+  return (
+    <section className="vsection" data-testid="estimate-accuracy">
+      <header className="vsection-head">
+        <h2>Estimates against actual time</h2>
+      </header>
+      <p className="muted">
+        {a.done
+          ? `${a.with_actual} of ${a.done} finished ${a.done === 1 ? 'job' : 'jobs'} recorded the time ${a.with_actual === 1 ? 'it' : 'they'} took (Actual time in the job). `
+          : 'No jobs were finished in this period. '}
+        A job is <strong>within</strong> its estimate when the time it took falls in the range chosen (2–4 hr, say). "Usually" is the middle job: how much
+        longer or shorter than its estimate it took.
+      </p>
+      {a.compared === 0 ? (
+        <p className="vsection-empty">No finished job in this period has both an estimate and an actual time.</p>
+      ) : (
+        <>
+          {a.overall && (
+            <p className="acc-overall">
+              <strong>
+                {a.overall.within} of {a.overall.jobs}
+              </strong>{' '}
+              within their estimate; {a.overall.longer} took longer, {a.overall.shorter} shorter. The middle job took {ratioText(a.overall.median_ratio)}.
+            </p>
+          )}
+          <p className="acc-legend muted small" aria-hidden="true">
+            <span>
+              <i className="acc-within" />
+              Within
+            </span>
+            <span>
+              <i className="acc-longer" />
+              Longer
+            </span>
+            <span>
+              <i className="acc-shorter" />
+              Shorter
+            </span>
+          </p>
+          <div className="acc-grid">
+            <div>
+              <h3>By job type</h3>
+              <AccuracyTable rows={a.by_type} first="Job type" />
+            </div>
+            <div>
+              <h3>By person</h3>
+              <AccuracyTable rows={a.by_person} first="Person" />
+            </div>
+          </div>
+        </>
+      )}
+    </section>
   );
 }

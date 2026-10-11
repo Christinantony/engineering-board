@@ -4724,3 +4724,81 @@ fieldset.panel-editable {
   border: 1px solid var(--line);
   border-radius: var(--radius);
 }
+
+/* ======================= Estimates vs actual time (1.7.0) ======================= */
+.estimate-hint {
+  margin: 4px 0 0;
+}
+.actual-row {
+  flex-wrap: wrap;
+}
+.estimate-outcome {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.estimate-outcome.outcome-longer {
+  color: var(--warn-ink);
+}
+.estimate-outcome.outcome-within {
+  color: var(--success-ink);
+}
+.acc-overall {
+  font-size: 15px;
+}
+.acc-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+}
+.accuracy-table th,
+.accuracy-table td {
+  white-space: nowrap;
+}
+.accuracy-table td:first-child {
+  white-space: normal;
+}
+.acc-legend {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+.acc-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  margin-right: 5px;
+  vertical-align: -1px;
+}
+.acc-grid h3 {
+  margin: 6px 0 6px;
+  font-size: 14px;
+}
+.acc-bar {
+  display: inline-flex;
+  width: 90px;
+  height: 8px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--line);
+  vertical-align: middle;
+  margin-right: 8px;
+}
+.acc-bar > span {
+  flex-basis: 0;
+}
+.acc-within {
+  background: var(--c-done);
+}
+.acc-longer {
+  background: var(--c-progress);
+}
+.acc-shorter {
+  background: var(--c-inbox);
+}
+@media (max-width: 760px) {
+  .acc-grid {
+    grid-template-columns: 1fr;
+  }
+}

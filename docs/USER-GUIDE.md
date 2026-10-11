@@ -61,6 +61,7 @@ Click a card to open its panel on the right. Every field saves as you finish wit
 - **File location**: paste a folder or file path, for example `\\fileserver\projects\P-1042\CAD`. **Copy** puts it on the clipboard so you can paste it into File Explorer. **Go to location** opens the folder in File Explorer, if your browser is allowed to open folder links from the board: browsers block them unless IT turns that on (Edge has a setting for it; see the [For IT](FOR-IT.md#opening-folders-from-the-board) guide). If nothing happens when you press it, use Copy.
 - **Reference**: a drawing number, PO or anything people will search for.
 - **Requester**, **job type**, **tags** and **notes** help find and report on work later.
+- **Estimate** and **Actual time**: once a few jobs of a type have recorded their time, the panel says under the estimate what that type usually takes ("FEA usually takes 4–8 hr"). Type the actual time the way you'd say it: `90`, `1.5h`, `3h 30m` or `1d` (a working day). The panel then says whether it was within the estimate, longer or shorter. When you mark your own job done without a time, the board asks once, in a message you can ignore: **Add the time**.
 - **Comments** at the bottom are for conversation; they land in the job's history with your name.
 - **History** lists every change: who, what and when. It can't be edited or deleted.
 
@@ -182,7 +183,7 @@ Encrypted PDFs are refused: save them again without security first.
 | **Dashboard** | <kbd>D</kbd> | Counts (unclaimed, in progress, waiting, due today, overdue, done today) and recent team activity. |
 | <kbd>V</kbd> | Drawing review |
 | **Workload** | <kbd>W</kbd> | Estimated hours per engineer for today, the next 3 days or this week, against an 8-hour day. It's a planning aid, not a limit. Jobs without an estimate are counted separately, not guessed. |
-| **Reports** | <kbd>R</kbd> | Jobs completed per day, per engineer and per job type, and how long jobs take, for this or last week or month. |
+| **Reports** | <kbd>R</kbd> | Jobs completed per day, per engineer and per job type, how long jobs take, and **estimates against actual time**: how many finished jobs took about what was estimated, longer or shorter, by job type and by person, for this or last week or month. |
 | **Team activity** | your name menu | Every change to every job, newest first. |
 
 ## Search
