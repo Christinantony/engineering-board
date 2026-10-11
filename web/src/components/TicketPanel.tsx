@@ -1,0 +1,844 @@
+// Side panel with every detail of a job. Fields save when you leave them.
+// The board stays visible behind it.
+
+import { useEffect, useRef, useState } from 'react';
+import { ESTIMATE_BUCKETS, PRIORITIES, STATUS_LABEL, compareToEstimate, estimateLabel, formatDuration, parseDuration, type Activity, type JobChecklist, type ReviewWorkspace, type Status, type Ticket } from '@board/shared';
+import { useApp } from '../context.ts';
+import { addComment, archiveTicket, claimTicket, moveTicket, releaseTicket, updateTicket } from '../lib/actions.ts';
+import { copyText } from '../lib/clipboard.ts';
+import { ask } from '../lib/dialogs.ts';
+import { clock, dueLabel, when } from '../lib/format.ts';
+import { TICKET_KEYS, invalidate, useQuery } from '../lib/store.ts';
+import { put } from '../lib/api.ts';
+import { navigate } from '../lib/router.ts';
+import { ProjectPicker } from './ProjectPicker.tsx';
+import { toast, toastError } from '../lib/toasts.ts';
+import { Badge, ErrorBox, PRIORITY_TEXT, Spinner } from './bits.tsx';
+import { AlsoViewing, useAnnounceViewing } from './Collab.tsx';
+
+export function TicketPanel({ id, onClose }: { id: number; onClose: () => void }) {
+  const q = useQuery<{ ticket: Ticket; activity: Activity[] }>(`/api/tickets/${id}`);
+  const panelRef = useRef<HTMLElement | null>(null);
+  useAnnounceViewing(id);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !document.querySelector('.dialog-backdrop')) onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  useEffect(() => {
+    panelRef.current?.focus();
+  }, [id]);
+
+  return (
+    <aside className="panel" ref={panelRef} tabIndex={-1} aria-label="Job details">
+      {q.error && !q.data ? (
+        <div className="panel-body">
+          <button className="icon-btn panel-close" onClick={onClose} aria-label="Close">
+            ✕
+          </button>
+          <ErrorBox message={q.error.status === 404 ? 'This job does not exist.' : q.error.message} retry={q.error.status === 404 ? undefined : q.refresh} />
+        </div>
+      ) : !q.data ? (
+        <Spinner label="Loading job" />
+      ) : (
+        <PanelContent key={q.data.ticket.id} t={q.data.ticket} activity={q.data.activity} onClose={onClose} />
+      )}
+    </aside>
+  );
+}
+
+// ---------------------------------------------------------------------------
+
+/** Text field with its own draft; saves on blur/Enter; never clobbers what you're typing. */
+function EditText({
+  value,
+  onSave,
+  multiline,
+  placeholder,
+  className,
+  label,
+  required,
+}: {
+  value: string;
+  /** `base` is the value when you started editing — used to detect someone else's change. */
+  onSave: (v: string, base: string) => Promise<unknown>;
+  multiline?: boolean;
+  placeholder?: string;
+  className?: string;
+  label: string;
+  required?: boolean;
+}) {
+  const [draft, setDraft] = useState(value);
+  const [focused, setFocused] = useState(false);
+  const base = useRef(value);
+  useEffect(() => {
+    if (!focused) setDraft(value);
+  }, [value, focused]);
+  const changedUnderneath = focused && value !== base.current;
+  const commit = async () => {
+    setFocused(false);
+    const v = multiline ? draft.replace(/\s+$/, '') : draft.trim();
+    if (v === base.current && v === value) return;
+    if (v === base.current) return; // you changed nothing; keep their newer value
+    if (required && !v) {
+      toast(`${label} can't be empty`, { kind: 'error' });
+      setDraft(value);
+      return;
+    }
+    await onSave(v, base.current);
+  };
+  const props = {
+    className: `field-input ${className ?? ''}`,
+    value: draft,
+    placeholder,
+    'aria-label': label,
+    onFocus: () => {
+      base.current = value;
+      setFocused(true);
+    },
+    onChange: (e: any) => setDraft(e.target.value),
+    onBlur: commit,
+    onKeyDown: (e: any) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        setDraft(value);
+        e.target.blur();
+      } else if (e.key === 'Enter' && (!multiline || e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        e.target.blur();
+      }
+    },
+  };
+  const warn = changedUnderneath ? <span className="edit-warn">Someone else just changed this. When you leave the field you'll be asked which version to keep.</span> : null;
+  if (multiline)
+    return (
+      <>
+        <textarea {...props} rows={Math.min(Math.max(draft.split('\n').length + 1, 3), 16)} />
+        {warn}
+      </>
+    );
+  return (
+    <>
+      <input type="text" {...props} />
+      {warn}
+    </>
+  );
+}
+
+const splitTags = (v: string) => v.split(',').map((s) => s.trim()).filter(Boolean);
+
+const URL_RE = /(https?:\/\/[^\s<>"']+)/g;
+function Linkified({ text }: { text: string }) {
+  const parts = text.split(URL_RE);
+  return (
+    <>
+      {parts.map((p, i) =>
+        i % 2 === 1 ? (
+          <a key={i} href={p} target="_blank" rel="noreferrer noopener">
+            {p}
+          </a>
+        ) : (
+          <span key={i}>{p}</span>
+        ),
+      )}
+    </>
+  );
+}
+
+function PathField({
+  value,
+  onSave,
+  label,
+  placeholder,
+}: {
+  value: string;
+  onSave: (v: string, base: string) => Promise<unknown>;
+  label: string;
+  placeholder: string;
+}) {
+  const copy = async () => {
+    const ok = await copyText(value);
+    toast(ok ? 'Path copied. Paste it into File Explorer.' : 'Could not copy. Select the text and press Ctrl+C.', { kind: ok ? 'success' : 'error' });
+  };
+  const folder = folderUrl(value);
+  return (
+    <div className="path-field">
+      <EditText value={value} onSave={onSave} label={label} placeholder={placeholder} className="mono-ish" />
+      {value && (
+        <button className="btn btn-quiet" onClick={copy} type="button">
+          Copy
+        </button>
+      )}
+      {folder && (
+        <a className="btn btn-quiet" href={folder} target="_blank" rel="noreferrer noopener" onClick={goHint} title="Open this folder in File Explorer (the browser must allow folder links; see the For IT guide)">
+          Go to location
+        </a>
+      )}
+      {/^https?:\/\//.test(value) && (
+        <a className="btn btn-quiet" href={value} target="_blank" rel="noreferrer noopener">
+          Open
+        </a>
+      )}
+    </div>
+  );
+}
+
+/**
+ * A Windows folder or file path as a file: link that Explorer can open:
+ * \\SERVER\share\dir becomes file://SERVER/share/dir, and D:\Projects becomes file:///D:/Projects.
+ * Browsers only follow such links from an http page when IT allows it (Edge's
+ * IntranetFileLinksEnabled policy; see docs/FOR-IT.md), so Copy stays next to it.
+ */
+export function folderUrl(path: string): string | null {
+  const p = path.trim();
+  if (/^file:/i.test(p)) return p;
+  if (/^\\\\[^\\/]+[\\/]/.test(p)) return encodeURI('file:' + p.replace(/\\/g, '/'));
+  if (/^[A-Za-z]:[\\/]/.test(p)) return encodeURI('file:///' + p.replace(/\\/g, '/'));
+  return null;
+}
+
+let hinted = false;
+/** Once per page: a browser that blocks folder links gives no sign, so say what to do. */
+function goHint() {
+  if (hinted) return;
+  hinted = true;
+  toast('Opening the folder in File Explorer. If nothing opens, this browser blocks folder links: use Copy and paste the path into Explorer, or ask IT to allow them (For IT guide).', { timeout: 9000 });
+}
+
+/** Drawings in board review on this job, with a way into the review screen. */
+function ReviewSummary({ t }: { t: Ticket }) {
+  const { me } = useApp();
+  const q = useQuery<ReviewWorkspace>(`/api/tickets/${t.id}/review`);
+  const w = q.data;
+  const open = !t.archived && t.status !== 'done' && t.status !== 'cancelled';
+  if (!w) return null;
+  const ds = w.drawings.filter((d) => d.required);
+  if (!ds.length && !(open && me.role === 'engineer')) return null;
+  const count = (s: string) => ds.filter((d) => d.state === s).length;
+  const parts = [
+    count('awaiting') && `${count('awaiting')} awaiting review`,
+    count('returned') && `${count('returned')} returned`,
+    count('passed') + count('handed_over') && `${count('passed') + count('handed_over')} signature pending`,
+    count('signed') && `${count('signed')} signed`,
+  ].filter(Boolean);
+  return (
+    <div className="panel-review">
+      <span className="field-label">Drawing review</span>
+      {ds.length ? (
+        <span>
+          {ds.length} drawing{ds.length === 1 ? '' : 's'}: {parts.join(', ')}
+        </span>
+      ) : (
+        <span className="muted">No drawings submitted</span>
+      )}
+      <span className="spacer" />
+      {ds.length > 0 && (
+        <button className="btn btn-sm" onClick={() => navigate(`/review/${t.id}`)}>
+          Open review
+        </button>
+      )}
+      {open && me.role === 'engineer' && (
+        <button className="btn btn-sm" onClick={() => navigate(`/review/${t.id}?submit=1`)}>
+          Submit for board review…
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** What can happen next from each status — one primary action, shown big. */
+function nextStep(t: Ticket): { label: string; to: Status } | null {
+  switch (t.status) {
+    case 'claimed':
+      return { label: 'Start work', to: 'in_progress' };
+    case 'in_progress':
+      return { label: 'Send to review', to: 'review' };
+    case 'waiting':
+    case 'blocked':
+      return { label: 'Resume work', to: 'in_progress' };
+    case 'review':
+      return { label: 'Approve and mark done', to: 'done' };
+    default:
+      return null;
+  }
+}
+
+function PanelContent({ t, activity, onClose }: { t: Ticket; activity: Activity[]; onClose: () => void }) {
+  const { me, user, workers, jobTypes, jobType, can, canChange, meta } = useApp();
+  const save = (fields: Record<string, unknown>, base?: Record<string, unknown>) => updateTicket(t, fields, base);
+  // your role's capabilities (Admin → Roles): edit any job, or claim-holders on their own job
+  const editable = canChange(t);
+  const assignee = user(t.assigned_to);
+  const closed = t.status === 'done' || t.status === 'cancelled';
+  const review = useQuery<ReviewWorkspace>(`/api/tickets/${t.id}/review`).data;
+  // a job with drawings in board review is done when the prints are signed, not from here
+  const signaturesPending = (review?.signatures_pending ?? 0) > 0;
+  const step = t.status === 'review' && signaturesPending ? null : nextStep(t);
+  const [comment, setComment] = useState('');
+  const [posting, setPosting] = useState(false);
+  const isBucket = t.estimate_minutes == null || ESTIMATE_BUCKETS.some((b) => b.minutes === t.estimate_minutes);
+
+  const copyLink = async () => {
+    const ok = await copyText(`${location.origin}/board?job=${t.id}`);
+    toast(ok ? `Link to ${t.job_number} copied` : 'Could not copy the link', { kind: ok ? 'success' : 'error' });
+  };
+
+  const post = async () => {
+    if (!comment.trim() || posting) return;
+    setPosting(true);
+    if (await addComment(t, comment.trim())) setComment('');
+    setPosting(false);
+  };
+
+  const cancelJob = async () => {
+    const ok = await ask({
+      type: 'confirm',
+      title: `Cancel ${t.job_number}?`,
+      body: 'It leaves the board but stays searchable, and you can reopen it later.',
+      confirm: 'Cancel job',
+      danger: true,
+    });
+    if (ok) await moveTicket(me, t, 'cancelled', {}, { quiet: false });
+  };
+
+  return (
+    <div className="panel-body">
+      <div className="panel-head">
+        <span className="panel-jobno">{t.job_number}</span>
+        <span className={`status-pill st-${t.status}`}>{STATUS_LABEL[t.status]}</span>
+        {t.archived && <span className="status-pill st-archived">Archived</span>}
+        <span className="spacer" />
+        <button className="icon-btn" onClick={copyLink} title="Copy a link to this job" aria-label="Copy link">
+          🔗
+        </button>
+        <button className="icon-btn" onClick={onClose} aria-label="Close (Esc)" title="Close (Esc)">
+          ✕
+        </button>
+      </div>
+
+      <AlsoViewing jobId={t.id} />
+      {!editable && (
+        <p className="panel-readonly muted">
+          {can('claim') ? 'You can change jobs assigned to you. Claim this one to work on it.' : 'Your role can view and comment on jobs, but not change them (Admin → Roles).'}
+        </p>
+      )}
+      <fieldset className="panel-editable" disabled={!editable}>
+      <EditText value={t.title} onSave={(v, b) => save({ title: v }, { title: b })} className="panel-title" label="Title" required />
+
+      {(t.status === 'waiting' || t.status === 'blocked') && (
+        <div className={`waiting-box ${t.status}`}>
+          <label className="field-label">{t.status === 'blocked' ? 'Blocked' : 'Waiting'} for</label>
+          <EditText
+            value={t.waiting_for}
+            onSave={(v) => moveTicket(me, t, t.status, {}, { reason: v, quiet: true })}
+            label="Waiting for"
+            required
+          />
+        </div>
+      )}
+
+      </fieldset>
+      {t.checklist && <Checklist t={t} />}
+      <ReviewSummary t={t} />
+
+      <div className="panel-actions">
+        {t.assigned_to == null && !closed && can('claim') && (
+          <button className="btn btn-claim" onClick={() => void claimTicket(t)}>
+            Claim
+          </button>
+        )}
+        <fieldset className="panel-editable" disabled={!editable}>
+        {step && !t.archived && (
+          <button className="btn btn-primary" onClick={() => void moveTicket(me, t, step.to, {}, { undo: { status: t.status, reason: t.waiting_for } })}>
+            {step.label}
+          </button>
+        )}
+        {t.status === 'review' && (
+          <button className="btn" onClick={() => void moveTicket(me, t, 'in_progress', {}, { undo: { status: t.status } })}>
+            Return to in progress
+          </button>
+        )}
+        {(t.status === 'in_progress' || t.status === 'claimed') && (
+          <button className="btn" onClick={() => void moveTicket(me, t, 'waiting', {}, { undo: { status: t.status } })}>
+            Mark waiting…
+          </button>
+        )}
+        {(t.status === 'in_progress' || t.status === 'claimed') && !signaturesPending && (
+          <button className="btn" onClick={() => void moveTicket(me, t, 'done', {}, { undo: { status: t.status } })}>
+            Mark done
+          </button>
+        )}
+        {closed && !t.archived && (
+          <button className="btn" onClick={() => void moveTicket(me, t, t.assigned_to ? 'in_progress' : 'inbox', {}, { undo: { status: t.status } })}>
+            Reopen
+          </button>
+        )}
+        </fieldset>
+      </div>
+
+      <fieldset className="panel-editable" disabled={!editable}>
+      <dl className="fields">
+        <div className={`field${t.project_id == null ? ' field-missing' : ''}`}>
+          <dt className="field-label">Project</dt>
+          <dd className="field-project">
+            <ProjectPicker value={t.project_id} onChange={(pid) => void save({ project_id: pid })} />
+            {t.project_id != null ? (
+              <button className="link-btn" onClick={() => navigate(`/projects?project=${t.project_id}`)} title="Every job in this project">
+                All its jobs
+              </button>
+            ) : (
+              <span className="field-hint">Every job belongs to a project: choose one.</span>
+            )}
+          </dd>
+        </div>
+        <div className="field">
+          <dt className="field-label">Status</dt>
+          <dd>
+            <select
+              className="field-input"
+              value={t.status}
+              disabled={t.archived}
+              aria-label="Status"
+              onChange={(e: any) => void moveTicket(me, t, e.target.value as Status, {}, { undo: { status: t.status, reason: t.waiting_for } })}
+            >
+              {(['inbox', 'claimed', 'in_progress', 'waiting', 'blocked', 'review', 'done', 'cancelled'] as Status[]).map((s) => (
+                <option key={s} value={s}>
+                  {STATUS_LABEL[s]}
+                </option>
+              ))}
+            </select>
+          </dd>
+        </div>
+        <div className="field">
+          <dt className="field-label">Assigned to</dt>
+          <dd className="assign-row">
+            {assignee && <Badge user={assignee} size="sm" />}
+            <select
+              className="field-input"
+              value={t.assigned_to ?? ''}
+              disabled={closed}
+              aria-label="Assigned to"
+              onChange={(e: any) => {
+                const v = e.target.value;
+                if (v === '') void releaseTicket(t);
+                else void save({ assigned_to: Number(v) });
+              }}
+            >
+              <option value="">Unassigned</option>
+              {workers
+                .filter((u) => u.active || u.id === t.assigned_to)
+                .map((u) => (
+                  <option key={u.id} value={u.id}>
+                    {u.name}
+                    {u.active ? '' : ' (inactive)'}
+                  </option>
+                ))}
+            </select>
+          </dd>
+        </div>
+        <div className="field">
+          <dt className="field-label">Priority</dt>
+          <dd>
+            <select className="field-input" value={t.priority} aria-label="Priority" onChange={(e: any) => void save({ priority: e.target.value })}>
+              {PRIORITIES.map((p) => (
+                <option key={p} value={p}>
+                  {PRIORITY_TEXT[p]}
+                </option>
+              ))}
+            </select>
+          </dd>
+        </div>
+        <div className="field">
+          <dt className="field-label">Estimate</dt>
+          <dd>
+            <select
+              className="field-input"
+              value={t.estimate_minutes ?? ''}
+              aria-label="Estimate"
+              onChange={(e: any) => void save({ estimate_minutes: e.target.value === '' ? null : Number(e.target.value) })}
+            >
+              <option value="">Not estimated</option>
+              {!isBucket && <option value={t.estimate_minutes!}>{estimateLabel(t.estimate_minutes)} ({t.estimate_minutes} min)</option>}
+              {ESTIMATE_BUCKETS.map((b) => (
+                <option key={b.minutes} value={b.minutes}>
+                  {b.label}
+                </option>
+              ))}
+            </select>
+            <TypicalHint jobTypeId={t.job_type_id} />
+          </dd>
+        </div>
+        <div className="field">
+          <dt className="field-label">Due</dt>
+          <dd className="due-row">
+            <input
+              type="date"
+              className="field-input"
+              value={t.due_date ?? ''}
+              aria-label="Due date"
+              onChange={(e: any) => void save({ due_date: e.target.value || null })}
+            />
+            <input
+              type="time"
+              className="field-input time"
+              value={t.due_time ?? ''}
+              disabled={!t.due_date}
+              aria-label="Due time (optional)"
+              title="Optional time"
+              onChange={(e: any) => void save({ due_time: e.target.value || null })}
+            />
+            {t.due_date && (
+              <span className={`due-hint${t.overdue ? ' overdue' : ''}`}>{t.overdue ? 'Overdue' : dueLabel(t)}</span>
+            )}
+          </dd>
+        </div>
+        <div className="field">
+          <dt className="field-label">Job type</dt>
+          <dd>
+            <select
+              className="field-input"
+              value={t.job_type_id ?? ''}
+              aria-label="Job type"
+              onChange={(e: any) => void save({ job_type_id: e.target.value === '' ? null : Number(e.target.value) })}
+            >
+              <option value="">None</option>
+              {jobTypes
+                .filter((j) => j.active || j.id === t.job_type_id)
+                .map((j) => (
+                  <option key={j.id} value={j.id}>
+                    {j.name}
+                  </option>
+                ))}
+            </select>
+          </dd>
+        </div>
+        <div className="field">
+          <dt className="field-label">Requester</dt>
+          <dd>
+            <EditText value={t.requester} onSave={(v, b) => save({ requester: v }, { requester: b })} label="Requester" placeholder="Who asked for this?" />
+          </dd>
+        </div>
+        <div className="field">
+          <dt className="field-label">Tags</dt>
+          <dd>
+            <EditText
+              value={t.tags.join(', ')}
+              onSave={(v, b) => save({ tags: splitTags(v) }, { tags: splitTags(b) })}
+              label="Tags"
+              placeholder="e.g. customer-A, ANSYS"
+            />
+          </dd>
+        </div>
+        <div className="field">
+          <dt className="field-label">Actual time</dt>
+          <dd className="actual-row">
+            <EditText
+              value={t.actual_minutes == null ? '' : formatDuration(t.actual_minutes)}
+              onSave={async (v) => {
+                const minutes = v === '' ? null : parseDuration(v, meta.workday.hours_per_day);
+                if (v !== '' && minutes == null) {
+                  toast('Type the time it took, such as 90, 1.5h or 3h 30m', { kind: 'error' });
+                  return;
+                }
+                await save({ actual_minutes: minutes });
+              }}
+              label="Actual time"
+              placeholder="e.g. 3h 30m"
+            />
+            {t.actual_minutes != null && t.estimate_minutes != null && <EstimateOutcome estimate={t.estimate_minutes} actual={t.actual_minutes} />}
+          </dd>
+        </div>
+      </dl>
+
+      <section className="panel-section">
+        <label className="field-label">Description</label>
+        <EditText value={t.description} onSave={(v, b) => save({ description: v }, { description: b })} multiline label="Description" placeholder="What was asked for?" />
+      </section>
+
+      <section className="panel-section">
+        <label className="field-label">Reference</label>
+        <PathField value={t.reference} onSave={(v, b) => save({ reference: v }, { reference: b })} label="Reference" placeholder="Drawing, part or project number, or a URL" />
+        <label className="field-label">File location</label>
+        <PathField value={t.file_location} onSave={(v, b) => save({ file_location: v }, { file_location: b })} label="File location" placeholder="\\SERVER\Projects\…" />
+      </section>
+
+      <section className="panel-section">
+        <label className="field-label">Notes</label>
+        <EditText
+          value={t.notes}
+          onSave={(v, b) => save({ notes: v }, { notes: b })}
+          multiline
+          label="Notes"
+          placeholder="Context, constraints, model locations… (Ctrl+Enter to save)"
+          className="notes"
+        />
+      </section>
+      </fieldset>
+
+      <section className="panel-section">
+        <h3 className="section-title">History</h3>
+        <ol className="timeline">
+          {activity.map((a) => (
+            <ActivityItem key={a.id} a={a} />
+          ))}
+        </ol>
+        <div className="comment-box">
+          <textarea
+            className="field-input"
+            rows={2}
+            value={comment}
+            placeholder="Add a note to the history…"
+            aria-label="Add a comment"
+            onChange={(e: any) => setComment(e.target.value)}
+            onKeyDown={(e: any) => {
+              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) void post();
+            }}
+          />
+          <button className="btn" onClick={() => void post()} disabled={!comment.trim() || posting}>
+            Add to history
+          </button>
+        </div>
+      </section>
+
+      <footer className="panel-foot">
+        <span className="muted">
+          Created {when(t.created_at)} by {user(t.created_by)?.name ?? 'someone'}
+          {t.claimed_at && `. Claimed ${when(t.claimed_at)}`}
+        </span>
+        <span className="spacer" />
+        {t.assigned_to != null && !closed && (
+          <button className="btn btn-quiet" onClick={() => void releaseTicket(t)}>
+            Return to inbox
+          </button>
+        )}
+        {!closed && (
+          <button className="btn btn-quiet danger" onClick={() => void cancelJob()}>
+            Cancel job
+          </button>
+        )}
+        {closed && (
+          <button className="btn btn-quiet" onClick={() => void archiveTicket(t, t.archived)}>
+            {t.archived ? 'Restore' : 'Archive'}
+          </button>
+        )}
+      </footer>
+    </div>
+  );
+}
+
+function ActivityItem({ a }: { a: Activity }) {
+  const who = a.user_name ?? 'Someone';
+  const st = (s: string | null) => (s ? STATUS_LABEL[s as Status] ?? s : '');
+  let text: any;
+  switch (a.kind) {
+    case 'created':
+      text = <>{who} created this job</>;
+      break;
+    case 'claimed':
+      text = <>{who} claimed this job</>;
+      break;
+    case 'assigned':
+      text = a.from_value ? <>{who} reassigned it from {a.from_value} to {a.to_value}</> : <>{who} assigned it to {a.to_value}</>;
+      break;
+    case 'released':
+      text = <>{who} returned it to the inbox{a.from_value ? ` (was ${a.from_value})` : ''}</>;
+      break;
+    case 'status':
+      text = (
+        <>
+          {who} moved it {st(a.from_value)} → <strong>{st(a.to_value)}</strong>
+          {a.body && <span className="tl-quote">{a.to_value === 'blocked' ? 'Blocked' : 'Waiting'} for: {a.body}</span>}
+        </>
+      );
+      break;
+    case 'priority':
+      text = (
+        <>
+          {who} changed priority {PRIORITY_TEXT[a.from_value as never] ?? a.from_value} → <strong>{PRIORITY_TEXT[a.to_value as never] ?? a.to_value}</strong>
+        </>
+      );
+      break;
+    case 'field':
+      text =
+        a.from_value == null && a.to_value == null ? (
+          <>
+            {who} edited the {a.body}
+          </>
+        ) : (
+          <>
+            {who} changed {a.body}: {a.from_value ?? 'none'} → <strong>{a.to_value ?? 'none'}</strong>
+          </>
+        );
+      break;
+    case 'comment':
+      text = (
+        <>
+          <strong>{who}</strong>
+          <span className="tl-bubble">
+            <Linkified text={a.body ?? ''} />
+          </span>
+        </>
+      );
+      break;
+    case 'archived':
+      text = <>{who} archived it{a.body ? ` (${a.body})` : ''}</>;
+      break;
+    case 'restored':
+      text = <>{who} restored it</>;
+      break;
+    case 'review_submitted':
+      text = (
+        <>
+          {who} submitted drawings for board review (submission {a.to_value}): {a.body}
+        </>
+      );
+      break;
+    case 'review_passed':
+      text = (
+        <>
+          {who} passed <strong>{a.to_value}</strong> in board review (signature pending)
+          {a.body && <span className="tl-quote">{a.body}</span>}
+        </>
+      );
+      break;
+    case 'review_returned':
+      text = (
+        <>
+          {who} returned <strong>{a.to_value}</strong> for correction
+          {a.body && <span className="tl-quote">{a.body}</span>}
+        </>
+      );
+      break;
+    case 'review_comment':
+      text = (
+        <>
+          <strong>{who}</strong> on {a.to_value}
+          <span className="tl-bubble">{a.body}</span>
+        </>
+      );
+      break;
+    case 'review_handover':
+      text = <>{who} handed the print to {a.to_value} for signature</>;
+      break;
+    case 'review_assigned':
+      text = (
+        <>
+          {who} handed <strong>{a.body}</strong> to {a.to_value} for review
+        </>
+      );
+      break;
+    case 'review_signed':
+      text = (
+        <>
+          {who} recorded the physical signature of <strong>{a.to_value}</strong>
+        </>
+      );
+      break;
+    case 'checklist':
+      text = (
+        <>
+          {who} {a.to_value === 'ticked' ? 'ticked' : 'unticked'} <strong>{a.body}</strong>
+        </>
+      );
+      break;
+    case 'imported':
+      text = (
+        <>
+          {who} imported this job from {a.body}
+        </>
+      );
+      break;
+    default:
+      text = (
+        <>
+          {who}: {a.kind}
+        </>
+      );
+  }
+  return (
+    <li className={`tl-item tl-${a.kind}`}>
+      <time dateTime={a.at} title={new Date(a.at).toLocaleString()}>
+        {when(a.at)}
+      </time>
+      <div className="tl-text">{text}</div>
+    </li>
+  );
+}
+
+export { clock };
+
+/** What this type of job usually takes, from finished jobs that recorded their time (decision #36). */
+function TypicalHint({ jobTypeId }: { jobTypeId: number | null }) {
+  const { jobType } = useApp();
+  const q = useQuery<{ typical: { job_type_id: number; jobs: number; median_minutes: number; label: string }[] }>(jobTypeId ? '/api/estimates/typical' : null);
+  const hit = q.data?.typical.find((x) => x.job_type_id === jobTypeId);
+  if (!hit) return null;
+  return (
+    <p className="estimate-hint muted small" data-testid="typical-hint">
+      {jobType(jobTypeId)?.name ?? 'This type'} usually takes {hit.label} (middle of the last {hit.jobs}: {formatDuration(hit.median_minutes)})
+    </p>
+  );
+}
+
+function EstimateOutcome({ estimate, actual }: { estimate: number; actual: number }) {
+  const o = compareToEstimate(estimate, actual);
+  const label = estimateLabel(estimate);
+  return (
+    <span className={`estimate-outcome outcome-${o}`} data-testid="estimate-outcome">
+      {o === 'within' ? `within the ${label} estimate` : o === 'longer' ? `longer than the ${label} estimate` : `shorter than the ${label} estimate`}
+    </span>
+  );
+}
+
+/** The job's release checklist (decision #38): tick each item before Review or Done. */
+function Checklist({ t }: { t: Ticket }) {
+  const { user, canChange } = useApp();
+  const q = useQuery<{ checklist: JobChecklist | null }>(`/api/tickets/${t.id}/checklist`);
+  const [busy, setBusy] = useState<number | null>(null);
+  const c = q.data?.checklist;
+  if (!c) return null;
+  const done = c.items.filter((i) => i.checked_at).length;
+  const editable = canChange(t) && !t.archived;
+  const toggle = async (itemId: number, checked: boolean) => {
+    setBusy(itemId);
+    try {
+      await put(`/api/tickets/${t.id}/checklist`, { item_id: itemId, checked });
+      invalidate((k) => k.startsWith(`/api/tickets/${t.id}`) || TICKET_KEYS(k));
+    } catch (e) {
+      toastError(e);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const complete = done === c.items.length;
+  return (
+    <section className={`panel-checklist${complete ? ' complete' : ''}`} data-testid="checklist" id="checklist">
+      <header>
+        <span className="field-label">Release checklist</span>
+        <span className="muted small">
+          {done} of {c.items.length} ticked
+          {!complete && (c.mode === 'block' ? ' · needed before Review or Done' : ' · asked before Review or Done')}
+        </span>
+      </header>
+      <ul>
+        {c.items.map((i) => (
+          <li key={i.id}>
+            <label className={i.checked_at ? 'checked' : ''}>
+              <input type="checkbox" checked={!!i.checked_at} disabled={!editable || busy === i.id} onChange={(e: any) => void toggle(i.id, e.target.checked)} />
+              <span>{i.text}</span>
+              {i.checked_at && (
+                <span className="muted small" title={when(i.checked_at)}>
+                  {user(i.checked_by)?.name ?? 'someone'}, {when(i.checked_at)}
+                </span>
+              )}
+            </label>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}

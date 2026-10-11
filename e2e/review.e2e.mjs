@@ -1,0 +1,308 @@
+// Browser checks for drawing review: submitting, the two independent PDF
+// viewers (page, zoom, rotation), remembering a reference page, comments,
+// passing, handover with its reminder, and signature.
+//   npm run build && npm run e2e
+
+import { spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createRequire } from 'node:module';
+import assert from 'node:assert/strict';
+import { test, before, after, afterEach } from 'node:test';
+import { makePdf } from './fixtures/pdf.mjs';
+
+const require = createRequire(import.meta.url);
+const { chromium } = require(process.env.PLAYWRIGHT_PATH ?? 'playwright');
+
+const PORT = 18094;
+const BASE = `http://127.0.0.1:${PORT}`;
+let server, dir, browser;
+let PROJECT_ID;
+const PASSWORD = 'board-e2e-1';
+const sha = (b) => createHash('sha256').update(b).digest('hex');
+
+async function api(method, path, body, cookie) {
+  const r = await fetch(BASE + path, {
+    method,
+    headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const text = await r.text();
+  return { r, body: text ? JSON.parse(text) : null, cookie: r.headers.getSetCookie().map((c) => c.split(';')[0]).join('; ') };
+}
+
+before(async () => {
+  dir = mkdtempSync(join(tmpdir(), 'eb-e2e-review-'));
+  server = spawn(process.execPath, ['dist/app/server.mjs'], {
+    env: { ...process.env, EB_DATA_DIR: dir, EB_PORT: String(PORT), EB_HOST: '127.0.0.1' },
+    stdio: 'ignore',
+  });
+  for (let i = 0; i < 50; i++) {
+    try {
+      if ((await fetch(BASE + '/api/health')).ok) break;
+    } catch {}
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  for (const user_id of [1, 2, 3, 4]) assert.equal((await api('POST', '/api/session/password', { user_id, password: PASSWORD })).r.status, 200);
+  const s = await api('POST', '/api/session', { user_id: 1, password: PASSWORD });
+  const u = await api('POST', '/api/admin/unlock', { pin: '1234' }, s.cookie);
+  const r = await api('POST', '/api/admin/users', { name: 'Ebin', role: 'reviewer' }, `${s.cookie}; ${u.cookie}`);
+  assert.equal(r.r.status, 201);
+  assert.equal((await api('POST', '/api/session/password', { user_id: r.body.user.id, password: PASSWORD })).r.status, 200);
+  // every new job needs a project (decision #30)
+  const pr = await api('POST', '/api/projects', { name: 'Telescope mount' }, s.cookie);
+  assert.equal(pr.r.status, 201);
+  PROJECT_ID = pr.body.project.id;
+  browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH });
+});
+
+after(async () => {
+  await browser?.close();
+  server?.kill();
+  rmSync(dir, { recursive: true, force: true });
+});
+
+const open = [];
+const pages = [];
+const EXPECTED_CONSOLE = [/Failed to load resource: the server responded with a status of 4\d\d/];
+afterEach(async () => {
+  const problems = pages.splice(0).flatMap((p) => [
+    ...p.errors.map((e) => `page error: ${e}`),
+    ...p.consoleErrors.filter((m) => !EXPECTED_CONSOLE.some((re) => re.test(m))).map((m) => `console: ${m}`),
+  ]);
+  while (open.length) await open.pop().close().catch(() => {});
+  assert.deepEqual(problems, [], 'no errors in the browser');
+});
+
+async function login(name, theme) {
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
+  open.push(ctx);
+  if (theme) await ctx.addInitScript((t) => localStorage.setItem('engineering-board-theme', t), theme);
+  const p = await ctx.newPage();
+  p.errors = [];
+  p.consoleErrors = [];
+  p.on('pageerror', (e) => p.errors.push(e.message));
+  p.on('console', (m) => m.type() === 'error' && p.consoleErrors.push(m.text()));
+  pages.push(p);
+  await p.goto(BASE + '/');
+  await p.click(`.who-option:has-text("${name}")`);
+  await p.fill('input[name=password]', PASSWORD);
+  await p.press('input[name=password]', 'Enter');
+  await p.waitForSelector('.topbar');
+  return p;
+}
+
+const rendered = (p, id) => p.waitForSelector(`[data-testid=${id}] canvas[data-rendered]`, { timeout: 20_000 });
+const renderedState = (p, id) => p.locator(`[data-testid=${id}] canvas`).getAttribute('data-rendered');
+
+let jobId;
+const scan = makePdf(3, { labels: ['BRK-023 Rev B signed', 'ASM-010 Rev C signed', 'PLT-004 Rev A signed'] });
+
+test('an engineer submits a signed scan and single-page drawings; a multi-page drawing is refused', async () => {
+  const c = await login('Christin');
+  const created = await c.evaluate(async (project_id) => {
+    const r = await fetch('/api/tickets', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'Revise mounting bracket', claim: true, project_id }) });
+    return (await r.json()).ticket;
+  }, PROJECT_ID);
+  jobId = created.id;
+  await c.goto(`${BASE}/board?job=${jobId}`);
+  await c.click('.panel-review button:has-text("Submit for board review")');
+  await c.waitForSelector('.rw-submit');
+  await c.setInputFiles('[data-testid=pick-reference]', { name: 'Telescope mount signed set.pdf', mimeType: 'application/pdf', buffer: scan });
+  await c.waitForSelector('.rw-file.done:has-text("3 pages")');
+  await c.setInputFiles('[data-testid=pick-drawings]', [
+    { name: 'BRK-023.pdf', mimeType: 'application/pdf', buffer: makePdf(1, { labels: ['BRK-023 Rev C'] }) },
+    { name: 'SUP-011.pdf', mimeType: 'application/pdf', buffer: makePdf(1, { labels: ['SUP-011 Rev A'], compressed: true }) },
+    { name: 'TWO-SHEETS.pdf', mimeType: 'application/pdf', buffer: makePdf(2) },
+  ]);
+  await c.waitForSelector('.rw-file.error:has-text("TWO-SHEETS.pdf has 2 pages")');
+  await c.click('button[aria-label="Remove TWO-SHEETS.pdf"]');
+  // the revision as written on the drawing, typed in lower case (decision #35)
+  await c.fill('input[aria-label="Revision of BRK-023.pdf"]', 'c');
+  assert.equal(await c.inputValue('input[aria-label="Revision of BRK-023.pdf"]'), 'C');
+  await c.fill('textarea[aria-label="Notes for BRK-023.pdf"]', 'Mounting holes Ø8 → Ø10 for the revised fastener size.');
+  await c.selectOption('select[aria-label="Type of SUP-011.pdf"]', 'new');
+  await c.fill('textarea[aria-label="Notes for SUP-011.pdf"]', 'New support plate.');
+  // nothing goes to review until it is handed to someone (decision #29)
+  await c.waitForSelector('text=Choose at least one reviewer for every drawing');
+  assert.equal(await c.locator('button:has-text("Submit 2 drawings for board review")').isDisabled(), true);
+  await c.click('[aria-label="Reviewers for these drawings"] label:has-text("Ebin")');
+  await c.waitForSelector('.rw-pending-reviewers:has-text("Ebin")');
+  await c.click('button:has-text("Submit 2 drawings for board review")');
+  await c.waitForSelector('.toast:has-text("Submitted for board review")');
+  await c.waitForSelector('.rw-item:has-text("BRK-023")');
+  await c.waitForSelector('.rw-item:has-text("SUP-011")');
+  assert.match(await c.textContent('.rw-item:has-text("BRK-023")'), /Rev C/);
+  assert.equal(await c.locator('[data-testid=action-bar]').getByText('Pass board review').count(), 0, 'engineers cannot pass drawings');
+});
+
+test('a reviewer sees only the review screens and the drawings handed to them', async () => {
+  // a second job, with a drawing handed to the manager only
+  const c = await login('Christin');
+  const other = await c.evaluate(async (project_id) => {
+    const r = await fetch('/api/tickets', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ title: 'Not for Ebin', claim: true, project_id }) });
+    return (await r.json()).ticket;
+  }, PROJECT_ID);
+  await c.goto(`${BASE}/review/${other.id}?submit=1`);
+  await c.waitForSelector('.rw-submit');
+  await c.setInputFiles('[data-testid=pick-drawings]', { name: 'GA-001.pdf', mimeType: 'application/pdf', buffer: makePdf(1, { labels: ['GA-001'] }) });
+  await c.selectOption('select[aria-label="Type of GA-001.pdf"]', 'new');
+  await c.fill('textarea[aria-label="Notes for GA-001.pdf"]', 'General arrangement.');
+  await c.click('[aria-label="Reviewers for these drawings"] label:has-text("Jeffin")');
+  await c.click('button:has-text("Submit 1 drawing for board review")');
+  await c.waitForSelector('.rw-item:has-text("GA-001")');
+  await c.waitForSelector('[data-testid=drawing-reviewers]:has-text("Jeffin")');
+
+  const e = await login('Ebin');
+  await e.waitForURL(/\/review$/);
+  assert.deepEqual(await e.locator('.nav a').allInnerTexts(), ['Review'], 'no board, workload or other views');
+  assert.equal(await e.locator('.topbar .search, .new-job').count(), 0);
+  await e.click('.me-menu summary');
+  assert.equal(await e.locator('.me-pop button:has-text("Team activity"), .me-pop button:has-text("Admin")').count(), 0);
+  await e.keyboard.press('Escape');
+  await e.waitForSelector(`.rv-table tr:has-text("Revise mounting bracket")`);
+  assert.equal(await e.locator('text=Not for Ebin').count(), 0, 'a job with nothing handed to Ebin is not listed');
+  // other pages send a reviewer back to the queue, and the job panel never opens
+  await e.goto(`${BASE}/workload`);
+  await e.waitForURL(/\/review$/);
+  await e.goto(`${BASE}/board?job=${jobId}`);
+  await e.waitForURL(/\/review/);
+  assert.equal(await e.locator('.panel').count(), 0);
+  await e.goto(`${BASE}/review/${jobId}`);
+  await e.waitForSelector('.rw-item:has-text("BRK-023")');
+  assert.equal(await e.locator('button:has-text("Open job"), a:has-text("Revision log")').count(), 0);
+  await e.goto(`${BASE}/review/${other.id}`);
+  await e.waitForSelector('.error-box');
+});
+
+test('a reviewer compares independently: page, zoom and rotation per viewer, and remembers the reference page', async () => {
+  const e = await login('Ebin', 'midnight');
+  await e.goto(`${BASE}/review`);
+  await e.waitForSelector(`.rv-table tr:has-text("Revise mounting bracket")`);
+  await e.click('.rv-open-btn');
+  await rendered(e, 'viewer-reference');
+  await rendered(e, 'viewer-submitted');
+  const ref = e.locator('[data-testid=viewer-reference]');
+  const sub = e.locator('[data-testid=viewer-submitted]');
+  assert.equal(await ref.getAttribute('data-pages'), '3');
+  assert.equal(await sub.getAttribute('data-pages'), '1');
+
+  // move only the reference to page 2 and rotate only the submitted drawing
+  await ref.locator('button[aria-label="Next page"]').click();
+  await e.waitForFunction(() => document.querySelector('[data-testid=viewer-reference] canvas')?.dataset.rendered?.startsWith('2:'));
+  const before = await sub.locator('canvas').boundingBox();
+  await sub.locator('button[aria-label="Rotate clockwise"]').click();
+  await e.waitForFunction(() => document.querySelector('[data-testid=viewer-submitted] canvas')?.dataset.rendered?.split(':')[1] === '90');
+  const after = await sub.locator('canvas').boundingBox();
+  assert.ok(after.height > after.width && before.width > before.height, 'the landscape sheet is shown portrait');
+  assert.equal(await ref.getAttribute('data-rotation'), '0', 'the other viewer is not rotated');
+  assert.equal(await sub.getAttribute('data-page'), '1');
+  await ref.locator('button[aria-label="Zoom in"]').click();
+  assert.equal(await ref.getAttribute('data-zoom'), 'custom');
+  assert.equal(await sub.getAttribute('data-zoom'), 'page');
+  await sub.locator('button:has-text("Reset")').click();
+  await e.waitForFunction(() => document.querySelector('[data-testid=viewer-submitted] canvas')?.dataset.rendered?.split(':')[1] === '0');
+
+  // the bytes are unchanged by viewing
+  const bytes = await e.evaluate(async () => {
+    const w = await (await fetch(location.pathname.replace('/review/', '/api/tickets/') + '/review')).json();
+    const r = await fetch(`/api/review-files/${w.references[0].sha256}`);
+    return Array.from(new Uint8Array(await r.arrayBuffer()));
+  });
+  assert.equal(sha(Buffer.from(bytes)), sha(scan));
+
+  // remember page 2 for BRK-023; it comes back after a reload
+  await ref.locator('button:has-text("Remember page 2")').click();
+  await e.waitForSelector('[data-testid=remembered]:has-text("Remembered page 2")');
+  await e.reload();
+  await rendered(e, 'viewer-reference');
+  await e.waitForFunction(() => document.querySelector('[data-testid=viewer-reference]')?.getAttribute('data-page') === '2');
+  assert.match(await e.locator('.rw-dl').innerText(), /Page 2 of Telescope mount signed set\.pdf/);
+});
+
+test('comments block a pass; pass, handover reminder and signature complete the job', async () => {
+  const e = await login('Ebin');
+  await e.goto(`${BASE}/review/${jobId}`);
+  await e.waitForSelector('.rw-item:has-text("BRK-023")');
+  await e.fill('textarea[aria-label="Add a review comment"]', 'Please confirm mating fastener clearance.');
+  await e.click('button:has-text("Post comment")');
+  await e.waitForSelector('.rw-comment:has-text("mating fastener")');
+  assert.equal(await e.locator('button:has-text("Pass board review")').isDisabled(), true);
+  await e.waitForSelector('text=Resolve open comments to pass');
+  await e.click('.rw-comment button:has-text("Resolve")');
+  await e.waitForSelector('.rw-comment .rv-chip:has-text("Resolved")');
+  await e.click('button:has-text("Pass board review")');
+  await e.waitForSelector('[data-testid=drawing-state]:has-text("Board review passed — signature pending")');
+  await e.click('.rw-item:has-text("SUP-011")');
+  await rendered(e, 'viewer-submitted');
+  await e.click('button:has-text("Pass board review")');
+  await e.waitForSelector('[data-testid=drawing-state]:has-text("Board review passed")');
+
+  const c = await login('Christin');
+  await c.goto(`${BASE}/review/${jobId}`);
+  await c.waitForSelector('.rw-item:has-text("BRK-023")');
+  for (const d of ['BRK-023', 'SUP-011']) {
+    await c.click(`.rw-item:has-text("${d}")`);
+    await c.click('button:has-text("Mark handed over for signature")');
+    await c.click('.dialog button:has-text("Mark handed over")');
+    await c.waitForSelector('[data-testid=drawing-state]:has-text("Handed over for signature")');
+  }
+  // Done is refused until signed
+  const move = await c.evaluate(async (id) => {
+    const t = (await (await fetch(`/api/tickets/${id}`)).json()).ticket;
+    const r = await fetch(`/api/tickets/${id}/move`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ status: 'done', from_status: t.status }) });
+    return { status: r.status, body: await r.json() };
+  }, jobId);
+  assert.equal(move.status, 409);
+  assert.match(move.body.message, /physical signature/);
+
+  // the reviewer gets exactly one reminder per handed-over drawing
+  await e.reload();
+  await e.click('.bell-btn');
+  await e.waitForSelector('.bell-detail:has-text("was approved by you in the board on")');
+  assert.equal(await e.locator('.bell-detail:has-text("handed over for your signature")').count(), 2);
+  await e.keyboard.press('Escape');
+
+  for (const d of ['BRK-023', 'SUP-011']) {
+    await c.click(`.rw-item:has-text("${d}")`);
+    await c.click('button:has-text("Record physical signature")');
+    await c.click('.dialog button:has-text("Record signature")');
+    await c.waitForSelector('[data-testid=drawing-state]:has-text("Physically signed")');
+  }
+  await c.waitForSelector('.rv-chip:has-text("All drawings signed")');
+  const t = await c.evaluate(async (id) => (await (await fetch(`/api/tickets/${id}`)).json()).ticket.status, jobId);
+  assert.equal(t, 'done');
+});
+
+test('the drawing register lists the signed revisions with their history; reviewers cannot open it', async () => {
+  const c = await login('Christin');
+  await c.goto(`${BASE}/review`);
+  await c.waitForSelector('.rv-table, .empty');
+  await c.click('button:has-text("Drawing register")');
+  await c.waitForSelector('[data-testid=register]');
+  const brk = c.locator('tr.reg-row[data-drawing="BRK-023"]');
+  assert.match(await brk.textContent(), /Rev C/);
+  assert.match(await brk.textContent(), /Signed/);
+  assert.match(await c.textContent('tr.reg-row[data-drawing="SUP-011"]'), /No rev/);
+  // its history across jobs, with the reviewed PDF
+  await brk.locator('button.reg-id').click();
+  await c.waitForSelector('.reg-history .reg-entry:has-text("Physically signed")');
+  assert.match(await c.textContent('.reg-history'), /Mounting holes Ø8 → Ø10/);
+  assert.equal(await c.locator('.reg-history a:has-text("Open the PDF")').count(), 1);
+  // never signed: both of these are signed, so they drop out
+  await c.click('.reg-tools button:has-text("Never signed")');
+  await c.waitForSelector('tr.reg-row[data-drawing="BRK-023"]', { state: 'detached' });
+  assert.equal(await c.locator('tr.reg-row[data-drawing="SUP-011"]').count(), 0);
+  // G from anywhere opens it
+  await c.goto(`${BASE}/board`);
+  await c.waitForSelector('.card');
+  await c.keyboard.press('g');
+  await c.waitForSelector('h1:has-text("Drawing register")');
+  // a reviewer is sent back to their review queue (decision #29)
+  const e = await login('Ebin');
+  await e.goto(`${BASE}/review/register`);
+  await e.waitForFunction(() => location.pathname === '/review');
+  assert.equal(await e.locator('button:has-text("Drawing register")').count(), 0);
+});
