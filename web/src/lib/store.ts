@@ -232,6 +232,8 @@ export function startLive(meId?: number, loadedVersion?: string) {
       // a job type's checklist changes the cards of its jobs too (decision #38)
       else if (e.type === 'job_types') invalidate((k) => k.startsWith('/api/job-types') || TICKET_KEYS(k));
       else if (e.type === 'projects') invalidate('/api/projects');
+      // the procurement tracker of one project (decision #39)
+      else if (e.type === 'procurement') invalidate((k) => k.startsWith(`/api/projects/${e.id}/procurement`));
       else if (e.type === 'permissions') invalidate((k) => k === '/api/meta' || k.startsWith('/api/admin/permissions'));
       else if (e.type === 'tools') invalidate((k) => k.startsWith('/api/tools'));
       else if (e.type === 'reload') invalidate();

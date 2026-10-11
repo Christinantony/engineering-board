@@ -81,6 +81,17 @@ Click a card to open its panel on the right. Every field saves as you finish wit
 
 Projects can't be renamed or deleted, so check the name before adding it.
 
+### Procurement
+
+**Procurement** on a project (Projects → the project → **Procurement**) keeps its inventory and procurement list, replacing the spreadsheet. It has four tabs:
+
+- **Master list**: the only place items are typed. One row per item: name, **discipline** (RF, Mechanical…), **category** (Single Antenna, Array, Tool…), **means** (Outsourced, In-house, Bought-out or Tools), **final size / spec**, quantity and unit, and notes such as the PO or supplier. Every cell saves when you leave it. Tick **In stock** when an item arrives (or is made); the date, time and your name are recorded. **×** removes an item.
+- **Assembly checklist**: the master list grouped by discipline, split into **components** and **tooling** (means Tools, or a Tool category), with what is in stock (✓) and what is still to come (○). It says when everything is in and assembly can start.
+- **Pending procurement**: everything not yet in stock, grouped by means, with its notes and **Mark in stock**. Items leave the list as soon as they are in.
+- **Procurement log**: the date and time each item was marked in stock, by whom; also items taken back to pending, and (if you tick the box) added and removed.
+
+**Starting a new project from an old one:** at the bottom of the master list, **Copy its items** from another project's list. Copied items start as pending, without notes; items already on the list are skipped. **Export to Excel (CSV)** saves the master list; **Print** prints the tab you are on.
+
 ## Drawing review
 
 Drawings are checked on the board before they are printed and signed. **Board review is an internal check, not official approval.** The physically signed drawing is the approved record, and the signed scans you attach are never changed, replaced or deleted by the board.

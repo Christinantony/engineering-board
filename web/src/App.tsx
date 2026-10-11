@@ -32,6 +32,7 @@ import { Projects } from './views/Projects.tsx';
 import { ReviewWorkspaceView } from './views/ReviewWorkspace.tsx';
 import { DrawingRegister } from './views/DrawingRegister.tsx';
 import { WeeklySummary } from './views/WeeklySummary.tsx';
+import { Procurement } from './views/Procurement.tsx';
 
 const NAV = [
   { path: '/board', label: 'Board', key: 'b' },
@@ -62,6 +63,7 @@ const VIEWS: Record<string, () => any> = {
   '/tools': Tools,
   '/review/register': DrawingRegister,
   '/reports/weekly': WeeklySummary,
+  '/projects/procurement': Procurement,
   '/review': ReviewQueue,
   '/projects': Projects,
 };
@@ -435,6 +437,7 @@ const TITLES: Record<string, string> = {
   '/projects': 'Projects',
   '/review/register': 'Drawing register',
   '/reports/weekly': 'Weekly summary',
+  '/projects/procurement': 'Procurement',
 };
 
 function View({ path }: { path: string }) {

@@ -501,4 +501,55 @@ CREATE TABLE ticket_checks (
 );
 `,
   },
+  {
+    id: 13,
+    name: 'procurement tracker',
+    sql: /* sql */ `
+-- The procurement tracker (decision #39), per project: the master list is
+-- the only place items are typed; the assembly checklist and the pending list
+-- are views of it; the log records when each item came into stock.
+CREATE TABLE procurement_items (
+  id          INTEGER PRIMARY KEY,
+  project_id  INTEGER NOT NULL REFERENCES projects(id),
+  name        TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 120),
+  discipline  TEXT NOT NULL DEFAULT '' CHECK (length(discipline) <= 40),
+  category    TEXT NOT NULL DEFAULT '' CHECK (length(category) <= 40),
+  means       TEXT NOT NULL DEFAULT 'bought_out' CHECK (means IN ('outsourced','in_house','bought_out','tools')),
+  spec        TEXT NOT NULL DEFAULT '' CHECK (length(spec) <= 200),
+  quantity    REAL NOT NULL DEFAULT 1 CHECK (quantity > 0),
+  unit        TEXT NOT NULL DEFAULT 'pcs' CHECK (length(unit) BETWEEN 1 AND 12),
+  notes       TEXT NOT NULL DEFAULT '' CHECK (length(notes) <= 500),
+  sort_order  REAL NOT NULL DEFAULT 0,
+  in_stock_at TEXT,
+  in_stock_by INTEGER REFERENCES users(id),
+  created_by  INTEGER REFERENCES users(id),
+  created_at  TEXT NOT NULL,
+  updated_at  TEXT NOT NULL,
+  removed_at  TEXT,
+  version     INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX idx_procurement_items_project ON procurement_items(project_id, removed_at, sort_order);
+-- Append-only, like the activity history.
+CREATE TABLE procurement_log (
+  id         INTEGER PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES projects(id),
+  item_id    INTEGER NOT NULL REFERENCES procurement_items(id),
+  user_id    INTEGER REFERENCES users(id),
+  at         TEXT NOT NULL,
+  kind       TEXT NOT NULL CHECK (kind IN ('in_stock','not_in_stock','added','removed')),
+  item_name  TEXT NOT NULL,
+  item_spec  TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX idx_procurement_log_project ON procurement_log(project_id, id);
+CREATE TRIGGER procurement_log_no_update BEFORE UPDATE ON procurement_log
+BEGIN
+  SELECT RAISE(ABORT, 'the procurement log is append-only');
+END;
+CREATE TRIGGER procurement_log_no_delete BEFORE DELETE ON procurement_log
+WHEN (SELECT is_demo FROM projects WHERE id = OLD.project_id) IS NOT 1
+BEGIN
+  SELECT RAISE(ABORT, 'the procurement log is append-only');
+END;
+`,
+  },
 ];

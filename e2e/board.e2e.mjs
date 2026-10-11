@@ -1269,3 +1269,45 @@ test('release checklists: the admin adds one, it blocks Done until ticked in the
   await p.click('.dialog button:has-text("Move to Done")');
   await p.waitForSelector(`.toast:has-text("${job2.job_number} moved to Done")`);
 });
+
+test('procurement: from a project, type the master list, mark items in stock, and see the checklist, pending list and log follow', async () => {
+  const s = await api('POST', '/api/session', { user_id: 1, password: PASSWORD });
+  const project = (await (await api('POST', '/api/projects', { name: 'Spiral array e2e' }, s.cookie)).r.json()).project;
+  const p = await login('Allen');
+  await p.goto(`${BASE}/projects?project=${project.id}`);
+  await p.click('.pj-head button:has-text("Procurement")');
+  await p.waitForSelector('[data-testid=master-list]');
+  const addItem = async (name, discipline, category, means, spec, quantity) => {
+    await p.fill('input[aria-label="New item"]', name);
+    await p.fill(`input[aria-label="New item's discipline"]`, discipline);
+    await p.fill(`input[aria-label="New item's category"]`, category);
+    await p.selectOption(`select[aria-label="New item's means"]`, means);
+    await p.fill(`input[aria-label="New item's final size or spec"]`, spec);
+    await p.fill(`input[aria-label="New item's quantity"]`, String(quantity));
+    await p.click('[data-testid=master-list] button:has-text("Add item")');
+    await p.waitForSelector(`[data-testid=master-list] tr[data-item="${name}"]`);
+  };
+  await addItem('Spiral antenna element', 'RF', 'Single Antenna', 'outsourced', 'Ø76 mm', 5);
+  await addItem('Alignment jig', 'Mechanical', 'Tool', 'tools', 'Printed PLA', 1);
+  await p.waitForSelector('[data-testid=proc-totals]:has-text("2 items · 0 in stock · 2 pending")');
+  // edit a cell: it saves when you leave it
+  await p.fill('input[aria-label="Notes of Spiral antenna element"]', 'PO 4512');
+  await p.press('input[aria-label="Notes of Spiral antenna element"]', 'Enter');
+  await p.waitForFunction(async (id) => (await (await fetch(`/api/projects/${id}/procurement`)).json()).items[0].notes === 'PO 4512', project.id);
+  // in stock from the master list
+  await p.click('input[aria-label="Spiral antenna element in stock"]');
+  await p.waitForSelector('[data-testid=proc-totals]:has-text("1 in stock")');
+  // the assembly checklist splits components from tooling
+  await p.click('.proc-tabs button:has-text("Assembly checklist")');
+  await p.waitForSelector('[data-group="RF components"]:has-text("1 of 1 in stock")');
+  await p.waitForSelector('[data-group="Mechanical tooling"]:has-text("0 of 1 in stock")');
+  // the pending list loses an item once it is in stock
+  await p.click('.proc-tabs button:has-text("Pending procurement")');
+  await p.click('tr[data-item="Alignment jig"] button:has-text("Mark in stock")');
+  await p.waitForSelector('text=Nothing pending: every item is in stock.');
+  // the log, with the date, time and who
+  await p.click('.proc-tabs button:has-text("Procurement log")');
+  await p.waitForSelector('[data-testid=proc-log] tr:has-text("Alignment jig"):has-text("Allen")');
+  assert.equal(await p.locator('[data-testid=proc-log] tbody tr').count(), 2);
+  assert.equal(await p.getAttribute('a:has-text("Export to Excel (CSV)")', 'href'), `/api/projects/${project.id}/procurement.csv`);
+});

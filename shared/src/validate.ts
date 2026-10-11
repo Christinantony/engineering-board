@@ -364,3 +364,39 @@ export const reviewTextSchema = v.object({ body: v.withDefault(v.string({ max: 5
 /** Correct a drawing's number and/or its revision (at least one; checked in renameDrawing). */
 export const drawingEditSchema = v.object({ identifier: v.optional(identifierField), revision: v.optional(revisionField) });
 export const drawingReviewersSchema = v.object({ reviewer_ids: v.array(v.int({ min: 1 }), { max: 20 }) });
+
+// ---------- Procurement tracker (decision #39) ----------
+const procurementFields = {
+  name: v.string({ min: 1, max: 120 }),
+  discipline: v.string({ max: 40 }),
+  category: v.string({ max: 40 }),
+  means: v.enum(['outsourced', 'in_house', 'bought_out', 'tools'] as const),
+  spec: v.string({ max: 200 }),
+  quantity: v.number({ min: 0.001, max: 1_000_000 }),
+  unit: v.string({ min: 1, max: 12 }),
+  notes: v.string({ max: 500 }),
+};
+export const procurementItemSchema = v.object({
+  name: procurementFields.name,
+  discipline: v.withDefault(procurementFields.discipline, ''),
+  category: v.withDefault(procurementFields.category, ''),
+  means: v.withDefault(procurementFields.means, 'bought_out'),
+  spec: v.withDefault(procurementFields.spec, ''),
+  quantity: v.withDefault(procurementFields.quantity, 1),
+  unit: v.withDefault(procurementFields.unit, 'pcs'),
+  notes: v.withDefault(procurementFields.notes, ''),
+});
+export const procurementEditSchema = v.object({
+  version: v.int({ min: 1 }),
+  name: v.optional(procurementFields.name),
+  discipline: v.optional(procurementFields.discipline),
+  category: v.optional(procurementFields.category),
+  means: v.optional(procurementFields.means),
+  spec: v.optional(procurementFields.spec),
+  quantity: v.optional(procurementFields.quantity),
+  unit: v.optional(procurementFields.unit),
+  notes: v.optional(procurementFields.notes),
+  sort_order: v.optional(v.number({ min: -1e12, max: 1e12 })),
+});
+export const procurementStockSchema = v.object({ in_stock: v.bool() });
+export const procurementCopySchema = v.object({ from_project_id: v.int({ min: 1 }) });

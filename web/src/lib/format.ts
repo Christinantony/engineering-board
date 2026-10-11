@@ -14,6 +14,9 @@ export function localDate(d = new Date()): string {
   return `${p.year}-${p.month}-${p.day}`;
 }
 
+/** Date and time in full, for logs: "1 Oct 2026, 10:00". */
+export const dateTime = (iso: string) => fmt({ day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(iso));
+
 /** A day without the time: "12 Oct", or "12 Oct 2025" in another year. */
 export function localDay(iso: string): string {
   const d = new Date(iso);
