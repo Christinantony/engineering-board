@@ -83,12 +83,12 @@ Projects can't be renamed or deleted, so check the name before adding it.
 
 ### Procurement
 
-**Procurement** on a project (Projects → the project → **Procurement**) keeps its inventory and procurement list, replacing the spreadsheet. It has four tabs:
+**Procurement** on a project (Projects → the project → **Procurement**) keeps its inventory and procurement list, replacing the spreadsheet. It has five tabs:
 
 - **Master list**: the only place items are typed. One row per item: name, **discipline** (RF, Mechanical…), **category** (Single Antenna, Array, Tool…), **means** (Outsourced, In-house, Bought-out or Tools), **final size / spec**, quantity and unit, and notes such as the PO or supplier. Every cell saves when you leave it. Tick **In stock** when an item arrives (or is made); the date, time and your name are recorded. **×** removes an item.
 - **Assembly checklist**: the master list grouped by discipline, split into **components** and **tooling** (means Tools, or a Tool category), with what is in stock (✓) and what is still to come (○). It says when everything is in and assembly can start.
 - **Pending procurement**: everything not yet in stock, grouped by means, with its notes and **Mark in stock**. Items leave the list as soon as they are in.
-- **Procurement log**: the date and time each item was marked in stock, by whom; also items taken back to pending, and (if you tick the box) added and removed.
+- **Follow-up control**: a cross-project queue of components not yet in stock, with next action, responsible colleague and follow-up date. Choose an item to update the next action or record a vendor call. Every contact stores outcome and notes in permanent history; a vendor saying **ready** does not mark stock received. Items due today, overdue or unscheduled appear in the summary. You can open this from **All follow-ups** without selecting a project.\n- **Procurement log**: the date and time each item was marked in stock, by whom; also items taken back to pending, and (if you tick the box) added and removed.
 
 **Starting a new project from an old one:** at the bottom of the master list, **Copy its items** from another project's list. Copied items start as pending, without notes; items already on the list are skipped. **Export to Excel (CSV)** saves the master list; **Print** prints the tab you are on.
 

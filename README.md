@@ -2,7 +2,7 @@
 
 ### The workboard for the mechanical design team
 
-*Catalogue edition, version 1.7.0*
+*Catalogue edition, version 1.8.0*
 
 One shared board for every design job: who is on it, what it is waiting for, when it is due and how it ended. It runs on a single PC on the office network. Everyone else opens it in a web browser.
 
@@ -56,7 +56,7 @@ Every page has a one-key shortcut. Press <kbd>?</kbd> anywhere for the full list
 | **A11** | **PDF tools** | <kbd>O</kbd> → PDF tools | The team's PDF scripts, one tab each: **Stamp** (a diagonal mark across every page, with a live preview of the first page while you adjust text, size, angle, opacity, position and colour), **Negative** (a vector PDF's colour negative, kept vector), **Combine by size** (A4 and A3 files merged into one PDF each) and **Word to PDF** (through Microsoft Word on the host PC). The first three run in your browser; results download singly or as one zip. | You are preparing drawings and documents to send out. |
 | **A12** | **Drawing register** | <kbd>G</kbd>, or Review → Drawing register | Every drawing number that has been through board review, across all jobs: its latest signed revision (when, by whom, which job, the reviewed PDF), what is in review for it now, and its full history. Filters for signed, in review and never signed, by project or text. | Someone asks "what is the latest signed revision of BRK-023, and where is it?" |
 | **A13** | **Weekly summary** | Reports → Weekly summary | One printable A4 page for the review meeting: the week's finished jobs by project and by person, and as of now what is overdue, what is waiting and on what, what is due next week, urgent work nobody has, and drawing review. Week by week. | You prepare the weekly review meeting. |
-| **A14** | **Procurement** | Projects → a project → Procurement | The project's inventory and procurement list: one **master list** typed once (discipline, category, means, final size / spec, quantity, notes), the **assembly checklist** (components and tooling per discipline), **pending procurement**, and a **log** of when each item came into stock and who marked it. Copy another project's list to start; export to Excel. | You are buying and making the parts for a build. |
+| **A14** | **Procurement and follow-ups** | Projects → a project → Procurement | The project's inventory and procurement list: one **master list** typed once (discipline, category, means, final size / spec, quantity, notes), the **assembly checklist** (components and tooling per discipline), **pending procurement**, and a **log** of when each item came into stock and who marked it. A shared Follow-up Control queue also shows outstanding components across projects, assigned next actions and immutable vendor-call notes. Copy another project's list to start; export to Excel. | You are buying and making the parts for a build. |
 
 | | |
 |---|---|
@@ -291,9 +291,9 @@ Copy `config.example.json` to `config.json` next to `start.bat`, edit it, restar
 | **History** | Append-only, enforced by database triggers. Jobs cannot be deleted. |
 | **Concurrency** | Version-checked edits, atomic claiming, idempotent creation. |
 | **Search** | SQLite full-text with trigram matching, so any three letters match. |
-| **Upgrades** | Schema version 13. A backup is taken before a new version changes the database. A board refuses to start on data written by a newer version. |
+| **Upgrades** | Schema version 14. A backup is taken before a new version changes the database. A board refuses to start on data written by a newer version. |
 | **Network** | LAN only; no outbound traffic. Name picker plus a password (scrypt hash) and a signed cookie bound to it; admin behind a hashed PIN; five wrong passwords pause sign-in for 30 seconds. |
-| **Checked by** | 254 backend tests, 47 browser tests, 15 package checks, and a typecheck. Every database upgrade is tested from the version before it. The sheet calculator is checked against the workbook's own example. |
+| **Checked by** | Automated backend and browser checks are provided; v1.8 results must be confirmed on the PR's validation workflow before release. Every database upgrade is tested from the version before it. The sheet calculator is checked against the workbook's own example. |
 
 ## J. Documentation
 
@@ -311,7 +311,7 @@ Copy `config.example.json` to `config.json` next to `start.bat`, edit it, restar
 
 | Version | What it brought |
 |---|---|
-| **1.7.0** | **Admin → Health** for the host PC. A **drawing register** across jobs, with a **revision** on every drawing. **Estimates against actual time** in Reports and the job panel. A printable **weekly summary**. **Release checklists** per job type, guarding Review and Done. A **procurement tracker** per project from the team's inventory workbook. Fixed: a reviewer recording a job's last signature was refused. |
+| **1.8.0** | Procurement follow-up control across projects: accountable next actions, follow-up dates, colleague ownership and immutable vendor contact history; items drop from pending only when in stock. |\n| **1.7.0** | **Admin → Health** for the host PC. A **drawing register** across jobs, with a **revision** on every drawing. **Estimates against actual time** in Reports and the job panel. A printable **weekly summary**. **Release checklists** per job type, guarding Review and Done. A **procurement tracker** per project from the team's inventory workbook. Fixed: a reviewer recording a job's last signature was refused. |
 | **1.6.0** | PDF tools on the Tools page: Stamp with a live preview, Negative, Combine by size and Word to PDF, from the team's four scripts. |
 | **1.5.0** | The project name stands out on cards and job rows. Admin-set role capabilities (create, claim and be assigned, edit any job) for engineers, managers and reviewers, leaving board review untouched. **Go to location** beside a job's file path. A **Tools** page with the team's *Sheet Requirement Calculator* workbook as a page, formula for formula, with its cutting layout drawn to scale; its materials and sheet sizes editable by the admin. |
 | **1.4.0** | Projects: every job belongs to a project, chosen or added from the New job form; a Projects page with each project's jobs; project filter, search, card and job-panel display; Project column in import and export. No preset list: projects are added as they are needed. |

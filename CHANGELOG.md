@@ -315,3 +315,7 @@
 - **Files:** migration, domain/procurement, routes, procurement UI, migration test helper, decision and changelog.
 - **Validation:** CI workflow added to run typecheck, backend tests, build/package checks, and Chromium E2E checks on pull requests; results require verification. Treat as draft until validated and reviewed.
 - **Follow-ups:** Replace numeric user-ID entry with a people selector; clarify Purchase access model in v2.0. Do not begin v1.9 on top of unvalidated changes.
+
+### 2026-10-12 | ChatGPT | branch: chatgpt/followup-control-1.8 (release integration)
+- **What:** Add cross-project access without requiring project selection, show follow-ups for all outstanding components, invalidate shared queue on procurement SSE events, document new endpoints, update user instructions and set version 1.8.0.
+- **Validation:** Automated suite configured in `.github/workflows/validate.yml`; GitHub Actions results not available in connector at authoring time. Manual code review completed but execution pending.

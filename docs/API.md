@@ -51,7 +51,7 @@ Every job created on the board belongs to a project (decision #30). Reviewers ge
 | GET | `/api/projects` | `{projects: [{id, name, created_by, created_at, open, total}]}`, sorted by name. `open` counts jobs not done, cancelled or archived. |
 | POST | `/api/projects` | `{name}` (1–100 characters; extra spaces are collapsed). Engineers and the manager. 201 `{project}`; a name that already exists (any case) answers 409 `project_exists` with the existing `project`. |
 
-### Procurement tracker (decision #39)
+### Procurement follow-ups (decision #40)\n\nThe existing procurement items are the only master records. Pending items are searchable across all projects, and follow-up contact history is append-only. All four endpoints require a signed-in board user; reviewers receive 403. Mutation endpoints use the existing worker authorization.\n\n| Method | Path | Body / notes |\n|---|---|---|\n| GET | `/api/procurement/followups` | `{items}` where every pending item includes project name, action owner/date/version and latest contact summary. Stocked or removed items are excluded. |\n| PUT | `/api/procurement/items/:id/followup` | `{version, owner_id: number or null, next_action, next_due: YYYY-MM-DD or null}`; absent state begins at version 0, stale writes return 409. |\n| POST | `/api/procurement/items/:id/followups` | `{outcome: progress\\|delayed\\|ready\\|unreachable\\|other, note, next_due?}`; inserts immutable record, does **not** set stock or silently change assigned action. |\n| GET | `/api/procurement/items/:id/followups` | `{calls}` most recent first, up to 100. |\n\n### Procurement tracker (decision #39)
 
 Board-wide: reviewers get 403. Live updates send `{type:'procurement', id: <project id>}`.
 
