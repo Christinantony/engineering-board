@@ -547,7 +547,7 @@ interface FollowupItem extends ProcurementItem {
 interface CallRecord {id:number;user_id:number|null;at:string;outcome:string;note:string;next_due:string|null}
 function FollowupControl() {
  const q = useQuery<{items:FollowupItem[]}>('/api/procurement/followups');
- const { user } = useApp();
+ const { user, users } = useApp();
  const [opened,setOpened] = useState<number|null>(null);
  const [owner,setOwner] = useState('');
  const [action,setAction] = useState('');
@@ -557,7 +557,7 @@ function FollowupControl() {
  const [callDate,setCallDate] = useState('');
  const history = useQuery<{calls:CallRecord[]}>(opened ? `/api/procurement/items/${opened}/followups` : null);
  const items = q.data?.items ?? [];
- const today = new Date().toLocaleDateString('en-CA');
+ const today = new Date().toISOString().slice(0,10);
  const sorted = items;
  const choose = (i:FollowupItem) => {setOpened(i.id);setOwner(i.owner_id == null?'':String(i.owner_id));setAction(i.next_action);setDue(i.next_due??'');setOutcome('progress');setNotes('');setCallDate(i.next_due??'');};
  const save = async(i:FollowupItem) => {try {
@@ -580,7 +580,7 @@ function FollowupControl() {
      </button>
      <p className="muted">{i.next_action||'No next action assigned'} · {i.last_called_at ? 'Last contact '+dateTime(i.last_called_at):'No contact logged'}</p>
      {opened===i.id&&<div className="proc-stack">
-       <label>Responsible user ID <input className="field-input" type="number" min="1" placeholder="Leave blank for unassigned" value={owner} onChange={(e:any)=>setOwner(e.target.value)}/></label>
+       <label>Responsible colleague <select className="field-input" value={owner} onChange={(e:any)=>setOwner(e.target.value)}><option value="">Unassigned</option>{users.filter(u=>u.active).map(u=><option key={u.id} value={u.id}>{u.name}</option>)}</select></label>
        <label>Next action <input className="field-input" maxLength={300} value={action} onChange={(e:any)=>setAction(e.target.value)}/></label>
        <label>Next follow-up <input className="field-input" type="date" value={due} onChange={(e:any)=>setDue(e.target.value)}/></label>
        <button className="btn btn-primary" onClick={()=>void save(i)}>Save next action</button>
