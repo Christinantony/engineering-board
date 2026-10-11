@@ -77,6 +77,7 @@ import {
 import { dashboard, myWork, todayView, workload, type Horizon } from './domain/views.ts';
 import { report } from './domain/reports.ts';
 import { typicalTimes } from './domain/estimates.ts';
+import { weeklySummary } from './domain/weekly.ts';
 import { markSeen, notifications } from './domain/notifications.ts';
 import { Presence } from './domain/presence.ts';
 import {
@@ -551,6 +552,8 @@ export function createApp(opts: AppOptions): App {
     const today = localDate(ctx.now().getTime(), ctx.tz);
     return report(ctx, req.query.get('from') ?? today, req.query.get('to') ?? today);
   });
+  // the weekly summary for the review meeting (decision #37)
+  board('GET', '/api/reports/weekly', (req) => weeklySummary(ctx, req.query.get('week') ?? undefined));
   // what each type of job usually takes, for the estimate hint in the job panel (decision #36)
   board('GET', '/api/estimates/typical', () => ({ typical: typicalTimes(ctx) }));
   board('GET', '/api/workload', (req) => workload(ctx, (req.query.get('horizon') ?? 'today') as Horizon));

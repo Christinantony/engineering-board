@@ -184,6 +184,7 @@ Encrypted PDFs are refused: save them again without security first.
 | <kbd>V</kbd> | Drawing review |
 | **Workload** | <kbd>W</kbd> | Estimated hours per engineer for today, the next 3 days or this week, against an 8-hour day. It's a planning aid, not a limit. Jobs without an estimate are counted separately, not guessed. |
 | **Reports** | <kbd>R</kbd> | Jobs completed per day, per engineer and per job type, how long jobs take, and **estimates against actual time**: how many finished jobs took about what was estimated, longer or shorter, by job type and by person, for this or last week or month. |
+| **Weekly summary** | Reports → **Weekly summary** | One page for the review meeting: what was finished in the week, by project and by person; and as of now what is overdue, what is waiting and on what, what is due next week, urgent jobs nobody has, and where drawing review stands. **Print or save as PDF** prints just that page (A4). Step back a week at a time with **← Previous week**. |
 | **Team activity** | your name menu | Every change to every job, newest first. |
 
 ## Search
