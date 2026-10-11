@@ -5113,3 +5113,208 @@ fieldset.panel-editable {
   align-items: center;
   gap: 8px;
 }
+
+/* ======================= Procurement tracker (1.7.0) ======================= */
+.proc-head-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.proc-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+  margin: 12px 0 10px;
+}
+.proc-project {
+  width: auto;
+  min-width: 260px;
+}
+.proc-totals {
+  font-size: 15px;
+}
+.proc-ok {
+  color: var(--success-ink);
+}
+.proc-due {
+  color: var(--warn-ink);
+}
+.proc-tabs {
+  margin-bottom: 12px;
+}
+.proc-empty {
+  margin-top: 20px;
+}
+.proc-sheet {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+}
+.proc-scroll {
+  overflow-x: auto;
+}
+.proc-table td {
+  vertical-align: middle;
+}
+.proc-table tr.proc-in td {
+  background: color-mix(in srgb, var(--success-bg) 55%, transparent);
+}
+.proc-cell {
+  min-width: 90px;
+  height: 30px;
+  padding: 3px 6px;
+}
+.proc-cell.wide {
+  min-width: 170px;
+}
+.proc-qty {
+  display: flex;
+  gap: 4px;
+}
+.proc-qty .proc-cell {
+  min-width: 0;
+  width: 70px;
+}
+.proc-stock {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.proc-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.proc-add .field-input {
+  width: 120px;
+}
+.proc-add .field-input.wide {
+  width: 200px;
+}
+.proc-add .field-input.narrow {
+  width: 70px;
+}
+.proc-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin-top: 14px;
+}
+.proc-copy select {
+  width: auto;
+}
+.proc-ready {
+  font-weight: 600;
+  color: var(--warn-ink);
+  margin: 0 0 10px;
+}
+.proc-ready.ok {
+  color: var(--success-ink);
+}
+.proc-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 14px 22px;
+}
+.proc-group h3 {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 0 6px;
+  font-size: 15px;
+  border-bottom: 2px solid var(--line-strong);
+  padding-bottom: 4px;
+}
+.proc-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--warn-ink);
+}
+.proc-count.ok {
+  color: var(--success-ink);
+}
+.proc-group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.proc-group li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  gap: 0 6px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--line);
+}
+.proc-group li .small {
+  grid-column: 2;
+}
+.proc-mark {
+  font-weight: 700;
+  color: var(--muted);
+}
+.proc-group li.in .proc-mark {
+  color: var(--success-ink);
+}
+.proc-name {
+  font-weight: 600;
+}
+.proc-log-all {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.print-only {
+  display: none;
+}
+@media print {
+  .procurement-view .view-head,
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block;
+    margin: 0 0 8px;
+    font-size: 14pt;
+  }
+  .proc-sheet {
+    border: 0;
+    padding: 0;
+  }
+  .proc-cell,
+  .proc-sheet select {
+    border: 0;
+    padding: 0;
+    height: auto;
+    background: none;
+    -webkit-appearance: none;
+    appearance: none;
+  }
+}
+.proc-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.proc-means {
+  min-width: 128px;
+}
+/* the pending groups line up with each other */
+.proc-stack .proc-table {
+  table-layout: fixed;
+  width: 100%;
+}
+.proc-stack .proc-table th:nth-child(1) { width: 22%; }
+.proc-stack .proc-table th:nth-child(2) { width: 12%; }
+.proc-stack .proc-table th:nth-child(3) { width: 24%; }
+.proc-stack .proc-table th:nth-child(4) { width: 10%; }
+.proc-stack .proc-table th:nth-child(5) { width: 20%; }
+.proc-stack .proc-table th:nth-child(6) { width: 12%; }
+.proc-stack .proc-table td {
+  overflow-wrap: anywhere;
+}

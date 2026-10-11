@@ -126,8 +126,20 @@ export function exportJson(ctx: Ctx, opts: { activity: boolean } = { activity: t
     exported_at: nowIso(ctx),
     time_zone: ctx.tz,
     users: users.map(({ id, name, initials, color, role, active }) => ({ id, name, initials, color, role, active })),
-    job_types: types.map(({ id, name, active }) => ({ id, name, active })),
+    job_types: types.map(({ id, name, active, checklist_mode, checklist }) => ({ id, name, active, checklist_mode, checklist })),
     projects: projects.map(({ id, name, created_at }) => ({ id, name, created_at })),
+    // the procurement tracker (decision #39): every project's master list and log
+    procurement: {
+      items: all<Record<string, unknown> & { project_id: number; in_stock_by: number | null }>(
+        ctx.db,
+        `SELECT id, project_id, name, discipline, category, means, spec, quantity, unit, notes, in_stock_at, in_stock_by, created_at, removed_at
+         FROM procurement_items ORDER BY project_id, sort_order, id`,
+      ).map((i) => ({ ...i, project: pName.get(i.project_id) ?? null, in_stock_by: i.in_stock_by ? byId.get(i.in_stock_by) ?? null : null })),
+      log: all<{ project_id: number; item_id: number; user_id: number | null; at: string; kind: string; item_name: string; item_spec: string }>(
+        ctx.db,
+        'SELECT project_id, item_id, user_id, at, kind, item_name, item_spec FROM procurement_log ORDER BY id',
+      ).map(({ user_id, ...l }) => ({ ...l, project: pName.get(l.project_id) ?? null, by: user_id ? byId.get(user_id) ?? null : null })),
+    },
     tickets: tickets.map((t) => {
       const { overdue: _o, due_today: _d, board_rank: _b, my_rank: _m, version: _v, ...rest } = t;
       return {

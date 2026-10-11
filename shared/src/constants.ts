@@ -403,3 +403,46 @@ export interface ReviewQueueRow {
   /** Reviewers who passed drawings now handed over to them to sign. */
   signers: number[];
 }
+
+// ---------- Procurement tracker (decision #39) ----------
+
+/** How an item is obtained, as in the team's inventory workbook. */
+export const PROCUREMENT_MEANS = ['outsourced', 'in_house', 'bought_out', 'tools'] as const;
+export type ProcurementMeans = (typeof PROCUREMENT_MEANS)[number];
+export const PROCUREMENT_MEANS_LABEL: Record<ProcurementMeans, string> = {
+  outsourced: 'Outsourced',
+  in_house: 'In-house',
+  bought_out: 'Bought-out',
+  tools: 'Tools',
+};
+
+export interface ProcurementItem {
+  id: number;
+  project_id: number;
+  name: string;
+  discipline: string;
+  category: string;
+  means: ProcurementMeans;
+  /** Final size or specification. */
+  spec: string;
+  quantity: number;
+  unit: string;
+  notes: string;
+  sort_order: number;
+  in_stock_at: string | null;
+  in_stock_by: number | null;
+  created_by: number | null;
+  created_at: string;
+  updated_at: string;
+  version: number;
+}
+
+export interface ProcurementLogEntry {
+  id: number;
+  item_id: number;
+  user_id: number | null;
+  at: string;
+  kind: 'in_stock' | 'not_in_stock' | 'added' | 'removed';
+  item_name: string;
+  item_spec: string;
+}

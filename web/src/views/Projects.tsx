@@ -119,6 +119,9 @@ function ProjectJobs({ project, onNewJob }: { project: Project | 'none'; onNewJo
             <button className="btn" onClick={() => navigate(`/board?pr=${project.id}`)} title="The board, showing only this project's jobs">
               Show on the board
             </button>
+            <button className="btn" onClick={() => navigate(`/projects/procurement?project=${project.id}`)} title="The project's master list, assembly checklist, pending procurement and log">
+              Procurement
+            </button>
             <button className="btn btn-primary" onClick={onNewJob} title="The new job goes in this project">
               + New job in this project
             </button>

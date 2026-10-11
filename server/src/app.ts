@@ -46,6 +46,7 @@ import { createUser, getUser, listUsers, requireUser, updateUser } from './domai
 import { createJobType, listJobTypes, updateJobType } from './domain/jobTypes.ts';
 import { createItem, updateItem } from './domain/checklists.ts';
 import { createProject, listProjects } from './domain/projects.ts';
+import { addItem, copyList, editItem, procurement, procurementCsv, removeItem, setStock } from './domain/procurement.ts';
 import { getPermissions, requireCapability, setPermissions } from './domain/permissions.ts';
 import { WordQueue, cleanWordName, convertWithWord, probeWord, type WordConverter, type WordStatus } from './domain/wordToPdf.ts';
 import {
@@ -406,6 +407,21 @@ export function createApp(opts: AppOptions): App {
   // ---- projects (decision #30): added by the team when needed, none preset ----
   board('GET', '/api/projects', () => ({ projects: listProjects(ctx) }));
   worker('POST', '/api/projects', (req, user) => new Reply(201, { project: createProject(ctx, user, req.body ?? {}) }), 'create');
+  // ---- procurement tracker per project (decision #39): not for reviewers (#29) ----
+  board('GET', '/api/projects/:id/procurement', (req) => procurement(ctx, id(req)));
+  board('GET', '/api/projects/:id/procurement.csv', (req) => {
+    const p = procurement(ctx, id(req)).project;
+    const file = `${p.name.replace(/[^\w .()-]/g, '_')} - procurement ${localDate(ctx.now().getTime(), ctx.tz)}.csv`;
+    return new Reply(200, procurementCsv(ctx, p.id, (uid) => (uid == null ? '' : getUser(ctx, uid)?.name ?? '')), {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${file}"`,
+    });
+  });
+  worker('POST', '/api/projects/:id/procurement/items', (req, user) => new Reply(201, { item: addItem(ctx, user, id(req), req.body ?? {}) }));
+  worker('POST', '/api/projects/:id/procurement/copy', (req, user) => copyList(ctx, user, id(req), req.body ?? {}));
+  worker('PATCH', '/api/procurement/items/:id', (req, user) => ({ item: editItem(ctx, user, id(req), req.body ?? {}) }));
+  worker('POST', '/api/procurement/items/:id/stock', (req, user) => ({ item: setStock(ctx, user, id(req), req.body ?? {}) }));
+  worker('DELETE', '/api/procurement/items/:id', (req, user) => removeItem(ctx, user, id(req)));
 
   worker('POST', '/api/tickets', (req, user) => {
     const key = req.headers['idempotency-key'];

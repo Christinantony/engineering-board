@@ -51,6 +51,22 @@ Every job created on the board belongs to a project (decision #30). Reviewers ge
 | GET | `/api/projects` | `{projects: [{id, name, created_by, created_at, open, total}]}`, sorted by name. `open` counts jobs not done, cancelled or archived. |
 | POST | `/api/projects` | `{name}` (1–100 characters; extra spaces are collapsed). Engineers and the manager. 201 `{project}`; a name that already exists (any case) answers 409 `project_exists` with the existing `project`. |
 
+### Procurement tracker (decision #39)
+
+Board-wide: reviewers get 403. Live updates send `{type:'procurement', id: <project id>}`.
+
+| Method | Path | Body / notes |
+|---|---|---|
+| GET | `/api/projects/:id/procurement` | `{project, items[], log[] (newest first, up to 500), totals: {items, in_stock, pending}, suggestions: {disciplines, categories, units}, copy_from: [{id, name, items}]}`. Items: `{id, project_id, name, discipline, category, means, spec, quantity, unit, notes, sort_order, in_stock_at, in_stock_by, created_by, created_at, updated_at, version}`; `means` is `outsourced`, `in_house`, `bought_out` or `tools`. Log entries: `{id, item_id, user_id, at, kind: in_stock\|not_in_stock\|added\|removed, item_name, item_spec}`. |
+| GET | `/api/projects/:id/procurement.csv` | The master list for Excel (UTF-8 with a BOM, formula-safe cells). |
+| POST | `/api/projects/:id/procurement/items` | `{name, discipline?, category?, means? (default bought_out), spec?, quantity? (default 1), unit? (default pcs), notes?}`. 201 `{item}`. |
+| PATCH | `/api/procurement/items/:id` | `{version, name?, discipline?, category?, means?, spec?, quantity?, unit?, notes?, sort_order?}`. A stale `version` answers 409 with `current`. |
+| POST | `/api/procurement/items/:id/stock` | `{in_stock}`: stamps or clears `in_stock_at` / `in_stock_by` and adds to the log. Repeating the same state changes nothing. |
+| DELETE | `/api/procurement/items/:id` | Takes it off the list (kept for the log). |
+| POST | `/api/projects/:id/procurement/copy` | `{from_project_id}`: copies that project's items as pending, without notes, skipping name and spec already present. `{copied, skipped}`. |
+
+The full JSON export carries `procurement: {items[], log[]}` with project and people names.
+
 Tickets carry `project_id` (null for jobs from before projects, or imported without one). `PATCH /api/tickets/:id` accepts `project_id` to move a job to another project; it can't be set back to null. Live updates send `{type:'projects'}` when one is added. CSV exports have a `project` column, JSON exports a `projects` list and each ticket's `project`. Import preview rows carry `project` and `project_is_new`, the preview has `new_projects` and `no_project_column`, and `create_projects=0` leaves unknown names blank.
 
 ## Tickets
