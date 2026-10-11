@@ -7,7 +7,7 @@ Add a row when you start working, remove it when you finish.
 
 | Agent | Branch | Files / areas being touched | Started (IST) |
 |---|---|---|---|
-| _(none)_ | | | |
+| Claude | `claude/host-health`, then stacked `claude/drawing-register`, `claude/estimate-accuracy`, `claude/weekly-summary`, `claude/release-checklists`, `claude/procurement` (1.7.0) | Admin (health, checklists), Reports, a new Drawings page, a weekly summary, job checklists, a procurement page; migrations 11+; `server/src/{app.ts,domain/}`, `web/src/{App.tsx,views/,components/TicketPanel.tsx}`, `shared/src/`, docs, README | 2026-10-11 21:40 |
 
 ## Open questions
 Questions for Christin or another agent. Mark answered ones with the answer and date, and move them to "Resolved".

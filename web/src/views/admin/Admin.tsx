@@ -1,4 +1,4 @@
-// Admin area: team, job types, tags, import, export, backups, PIN.
+// Admin area: health, team, job types, tags, import, export, backups, PIN.
 // Unlocked with the admin PIN for 12 hours on this browser.
 
 import { useState } from 'react';
@@ -8,6 +8,7 @@ import { invalidate, useQuery } from '../../lib/store.ts';
 import { toastError } from '../../lib/toasts.ts';
 import { ErrorBox, Spinner } from '../../components/bits.tsx';
 import { TeamSection } from './Team.tsx';
+import { HealthNotice, HealthSection } from './Health.tsx';
 import { RolesSection } from './Roles.tsx';
 import { ToolsDataSection } from './ToolsData.tsx';
 import { JobTypesSection, TagsSection } from './Lists.tsx';
@@ -16,6 +17,7 @@ import { BackupSection, ExportSection, ArchiveSection, PinSection, DemoSection, 
 
 const SECTIONS = [
   { id: 'team', label: 'Team', C: TeamSection },
+  { id: 'health', label: 'Health', C: HealthSection },
   { id: 'roles', label: 'Roles', C: RolesSection },
   { id: 'job-types', label: 'Job types', C: JobTypesSection },
   { id: 'tags', label: 'Tags', C: TagsSection },
@@ -62,6 +64,7 @@ export function Admin() {
           </button>
         </div>
       )}
+      <HealthNotice onHealthPage={current.id === 'health'} />
       <div className="admin-grid">
         <nav className="admin-nav" aria-label="Admin sections">
           {SECTIONS.map((s) => (

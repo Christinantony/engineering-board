@@ -116,6 +116,7 @@ import {
   workspace,
   type QueueTab,
 } from './domain/reviews.ts';
+import { HealthState, hostHealth } from './domain/health.ts';
 import { jobsNeedingSync, markSyncPending, revisionLog, settleSyncs, syncProjectFolder } from './domain/projectFolder.ts';
 
 /** Default maximum PDF upload for drawing review (merged signed scans can be large). */
@@ -155,6 +156,8 @@ export interface App {
   server: Server;
   /** Every API route (method and pattern). */
   routes: { method: string; path: string }[];
+  /** The daily-backup check the board runs every hour (tests call it directly). */
+  runMaintenance(): void;
   listen(port: number, host?: string): Promise<number>;
   close(): Promise<void>;
 }
@@ -200,6 +203,8 @@ export function createApp(opts: AppOptions): App {
     ctx.db.close(); // don't hold the file open (and locked on Windows) after a failed start
     throw e;
   }
+  // host health (decision #34): when the board started, and the last daily-backup failure
+  const health = new HealthState(ctx.now());
   // forget idempotency keys older than 7 days
   run(ctx.db, 'DELETE FROM idempotency WHERE created_at < ?', new Date(ctx.now().getTime() - 7 * 86_400_000).toISOString());
 
@@ -209,8 +214,12 @@ export function createApp(opts: AppOptions): App {
   const maintenance = () => {
     try {
       const b = runDailyBackupIfDue(ctx);
-      if (b) console.log(`Daily backup saved: ${join(ctx.backupDir, b.name)}`);
+      if (b) {
+        health.backupError = null;
+        console.log(`Daily backup saved: ${join(ctx.backupDir, b.name)}`);
+      }
     } catch (e) {
+      health.backupError = { at: ctx.now().toISOString(), message: (e as Error).message };
       console.error('Daily backup failed:', (e as Error).message);
     }
   };
@@ -634,8 +643,10 @@ export function createApp(opts: AppOptions): App {
 
   // ---- backups, restore, archive, tags ----
   admin('GET', '/api/admin/info', () => ({ ...dbStats(ctx), version: APP_VERSION, node: process.versions.node, tz: ctx.tz, backups: listBackups(ctx) }));
+  admin('GET', '/api/admin/health', () => hostHealth(ctx, health, APP_VERSION));
   admin('POST', '/api/admin/backups', () => {
     const b = backupNow(ctx, 'manual');
+    health.backupError = null; // a backup that worked clears the warning
     pruneBackups(ctx);
     return new Reply(201, { backup: b });
   });
@@ -749,6 +760,7 @@ export function createApp(opts: AppOptions): App {
     ctx,
     server,
     routes: router.list(),
+    runMaintenance: maintenance,
     listen(port, host = '0.0.0.0') {
       return new Promise((resolveListen, reject) => {
         server.once('error', reject);
