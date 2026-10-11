@@ -4486,3 +4486,116 @@ fieldset.panel-editable {
 .combine-table {
   margin: 10px 0;
 }
+
+/* ======================= Admin → Health (1.7.0) ======================= */
+.notice-bad {
+  background: var(--error-bg);
+  border-color: var(--error-ink);
+  color: var(--error-strong-ink);
+}
+.btn-small {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+.admin-section h3 {
+  margin: 18px 0 8px;
+  font-size: 15px;
+}
+.health-checks {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.health-check {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.health-check p {
+  margin: 2px 0 6px;
+  color: var(--ink-2);
+  max-width: 80ch;
+}
+.health-badge {
+  display: inline-block;
+  text-align: center;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border: 1px solid transparent;
+}
+.health-ok {
+  border-left-color: var(--success-line);
+}
+.health-ok .health-badge {
+  background: var(--success-bg);
+  border-color: var(--success-line);
+  color: var(--success-ink);
+}
+.health-warn {
+  border-left-color: var(--warn-line);
+}
+.health-warn .health-badge {
+  background: var(--warn-bg);
+  border-color: var(--warn-line);
+  color: var(--warn-strong-ink);
+}
+.health-bad {
+  border-left-color: var(--error-ink);
+}
+.health-bad .health-badge {
+  background: var(--error-bg);
+  border-color: var(--error-ink);
+  color: var(--error-strong-ink);
+}
+.health-disks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 12px;
+}
+.health-disk {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.health-disk code {
+  overflow-wrap: anywhere;
+}
+.health-disk-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.health-disk-bar {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--line);
+  overflow: hidden;
+}
+.health-disk-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--ink-2);
+}
+.facts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px 20px;
+}
+.facts-grid dd {
+  overflow-wrap: anywhere;
+}

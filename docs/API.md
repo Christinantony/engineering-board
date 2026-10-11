@@ -163,6 +163,7 @@ What each role may do with jobs is a setting (decision #31): `{engineer, manager
 | POST | `/api/admin/job-types`; PATCH `/api/admin/job-types/:id` |
 | POST/DELETE | `/api/admin/demo`: load or clear the demo jobs |
 | GET | `/api/admin/info`: database size and counts, backup folder, list of backups |
+| GET | `/api/admin/health`: `{level, checks: [{id, level, title, detail}], host, database, review_files, backups, disks}`. `level` is `ok`, `warn` or `bad`, the worst of the checks; check ids are `backups`, `backup_disk`, `disk_space`, `database`, `admin_pin`. `disks.same_disk` is null when it can't be told. |
 | POST | `/api/admin/backups`: back up now. GET `/api/admin/backups/:name` downloads one. |
 | POST | `/api/admin/restore` `{name}`, or `/api/admin/restore/upload` with an `application/octet-stream` body containing the `.db` file |
 | POST | `/api/admin/import/preview` and `/api/admin/import/commit`. The body is CSV text (`text/csv`). Query: `filename`, `date_order=DMY\|MDY`, `create_job_types=0\|1`, `skip_invalid=1`, `allow_duplicate=1` |

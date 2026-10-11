@@ -1150,3 +1150,37 @@ test('the New job form keeps the cursor where you are typing while the board ref
   assert.equal(await other.inputValue(), 'Produuuction');
   await p.keyboard.press('Escape');
 });
+
+/** Open an Admin page, entering the PIN if this browser hasn't unlocked it yet. */
+async function openAdmin(p, section) {
+  await p.goto(`${BASE}/admin?s=${section}`);
+  await p.waitForSelector('input[aria-label="Admin PIN"], .admin-section');
+  if (await p.locator('input[aria-label="Admin PIN"]').count()) {
+    await p.fill('input[aria-label="Admin PIN"]', '1234');
+    await p.click('button:has-text("Unlock")');
+  }
+  await p.waitForSelector('.admin-section');
+}
+
+test('admin health: the checks, a backup made from the page, and the notice on other admin pages', async () => {
+  const c = await login('Christin');
+  await openAdmin(c, 'health');
+  await c.waitForSelector('[data-testid=health-checks]');
+  assert.deepEqual(
+    await c.locator('.health-check').evaluateAll((els) => els.map((e) => e.dataset.check)),
+    ['backups', 'backup_disk', 'disk_space', 'database', 'admin_pin'],
+  );
+  // the e2e board keeps its backups next to its data: that is the warning to show
+  assert.match(await c.textContent('[data-check=backup_disk]'), /same disk as the board/);
+  assert.match(await c.textContent('[data-check=database]'), /Database checks out/);
+  if (await c.locator('[data-check=backups] button:has-text("Back up now")').count()) {
+    await c.click('[data-check=backups] button:has-text("Back up now")');
+    await c.waitForSelector('.toast:has-text("Backup saved")');
+  }
+  await c.waitForSelector('[data-check=backups].health-ok');
+  // elsewhere in Admin a line points back here while anything needs attention
+  await c.click('.admin-nav a:has-text("Team")');
+  await c.waitForSelector('[data-testid=health-notice]');
+  await c.click('[data-testid=health-notice] button:has-text("Open Health")');
+  await c.waitForSelector('.admin-section h2:has-text("Health")');
+});

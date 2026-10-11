@@ -4,6 +4,20 @@ For whoever looks after the board. Installing and updating are in [Install, run 
 
 Open **your name (top right) → Admin** and enter the admin PIN. The Admin area stays unlocked in that browser for 12 hours, or until you click **Lock admin**. The PIN starts as `1234`: change it on day one.
 
+## Health
+
+**Admin → Health** is the first place to look if something seems wrong, and worth a glance every week or two. Each check says **OK**, **Check** (sort it out soon) or **Fix now**:
+
+| Check | What it means |
+|---|---|
+| **Backups** | Whether backups are being made. *Fix now* if the board has jobs and no backup, or if the last daily backup failed (the reason is shown: usually the backup folder is missing, full or offline); press **Back up now** once it is sorted. *Check* if the newest backup is more than 3 days old. |
+| **Backup disk** | *Check* while backups are on the same disk as the board: if that disk fails, both are lost. Set `backupDir` in `config.json` to a network share or a OneDrive folder (see [Settings](#settings)). |
+| **Disk space** | Free space where the board and its backups write. *Check* under 5 GB or 10 %, *Fix now* under 1 GB: backups and drawing uploads fail on a full disk. |
+| **Database** | SQLite's own quick check of the database file. If it ever reports damage, restore the newest backup. |
+| **Admin PIN** | *Check* while the PIN is still `1234`. |
+
+Below the checks: the disks' free space, and the host PC's name, the board and Node.js versions, how long the board has been running, and the size of the database, the drawing-review PDFs and the backups. While anything needs attention, a line at the top of every other Admin page links to Health.
+
 ## Team
 
 **Admin → Team** lists everyone who can sign in.
@@ -132,6 +146,7 @@ On Linux and in Docker the same settings can be given as environment variables, 
 
 ## Checking on the board
 
+- **Admin → Health** checks the backups, the disks and the database (see [Health](#health)).
 - **Admin → About this board** shows the version, database size, backup folder, time zone and Node.js version.
 - `http://<host>:8080/api/health` answers `{"ok":true,…}` while the board is running: handy for a monitoring tool.
 - The board's window prints a line for each daily backup and any error. Errors never show people's data.
