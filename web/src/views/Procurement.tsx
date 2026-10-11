@@ -102,7 +102,7 @@ export function Procurement() {
             {TABS.map((t) => (
               <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'on' : ''} onClick={() => set('tab', t.id === 'master' ? null : t.id)}>
                 {t.label}
-                {t.id === 'pending' && d.totals.pending ? ` (${d.totals.pending})` : ''}
+                {t.id === 'pending' && d?.totals.pending ? ` (${d.totals.pending})` : ''}
               </button>
             ))}
           </div>
