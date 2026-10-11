@@ -1,11 +1,12 @@
 // Mutations used across the UI. Each one reports failures with a toast,
 // refreshes affected views, and (for moves) offers Undo.
 
-import { DEFAULT_PERMISSIONS, REASON_STATUSES, ASSIGNED_STATUSES, STATUS_LABEL, allows, parseDuration, type RolePermissions, type Status, type Ticket, type User } from '@board/shared';
+import { CHECKLIST_STATUSES, DEFAULT_PERMISSIONS, REASON_STATUSES, ASSIGNED_STATUSES, STATUS_LABEL, allows, parseDuration, type RolePermissions, type Status, type Ticket, type User } from '@board/shared';
 import { ApiError, newKey, patch, post } from './api.ts';
 import { ask } from './dialogs.ts';
 import { TICKET_KEYS, invalidate, setCached } from './store.ts';
 import { toast, toastError } from './toasts.ts';
+import { setJob } from './router.ts';
 
 // the current role rules (Admin → Roles), set by the shell when /api/meta loads
 let perms: RolePermissions = DEFAULT_PERMISSIONS;
@@ -85,7 +86,19 @@ export async function moveTicket(
   let status = target;
   let reason = opts.reason;
   let cur = t;
+  const guarded = (s: Status) => (CHECKLIST_STATUSES as readonly string[]).includes(s);
   try {
+    // a release checklist set to "warn" asks first (decision #38); "block" is refused by the board below
+    const c = t.checklist;
+    if (c && c.mode === 'warn' && c.done < c.total && guarded(target) && !guarded(t.status)) {
+      const ok = await ask({
+        type: 'confirm',
+        title: `${t.job_number}'s release checklist isn't finished`,
+        body: `${c.total - c.done} of ${c.total} items aren't ticked. Move it to ${STATUS_LABEL[target]} anyway?`,
+        confirm: `Move to ${STATUS_LABEL[target]}`,
+      });
+      if (!ok) return null;
+    }
     if (REASON_STATUSES.includes(target) && reason === undefined && !(REASON_STATUSES.includes(t.status) && t.waiting_for)) {
       const ans = await ask({ type: 'reason', ticket: t, status: target as 'waiting' | 'blocked', initial: t.waiting_for });
       if (!ans) return null;
@@ -123,6 +136,10 @@ export async function moveTicket(
     if (!opts.quiet && t.status !== 'done') offerActualTime(me, res.ticket);
     return res.ticket;
   } catch (err) {
+    if (err instanceof ApiError && err.code === 'checklist_incomplete') {
+      toast(err.message, { kind: 'error', timeout: 12_000, action: { label: 'Open the checklist', run: () => setJob(t.id) } });
+      return null;
+    }
     handleConflict(err);
     return null;
   }

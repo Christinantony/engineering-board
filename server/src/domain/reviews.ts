@@ -279,6 +279,7 @@ function reviewerTicket(t: Ticket): Ticket {
     tags: [],
     overdue: false,
     due_today: false,
+    checklist: null,
   };
 }
 

@@ -62,6 +62,7 @@ Signed scans are only ever read from the PDF someone attaches; the board stores 
 ## Job types and tags
 
 - **Job types** (CAD Modification, Drawing, FEA…) can be added, renamed and reordered (the order here is the order in every menu). **Retire** hides one from new jobs but keeps it on old ones; **Bring back** undoes that.
+- **Release checklists**: **Checklist** next to a job type lists what must be checked on every job of that type before it goes to **Review** or **Done**, for example *Title block filled in*, *BOM checked against the model*, *Tolerances and finish specified*. Add items, reword them, put them in order, and **Retire** ones no longer needed (they are never deleted, so old jobs' history keeps their wording). Choose what happens when something isn't ticked: **Refuse Review and Done until every item is ticked** (the default), or **Ask first, then allow the move**. A type without items has no checklist. The checklist also applies when drawings are submitted for board review, since that moves the job to Review; the move to Done after the last signature is not checked again.
 - **Tags** are created by people as they type them. Under **Admin → Tags** you can rename a tag; renaming it to an existing name merges the two. Only unused tags can be deleted.
 
 ## Import jobs from Excel

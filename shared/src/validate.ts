@@ -296,7 +296,21 @@ export const jobTypeSchema = v.object({
   name: v.string({ min: 1, max: 60 }),
   sort_order: v.optional(v.int({ min: 0, max: 10_000 })),
   active: v.optional(v.bool()),
+  checklist_mode: v.optional(v.enum(['block', 'warn'] as const)),
 });
+
+// ---------- Release checklists (decision #38) ----------
+export const checklistItemSchema = v.object({
+  text: v.string({ min: 1, max: 200 }),
+  sort_order: v.optional(v.int({ min: 0, max: 100_000 })),
+  active: v.optional(v.bool()),
+});
+export const checklistItemEditSchema = v.object({
+  text: v.optional(v.string({ min: 1, max: 200 })),
+  sort_order: v.optional(v.int({ min: 0, max: 100_000 })),
+  active: v.optional(v.bool()),
+});
+export const checkSchema = v.object({ item_id: v.int({ min: 1 }), checked: v.bool() });
 
 // ---------- Drawing review ----------
 

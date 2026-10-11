@@ -475,4 +475,30 @@ ALTER TABLE review_drawings ADD COLUMN revision TEXT CHECK (revision IS NULL OR 
 CREATE INDEX idx_review_drawings_identifier ON review_drawings(identifier);
 `,
   },
+  {
+    id: 12,
+    name: 'release checklists',
+    sql: /* sql */ `
+-- Release checklists (decision #38): the admin lists what must be checked for
+-- each job type before a job goes to Review or Done. "block" refuses the move
+-- until every item is ticked; "warn" only asks.
+ALTER TABLE job_types ADD COLUMN checklist_mode TEXT NOT NULL DEFAULT 'block' CHECK (checklist_mode IN ('block','warn'));
+CREATE TABLE checklist_items (
+  id          INTEGER PRIMARY KEY,
+  job_type_id INTEGER NOT NULL REFERENCES job_types(id),
+  text        TEXT NOT NULL CHECK (length(text) BETWEEN 1 AND 200),
+  sort_order  INTEGER NOT NULL DEFAULT 0,
+  active      INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0,1))
+);
+CREATE INDEX idx_checklist_items_type ON checklist_items(job_type_id, active, sort_order);
+-- A tick on a job: who and when. Unticking deletes the row; the history keeps both.
+CREATE TABLE ticket_checks (
+  ticket_id  INTEGER NOT NULL REFERENCES tickets(id),
+  item_id    INTEGER NOT NULL REFERENCES checklist_items(id),
+  checked_by INTEGER REFERENCES users(id),
+  checked_at TEXT NOT NULL,
+  PRIMARY KEY (ticket_id, item_id)
+);
+`,
+  },
 ];

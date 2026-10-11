@@ -8,6 +8,8 @@ import {
   STATUS_LABEL,
   allows,
   canChangeJob,
+  checkSchema,
+  CHECKLIST_STATUSES,
   commentSchema,
   createTicketSchema,
   createBoardTicketSchema,
@@ -16,6 +18,7 @@ import {
   rankSchema,
   updateTicketSchema,
   type Activity,
+  type JobChecklist,
   type Status,
   type Ticket,
   type User,
@@ -29,12 +32,13 @@ import { boardScope, bottomRank, myScope, rankFor } from './rank.ts';
 import { reindexTicket, searchCondition, rankExpr } from './search.ts';
 import { getUser } from './users.ts';
 import { projectIdsFor, requireProject, setTicketProject } from './projects.ts';
+import { checklistSummaries, jobChecklist, requireChecklistDone } from './checklists.ts';
 
 // ---------------------------------------------------------------------------
 // Row mapping
 // ---------------------------------------------------------------------------
 
-type Row = Omit<Ticket, 'archived' | 'is_demo' | 'tags' | 'overdue' | 'due_today' | 'project_id'> & { archived: number; is_demo: number };
+type Row = Omit<Ticket, 'archived' | 'is_demo' | 'tags' | 'overdue' | 'due_today' | 'project_id' | 'checklist'> & { archived: number; is_demo: number };
 
 function tagsFor(ctx: Ctx, ids: number[]): Map<number, string[]> {
   const map = new Map<number, string[]>();
@@ -60,6 +64,7 @@ function tagsFor(ctx: Ctx, ids: number[]): Map<number, string[]> {
 function toTickets(ctx: Ctx, rows: Row[]): Ticket[] {
   const tags = tagsFor(ctx, rows.map((r) => r.id));
   const projects = projectIdsFor(ctx, rows.map((r) => r.id));
+  const checklists = checklistSummaries(ctx, rows);
   const now = nowIso(ctx);
   const today = localDate(ctx.now().getTime(), ctx.tz);
   return rows.map((r) => {
@@ -72,6 +77,7 @@ function toTickets(ctx: Ctx, rows: Row[]): Ticket[] {
       project_id: projects.get(r.id) ?? null,
       overdue: open && r.due_at != null && now > r.due_at,
       due_today: open && r.due_date === today,
+      checklist: checklists.get(r.id) ?? null,
     };
   });
 }
@@ -453,6 +459,10 @@ export function moveTicket(ctx: Ctx, actor: User, id: number, input: unknown, op
     const from = row.status;
     const now = nowIso(ctx);
     const reason = (data.reason ?? '').trim();
+    // the release checklist guards the way into Review and Done (decision #38);
+    // the board's own move after the last signature has passed review already
+    const guarded = (s: string) => (CHECKLIST_STATUSES as readonly string[]).includes(s);
+    if (guarded(target) && !guarded(from) && !opts.byReview) requireChecklistDone(ctx, id, row.job_number, target);
 
     if (target !== from) {
       // assignment requirements
@@ -805,4 +815,36 @@ export function listTickets(ctx: Ctx, f: TicketFilters = {}): { tickets: Ticket[
 /** Tickets for a raw SQL condition (used by the operational views). */
 export function ticketsWhere(ctx: Ctx, whereSql: string, order: string, ...params: Param[]): Ticket[] {
   return toTickets(ctx, all<Row>(ctx.db, `SELECT t.* FROM tickets t WHERE ${whereSql} ORDER BY ${order}`, ...params));
+}
+
+// ---------------------------------------------------------------------------
+// Release checklist ticks (decision #38)
+// ---------------------------------------------------------------------------
+
+/** The job's checklist with who ticked what, or null when its type has none. */
+export function ticketChecklist(ctx: Ctx, id: number): JobChecklist | null {
+  return jobChecklist(ctx, id);
+}
+
+/** Tick or untick one item. Anyone who may change the job may tick; each tick goes in the history. */
+export function setCheck(ctx: Ctx, actor: User, id: number, input: unknown): JobChecklist | null {
+  const { item_id, checked } = checkSchema(input);
+  return tx(ctx.db, () => {
+    const row = getRow(ctx, id);
+    requireChange(ctx, actor, row);
+    if (row.archived) throw conflict(`${row.job_number} is archived. Restore it first.`);
+    const item = get<{ text: string; job_type_id: number; active: number }>(ctx.db, 'SELECT text, job_type_id, active FROM checklist_items WHERE id = ?', item_id);
+    if (!item || item.job_type_id !== row.job_type_id || !item.active) throw badRequest("That item isn't on this job's checklist.");
+    const has = !!get(ctx.db, 'SELECT 1 FROM ticket_checks WHERE ticket_id = ? AND item_id = ?', id, item_id);
+    if (checked && !has) {
+      run(ctx.db, 'INSERT INTO ticket_checks (ticket_id, item_id, checked_by, checked_at) VALUES (?, ?, ?, ?)', id, item_id, actor.id, nowIso(ctx));
+      log(ctx, id, actor.id, 'checklist', null, 'ticked', item.text);
+    } else if (!checked && has) {
+      run(ctx.db, 'DELETE FROM ticket_checks WHERE ticket_id = ? AND item_id = ?', id, item_id);
+      log(ctx, id, actor.id, 'checklist', null, 'unticked', item.text);
+    } else return jobChecklist(ctx, id);
+    run(ctx.db, 'UPDATE tickets SET updated_at = ? WHERE id = ?', nowIso(ctx), id);
+    emitTicket(ctx, id, actor.id);
+    return jobChecklist(ctx, id);
+  });
 }

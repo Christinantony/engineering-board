@@ -229,7 +229,8 @@ export function startLive(meId?: number, loadedVersion?: string) {
         scheduleRefresh();
       } else if (e.type === 'presence') invalidate('/api/presence');
       else if (e.type === 'users') invalidate((k) => k.startsWith('/api/users') || k.startsWith('/api/admin/users') || TICKET_KEYS(k));
-      else if (e.type === 'job_types') invalidate('/api/job-types');
+      // a job type's checklist changes the cards of its jobs too (decision #38)
+      else if (e.type === 'job_types') invalidate((k) => k.startsWith('/api/job-types') || TICKET_KEYS(k));
       else if (e.type === 'projects') invalidate('/api/projects');
       else if (e.type === 'permissions') invalidate((k) => k === '/api/meta' || k.startsWith('/api/admin/permissions'));
       else if (e.type === 'tools') invalidate((k) => k.startsWith('/api/tools'));

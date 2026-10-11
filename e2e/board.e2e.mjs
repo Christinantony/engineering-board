@@ -1234,3 +1234,38 @@ test('weekly summary: from Reports, a week at a time, ready to print on one page
   await p.locator('.weekly-job').first().click();
   await p.waitForSelector('.panel-title');
 });
+
+test('release checklists: the admin adds one, it blocks Done until ticked in the job, and "warn" asks instead', async () => {
+  const c = await login('Christin');
+  await openAdmin(c, 'job-types');
+  await c.click('.admin-list li:has(input[value="Design Calculation"]) button:has-text("Checklist")');
+  await c.fill('input[aria-label="New checklist item for Design Calculation"]', 'Inputs and units checked');
+  await c.click('[data-testid="checklist-editor-Design Calculation"] button:has-text("Add item")');
+  await c.waitForSelector('input[aria-label="Checklist item: Inputs and units checked"]');
+
+  const s = await api('POST', '/api/session', { user_id: 2, password: PASSWORD }); // Paul
+  const types = (await (await fetch(BASE + '/api/job-types', { headers: { cookie: s.cookie } })).json()).job_types;
+  const calc = types.find((t) => t.name === 'Design Calculation').id;
+  const job = (await (await api('POST', '/api/tickets', { title: 'Shaft key calc', project_id: PROJECT_ID, claim: true, job_type_id: calc }, s.cookie)).r.json()).ticket;
+  const p = await login('Paul');
+  await p.waitForSelector(`.card:has-text("Shaft key calc") [data-testid=checklist-chip]:has-text("0/1")`);
+  await p.goto(`${BASE}/board?job=${job.id}`);
+  await p.waitForSelector('[data-testid=checklist]');
+  await p.click('.panel button:has-text("Mark done")');
+  await p.waitForSelector('.toast:has-text("tick its release checklist first")');
+  assert.equal((await (await fetch(`${BASE}/api/tickets/${job.id}`, { headers: { cookie: s.cookie } })).json()).ticket.status, 'claimed');
+  await p.click('[data-testid=checklist] label:has-text("Inputs and units checked") input');
+  await p.waitForSelector('[data-testid=checklist]:has-text("1 of 1 ticked")');
+  await p.click('.panel button:has-text("Mark done")');
+  await p.waitForSelector(`.toast:has-text("${job.job_number} moved to Done")`);
+
+  // "warn": the board asks, and the move goes ahead once confirmed
+  await c.selectOption('select[aria-label="When Design Calculation\'s checklist isn\'t finished"]', 'warn');
+  const job2 = (await (await api('POST', '/api/tickets', { title: 'Bearing life calc', project_id: PROJECT_ID, claim: true, job_type_id: calc }, s.cookie)).r.json()).ticket;
+  await p.goto(`${BASE}/board?job=${job2.id}`);
+  await p.waitForSelector('[data-testid=checklist]:has-text("asked before Review or Done")');
+  await p.click('.panel button:has-text("Mark done")');
+  await p.waitForSelector(`.dialog:has-text("release checklist isn't finished")`);
+  await p.click('.dialog button:has-text("Move to Done")');
+  await p.waitForSelector(`.toast:has-text("${job2.job_number} moved to Done")`);
+});

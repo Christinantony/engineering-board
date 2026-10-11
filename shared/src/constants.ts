@@ -143,7 +143,26 @@ export interface JobType {
   name: string;
   sort_order: number;
   active: boolean;
+  /** Release checklist (decision #38): "block" refuses Review and Done until every item is ticked; "warn" asks. */
+  checklist_mode: ChecklistMode;
+  /** The checklist's items, active first in order (retired ones kept for the admin). */
+  checklist: ChecklistItem[];
 }
+
+export type ChecklistMode = 'block' | 'warn';
+export interface ChecklistItem {
+  id: number;
+  text: string;
+  sort_order: number;
+  active: boolean;
+}
+/** A job's checklist with its ticks. */
+export interface JobChecklist {
+  mode: ChecklistMode;
+  items: { id: number; text: string; checked_by: number | null; checked_at: string | null }[];
+}
+/** The statuses a job's release checklist guards. */
+export const CHECKLIST_STATUSES = ['review', 'done'] as const;
 
 /** A project jobs belong to, added by the team when it is needed (decision #30). */
 export interface Project {
@@ -194,6 +213,8 @@ export interface Ticket {
   // derived
   overdue: boolean;
   due_today: boolean;
+  /** The release checklist's progress, when the job's type has one (decision #38). */
+  checklist: { done: number; total: number; mode: ChecklistMode } | null;
 }
 
 export interface Activity {

@@ -61,7 +61,8 @@ Tickets carry `project_id` (null for jobs from before projects, or imported with
 | POST | `/api/tickets` | `{title, project_id, description?, priority?, requester?, job_type_id?, estimate_minutes?, due_date?, due_time?, reference?, file_location?, notes?, tags?, parent_job_id?, claim?, assigned_to?}`. `project_id` is required (400 `validation` with path `project_id` otherwise). Send an `Idempotency-Key` header so retries never duplicate. Returns 201, or 200 with `replayed: true`. |
 | GET | `/api/tickets/:id` | `{ticket, activity}` |
 | PATCH | `/api/tickets/:id` | `{version, ...fields}`. A stale `version` returns 409 with `current`. |
-| POST | `/api/tickets/:id/move` | `{status, from_status?, before_id?, after_id?, reason?}`. Handles drag and drop: status change plus position. |
+| POST | `/api/tickets/:id/move` | `{status, from_status?, before_id?, after_id?, reason?}`. Handles drag and drop: status change plus position. Moving into Review or Done from another column answers 409 `checklist_incomplete` with `missing: [{id, text}]` while a blocking release checklist has unticked items (decision #38). |
+| GET / PUT | `/api/tickets/:id/checklist` | GET `{checklist: {mode, items: [{id, text, checked_by, checked_at}]} \| null}`. PUT `{item_id, checked}` ticks or unticks one item (same permission as changing the job) and returns the checklist. Every ticket carries `checklist: {done, total, mode} \| null`. |
 | POST | `/api/tickets/:id/claim` | Atomic. Exactly one engineer wins. |
 | POST | `/api/tickets/:id/release` | Returns the job to the inbox, unassigned. |
 | POST | `/api/tickets/:id/my-rank` | `{before_id?, after_id?}`. Reorders your own My Work list. |
@@ -171,7 +172,8 @@ What each role may do with jobs is a setting (decision #31): `{engineer, manager
 | POST/PATCH | `/api/admin/materials`, `/api/admin/materials/:id` `{name?, sort_order?, active?}` |
 | POST/PATCH/DELETE | `/api/admin/sheet-sizes`, `/api/admin/sheet-sizes/:id` `{material_id, length, width}` |
 | PUT | `/api/admin/tools/sheet-settings` `{kerf (mm), margin (mm), rotate}` |
-| POST | `/api/admin/job-types`; PATCH `/api/admin/job-types/:id` |
+| POST | `/api/admin/job-types`; PATCH `/api/admin/job-types/:id` `{name?, sort_order?, active?, checklist_mode?: "block"\|"warn"}`. Job types carry `checklist_mode` and `checklist: [{id, text, sort_order, active}]` (decision #38). |
+| POST | `/api/admin/job-types/:id/checklist` `{text, sort_order?}`; PATCH `/api/admin/checklist-items/:id` `{text?, sort_order?, active?}`. Items are retired, never deleted. |
 | POST/DELETE | `/api/admin/demo`: load or clear the demo jobs |
 | GET | `/api/admin/info`: database size and counts, backup folder, list of backups |
 | GET | `/api/admin/health`: `{level, checks: [{id, level, title, detail}], host, database, review_files, backups, disks}`. `level` is `ok`, `warn` or `bad`, the worst of the checks; check ids are `backups`, `backup_disk`, `disk_space`, `database`, `admin_pin`. `disks.same_disk` is null when it can't be told. |

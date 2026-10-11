@@ -1,19 +1,29 @@
-import type { JobType } from '@board/shared';
+import type { ChecklistMode, JobType } from '@board/shared';
 import { jobTypeSchema } from '@board/shared';
 import { all, get, run, tx } from '../db/connection.ts';
 import { bool, conflict, int, notFound, type Ctx } from '../lib/core.ts';
 import { reindexWhere } from './search.ts';
+import { itemsByType } from './checklists.ts';
 
 interface Row {
   id: number;
   name: string;
   sort_order: number;
   active: number;
+  checklist_mode: ChecklistMode;
 }
-const toJobType = (r: Row): JobType => ({ id: r.id, name: r.name, sort_order: r.sort_order, active: bool(r.active) });
+const toJobType = (ctx: Ctx, r: Row, items = itemsByType(ctx)): JobType => ({
+  id: r.id,
+  name: r.name,
+  sort_order: r.sort_order,
+  active: bool(r.active),
+  checklist_mode: r.checklist_mode,
+  checklist: items.get(r.id) ?? [],
+});
 
 export function listJobTypes(ctx: Ctx): JobType[] {
-  return all<Row>(ctx.db, 'SELECT * FROM job_types ORDER BY active DESC, sort_order, name').map(toJobType);
+  const items = itemsByType(ctx);
+  return all<Row>(ctx.db, 'SELECT * FROM job_types ORDER BY active DESC, sort_order, name').map((r) => toJobType(ctx, r, items));
 }
 
 export function createJobType(ctx: Ctx, input: unknown): JobType {
@@ -29,7 +39,7 @@ export function createJobType(ctx: Ctx, input: unknown): JobType {
       int(data.active ?? true),
     );
     ctx.events.emit({ type: 'job_types' });
-    return toJobType(get<Row>(ctx.db, 'SELECT * FROM job_types WHERE id = ?', Number(res.lastInsertRowid))!);
+    return toJobType(ctx, get<Row>(ctx.db, 'SELECT * FROM job_types WHERE id = ?', Number(res.lastInsertRowid))!);
   });
 }
 
@@ -41,14 +51,15 @@ export function updateJobType(ctx: Ctx, id: number, input: unknown): JobType {
     if (get(ctx.db, 'SELECT 1 FROM job_types WHERE name = ? AND id <> ?', data.name, id)) throw conflict(`Job type "${data.name}" already exists`);
     run(
       ctx.db,
-      'UPDATE job_types SET name = ?, sort_order = ?, active = ? WHERE id = ?',
+      'UPDATE job_types SET name = ?, sort_order = ?, active = ?, checklist_mode = ? WHERE id = ?',
       data.name,
       data.sort_order ?? cur.sort_order,
       int(data.active ?? bool(cur.active)),
+      data.checklist_mode ?? cur.checklist_mode,
       id,
     );
     if (data.name !== cur.name) reindexWhere(ctx, 'job_type_id', id);
     ctx.events.emit({ type: 'job_types' });
-    return toJobType(get<Row>(ctx.db, 'SELECT * FROM job_types WHERE id = ?', id)!);
+    return toJobType(ctx, get<Row>(ctx.db, 'SELECT * FROM job_types WHERE id = ?', id)!);
   });
 }
