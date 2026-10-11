@@ -44,6 +44,7 @@ import {
 } from './domain/auth.ts';
 import { createUser, getUser, listUsers, requireUser, updateUser } from './domain/users.ts';
 import { createJobType, listJobTypes, updateJobType } from './domain/jobTypes.ts';
+import { createItem, updateItem } from './domain/checklists.ts';
 import { createProject, listProjects } from './domain/projects.ts';
 import { getPermissions, requireCapability, setPermissions } from './domain/permissions.ts';
 import { WordQueue, cleanWordName, convertWithWord, probeWord, type WordConverter, type WordStatus } from './domain/wordToPdf.ts';
@@ -70,6 +71,8 @@ import {
   releaseTicket,
   restoreTicket,
   setMyRank,
+  setCheck,
+  ticketChecklist,
   ticketActivity,
   activityPage,
   updateTicket,
@@ -421,6 +424,9 @@ export function createApp(opts: AppOptions): App {
   worker('POST', '/api/tickets/:id/archive', (req, user) => ({ ticket: archiveTicket(ctx, user, id(req)) }));
   worker('POST', '/api/tickets/:id/restore', (req, user) => ({ ticket: restoreTicket(ctx, user, id(req)) }));
   board('GET', '/api/tickets/:id/activity', (req) => ({ activity: ticketActivity(ctx, id(req)) }));
+  // release checklist (decision #38)
+  board('GET', '/api/tickets/:id/checklist', (req) => ({ checklist: ticketChecklist(ctx, id(req)) }));
+  worker('PUT', '/api/tickets/:id/checklist', (req, user) => ({ checklist: setCheck(ctx, user, id(req), req.body ?? {}) }));
 
   // ---- drawing review ----
   const did = (req: Request) => v.int({ min: 1 })(req.params.id, 'id');
@@ -627,6 +633,8 @@ export function createApp(opts: AppOptions): App {
   admin('PUT', '/api/admin/tools/sheet-settings', (req) => ({ settings: setSheetSettings(ctx, req.body ?? {}) }));
   admin('POST', '/api/admin/job-types', (req) => new Reply(201, { job_type: createJobType(ctx, req.body ?? {}) }));
   admin('PATCH', '/api/admin/job-types/:id', (req) => ({ job_type: updateJobType(ctx, id(req), req.body ?? {}) }));
+  admin('POST', '/api/admin/job-types/:id/checklist', (req) => new Reply(201, { item: createItem(ctx, id(req), req.body ?? {}) }));
+  admin('PATCH', '/api/admin/checklist-items/:id', (req) => ({ item: updateItem(ctx, id(req), req.body ?? {}) }));
   admin('POST', '/api/admin/demo', () => {
     if (hasDemoData(ctx)) throw new HttpError(409, 'conflict', 'Demo data is already loaded.');
     return { created: seedDemo(ctx) };

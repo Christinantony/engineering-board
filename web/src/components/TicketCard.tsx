@@ -74,6 +74,15 @@ export function TicketCard({ t, dragging, ghost, onPointerDown, onOpen }: Props)
             {due}
           </span>
         )}
+        {t.checklist && t.status !== 'done' && t.status !== 'cancelled' && (
+          <span
+            className={`chip checklist-chip${t.checklist.done === t.checklist.total ? ' complete' : ''}`}
+            title={`Release checklist: ${t.checklist.done} of ${t.checklist.total} ticked`}
+            data-testid="checklist-chip"
+          >
+            <span aria-hidden="true">{t.checklist.done === t.checklist.total ? '☑' : '☐'}</span> {t.checklist.done}/{t.checklist.total}
+          </span>
+        )}
       </div>
 
       {(jobType(t.job_type_id) || (t.status === 'claimed' && t.claimed_at) || t.status === 'done') && (

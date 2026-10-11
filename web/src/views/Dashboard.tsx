@@ -64,6 +64,8 @@ export function activitySentence(a: Activity): string {
       return `${who} handed ${a.body ?? 'a drawing'} to ${a.to_value} for review`;
     case 'review_signed':
       return `${who} recorded the physical signature of ${a.to_value}`;
+    case 'checklist':
+      return `${who} ${a.to_value === 'ticked' ? 'ticked' : 'unticked'} “${a.body}”`;
     default:
       return `${who}: ${a.kind}`;
   }

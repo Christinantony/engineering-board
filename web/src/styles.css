@@ -5022,3 +5022,94 @@ fieldset.panel-editable {
     break-inside: avoid;
   }
 }
+
+/* ======================= Release checklists (1.7.0) ======================= */
+.checklist-chip {
+  font-variant-numeric: tabular-nums;
+}
+.checklist-chip.complete {
+  background: var(--success-bg);
+  color: var(--success-ink);
+}
+.panel-checklist {
+  margin: 12px 0 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--warn-line);
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  background: var(--warn-bg);
+}
+.panel-checklist.complete {
+  border-color: var(--success-line);
+  background: var(--success-bg);
+}
+.panel-checklist header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin-bottom: 6px;
+}
+.panel-checklist ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.panel-checklist label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  cursor: pointer;
+  color: var(--ink);
+}
+.panel-checklist label input {
+  margin: 0;
+  transform: translateY(1px);
+}
+.panel-checklist label.checked > span:first-of-type {
+  color: var(--ink-2);
+}
+.admin-list li.open {
+  grid-template-columns: minmax(180px, 360px) auto auto 1fr;
+}
+.jt-buttons {
+  display: inline-flex;
+  gap: 4px;
+}
+.checklist-editor {
+  grid-column: 1 / -1;
+  margin: 4px 0 12px 16px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--line-strong);
+  background: var(--panel);
+  border-radius: var(--radius);
+}
+.checklist-mode {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+.checklist-mode select {
+  width: auto;
+  font-weight: 400;
+}
+.checklist-items {
+  margin: 0 0 8px;
+  padding-left: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.checklist-items li {
+  display: grid;
+  grid-template-columns: minmax(200px, 480px) auto auto 1fr;
+  align-items: center;
+  gap: 8px;
+}

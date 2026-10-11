@@ -120,7 +120,7 @@ export function seedDemo(ctx: Ctx): number {
       claimTicket(ctx, s.owner, ticket.id);
       let status = 'claimed';
       for (const step of s.path ?? []) {
-        moveTicket(ctx, s.owner, ticket.id, { status: step, from_status: status, reason: s.reason });
+        moveTicket(ctx, s.owner, ticket.id, { status: step, from_status: status, reason: s.reason }, { skipChecklist: true });
         status = step;
       }
       if (s.comment) addComment(ctx, s.owner, ticket.id, { body: s.comment });
@@ -154,6 +154,7 @@ export function clearDemo(ctx: Ctx): number {
     run(ctx.db, `DELETE FROM projects WHERE is_demo = 1 AND id NOT IN (SELECT project_id FROM ticket_projects)`);
     run(ctx.db, `DELETE FROM activity WHERE ticket_id IN (${list})`);
     run(ctx.db, `DELETE FROM ticket_tags WHERE ticket_id IN (${list})`);
+    run(ctx.db, `DELETE FROM ticket_checks WHERE ticket_id IN (${list})`);
     run(ctx.db, `DELETE FROM idempotency WHERE ticket_id IN (${list})`);
     run(ctx.db, `DELETE FROM tickets WHERE id IN (${list})`);
     run(ctx.db, `DELETE FROM tags WHERE id NOT IN (SELECT tag_id FROM ticket_tags)`);

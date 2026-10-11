@@ -163,6 +163,7 @@ export const UNDO: Record<number, string> = {
   9: 'DROP TABLE ticket_projects; DROP TABLE projects;',
   10: 'DROP TABLE sheet_sizes; DROP TABLE materials;',
   11: 'DROP INDEX idx_review_drawings_identifier; ALTER TABLE review_drawings DROP COLUMN revision;',
+  12: 'DROP TABLE ticket_checks; DROP TABLE checklist_items; ALTER TABLE job_types DROP COLUMN checklist_mode;',
 };
 
 /** Take a database back to schema `to`, as the version that wrote it would have left it. */

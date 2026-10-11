@@ -2,16 +2,17 @@
 // The board stays visible behind it.
 
 import { useEffect, useRef, useState } from 'react';
-import { ESTIMATE_BUCKETS, PRIORITIES, STATUS_LABEL, compareToEstimate, estimateLabel, formatDuration, parseDuration, type Activity, type ReviewWorkspace, type Status, type Ticket } from '@board/shared';
+import { ESTIMATE_BUCKETS, PRIORITIES, STATUS_LABEL, compareToEstimate, estimateLabel, formatDuration, parseDuration, type Activity, type JobChecklist, type ReviewWorkspace, type Status, type Ticket } from '@board/shared';
 import { useApp } from '../context.ts';
 import { addComment, archiveTicket, claimTicket, moveTicket, releaseTicket, updateTicket } from '../lib/actions.ts';
 import { copyText } from '../lib/clipboard.ts';
 import { ask } from '../lib/dialogs.ts';
 import { clock, dueLabel, when } from '../lib/format.ts';
-import { useQuery } from '../lib/store.ts';
+import { TICKET_KEYS, invalidate, useQuery } from '../lib/store.ts';
+import { put } from '../lib/api.ts';
 import { navigate } from '../lib/router.ts';
 import { ProjectPicker } from './ProjectPicker.tsx';
-import { toast } from '../lib/toasts.ts';
+import { toast, toastError } from '../lib/toasts.ts';
 import { Badge, ErrorBox, PRIORITY_TEXT, Spinner } from './bits.tsx';
 import { AlsoViewing, useAnnounceViewing } from './Collab.tsx';
 
@@ -341,6 +342,7 @@ function PanelContent({ t, activity, onClose }: { t: Ticket; activity: Activity[
       )}
 
       </fieldset>
+      {t.checklist && <Checklist t={t} />}
       <ReviewSummary t={t} />
 
       <div className="panel-actions">
@@ -736,6 +738,13 @@ function ActivityItem({ a }: { a: Activity }) {
         </>
       );
       break;
+    case 'checklist':
+      text = (
+        <>
+          {who} {a.to_value === 'ticked' ? 'ticked' : 'unticked'} <strong>{a.body}</strong>
+        </>
+      );
+      break;
     case 'imported':
       text = (
         <>
@@ -782,5 +791,54 @@ function EstimateOutcome({ estimate, actual }: { estimate: number; actual: numbe
     <span className={`estimate-outcome outcome-${o}`} data-testid="estimate-outcome">
       {o === 'within' ? `within the ${label} estimate` : o === 'longer' ? `longer than the ${label} estimate` : `shorter than the ${label} estimate`}
     </span>
+  );
+}
+
+/** The job's release checklist (decision #38): tick each item before Review or Done. */
+function Checklist({ t }: { t: Ticket }) {
+  const { user, canChange } = useApp();
+  const q = useQuery<{ checklist: JobChecklist | null }>(`/api/tickets/${t.id}/checklist`);
+  const [busy, setBusy] = useState<number | null>(null);
+  const c = q.data?.checklist;
+  if (!c) return null;
+  const done = c.items.filter((i) => i.checked_at).length;
+  const editable = canChange(t) && !t.archived;
+  const toggle = async (itemId: number, checked: boolean) => {
+    setBusy(itemId);
+    try {
+      await put(`/api/tickets/${t.id}/checklist`, { item_id: itemId, checked });
+      invalidate((k) => k.startsWith(`/api/tickets/${t.id}`) || TICKET_KEYS(k));
+    } catch (e) {
+      toastError(e);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const complete = done === c.items.length;
+  return (
+    <section className={`panel-checklist${complete ? ' complete' : ''}`} data-testid="checklist" id="checklist">
+      <header>
+        <span className="field-label">Release checklist</span>
+        <span className="muted small">
+          {done} of {c.items.length} ticked
+          {!complete && (c.mode === 'block' ? ' · needed before Review or Done' : ' · asked before Review or Done')}
+        </span>
+      </header>
+      <ul>
+        {c.items.map((i) => (
+          <li key={i.id}>
+            <label className={i.checked_at ? 'checked' : ''}>
+              <input type="checkbox" checked={!!i.checked_at} disabled={!editable || busy === i.id} onChange={(e: any) => void toggle(i.id, e.target.checked)} />
+              <span>{i.text}</span>
+              {i.checked_at && (
+                <span className="muted small" title={when(i.checked_at)}>
+                  {user(i.checked_by)?.name ?? 'someone'}, {when(i.checked_at)}
+                </span>
+              )}
+            </label>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
