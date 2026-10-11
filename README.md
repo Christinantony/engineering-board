@@ -2,13 +2,13 @@
 
 ### The workboard for the mechanical design team
 
-*Catalogue edition, version 1.6.0*
+*Catalogue edition, version 1.7.0*
 
 One shared board for every design job: who is on it, what it is waiting for, when it is due and how it ended. It runs on a single PC on the office network. Everyone else opens it in a web browser.
 
 ![The board: six columns from Inbox to Done, with the demo jobs](assets/screenshots/board.png)
 
-*Every picture in this file is a real screenshot of version 1.5.0 running with its demo data, taken in Chromium by `scripts/screenshots.mjs`.*
+*Every picture in this file is a real screenshot of version 1.7.0 running with its demo data, taken in Chromium by `scripts/screenshots.mjs`.*
 
 | | |
 |---|---|
@@ -23,11 +23,11 @@ One shared board for every design job: who is on it, what it is waiting for, whe
 
 | Section | What you will find |
 |---|---|
-| [A. The pages](#a-the-pages) | Ten pages, each with its shortcut key |
+| [A. The pages](#a-the-pages) | Every page, with its shortcut key |
 | [B. The job record](#b-the-job-record) | Every field a job carries, and how a job moves |
 | [C. Working together](#c-working-together) | Claiming, live updates, edit merging, notifications |
 | [D. Finding things](#d-finding-things) | Search, filters, export |
-| [E. Administration](#e-administration) | Team, roles, tools data, import, backups, restore, archive |
+| [E. Administration](#e-administration) | Health, team, roles, release checklists, tools data, import, backups, restore, archive |
 | [F. Appearance](#f-appearance) | Three themes, keyboard, phone and tablet |
 | [G. Editions and installation](#g-editions-and-installation) | Windows, Linux, Docker |
 | [H. Specifications](#h-specifications) | Settings, limits, checks |
@@ -43,17 +43,20 @@ Every page has a one-key shortcut. Press <kbd>?</kbd> anywhere for the full list
 
 | Item | Page | Key | What it shows | Use it when |
 |---|---|---|---|---|
-| **A1** | **Board** | <kbd>B</kbd> | Six columns: Inbox, Claimed, In progress, Waiting / blocked, Review, Done. Cards show the job number, title, owner, priority, due date and estimate. | You want to see everything at once and move work along. |
+| **A1** | **Board** | <kbd>B</kbd> | Six columns: Inbox, Claimed, In progress, Waiting / blocked, Review, Done. Cards show the job number, title, owner, priority, due date, estimate and, where the job type has one, how much of the release checklist is ticked (☐ 2/4). | You want to see everything at once and move work along. |
 | **A2** | **Today** | <kbd>T</kbd> | Urgent, overdue, due today, unclaimed, being worked on, waiting, ready for review, finished since yesterday. | You open the board first thing in the morning. |
 | **A3** | **My work** | <kbd>M</kbd> | One engineer's open jobs, in that engineer's own order. Any engineer's list can be viewed. | You are deciding what to do next. |
 | **A4** | **Dashboard** | <kbd>D</kbd> | Six counts (unclaimed, in progress, waiting or blocked, due today, overdue, done today) and recent team activity. | You want the state of the team in ten seconds. |
 | **A5** | **Workload** | <kbd>W</kbd> | Estimated hours per engineer for today, the next 3 days or this week, against an 8-hour reference day. Jobs with no estimate are counted, not guessed. | You are planning who can take more. |
-| **A6** | **Reports** | <kbd>R</kbd> | Jobs completed per day, per engineer and per job type, plus how long jobs take. This and last week, this and last month, last 30 days. | You need numbers for a review meeting. |
+| **A6** | **Reports** | <kbd>R</kbd> | Jobs completed per day, per engineer and per job type, how long jobs take, and **estimates against actual time**: how many finished jobs took about what was estimated, longer or shorter, by job type and by person. This and last week, this and last month, last 30 days. | You need numbers for a review meeting, or want better estimates. |
 | **A7** | **Team activity** | name menu | Every change to every job, newest first. History cannot be edited or deleted. | You want to know who did what, and when. |
 | **A8** | **Drawing review** | <kbd>V</kbd> | Jobs with drawings in board review; a workspace per job with the signed reference and the submitted drawing side by side (independent page, zoom and rotation), revision notes, comments, pass or return, handover and signature. | You check drawings before they are printed and signed. |
 | **A9** | **Projects** | <kbd>P</kbd> | Every project with its open and total jobs, and all of a project's jobs. Projects are added by the team when their first job comes in; none are preset. | You want everything for one project, or to add a new one. |
 | **A10** | **Tools** | <kbd>O</kbd> | Calculators for the team. First: the **sheet calculator**, the team's Sheet Requirement Calculator workbook as a page: per component (material, length, width, number) the parts per sheet in a straight grid with kerf and edge margin, the sheets to buy, parts on the last sheet, utilisation and waste, with the cutting layout drawn to scale. Materials and stock sizes are kept under Admin → Tools. | You are ordering sheet for a job. |
 | **A11** | **PDF tools** | <kbd>O</kbd> → PDF tools | The team's PDF scripts, one tab each: **Stamp** (a diagonal mark across every page, with a live preview of the first page while you adjust text, size, angle, opacity, position and colour), **Negative** (a vector PDF's colour negative, kept vector), **Combine by size** (A4 and A3 files merged into one PDF each) and **Word to PDF** (through Microsoft Word on the host PC). The first three run in your browser; results download singly or as one zip. | You are preparing drawings and documents to send out. |
+| **A12** | **Drawing register** | <kbd>G</kbd>, or Review → Drawing register | Every drawing number that has been through board review, across all jobs: its latest signed revision (when, by whom, which job, the reviewed PDF), what is in review for it now, and its full history. Filters for signed, in review and never signed, by project or text. | Someone asks "what is the latest signed revision of BRK-023, and where is it?" |
+| **A13** | **Weekly summary** | Reports → Weekly summary | One printable A4 page for the review meeting: the week's finished jobs by project and by person, and as of now what is overdue, what is waiting and on what, what is due next week, urgent work nobody has, and drawing review. Week by week. | You prepare the weekly review meeting. |
+| **A14** | **Procurement** | Projects → a project → Procurement | The project's inventory and procurement list: one **master list** typed once (discipline, category, means, final size / spec, quantity, notes), the **assembly checklist** (components and tooling per discipline), **pending procurement**, and a **log** of when each item came into stock and who marked it. Copy another project's list to start; export to Excel. | You are buying and making the parts for a build. |
 
 | | |
 |---|---|
@@ -61,7 +64,7 @@ Every page has a one-key shortcut. Press <kbd>?</kbd> anywhere for the full list
 | **A2 Today** | **A4 Dashboard** |
 | ![Workload: estimated hours per engineer against the 8-hour reference line](assets/screenshots/workload.png) | ![Reports: completed per day, per engineer and per job type](assets/screenshots/reports.png) |
 | **A5 Workload** | **A6 Reports** |
-| ![A job opened from the board: its project in bold above the title on every card, and every field in the side panel, with Copy and Go to location beside the file path](assets/screenshots/job-panel.png) | ![My work: one engineer's open jobs in their own order](assets/screenshots/my-work.png) |
+| ![A job opened from the board: its release checklist at the top with two of four items ticked, its project in bold above the title on every card, and every field in the side panel](assets/screenshots/job-panel.png) | ![My work: one engineer's open jobs in their own order](assets/screenshots/my-work.png) |
 | **A1 Board with a job open** | **A3 My work** |
 | ![Projects: every project with its open and total jobs, and all the jobs of the chosen project](assets/screenshots/projects.png) | ![New job: a title and its project, with "+ Add a project…" for a new one](assets/screenshots/new-job.png) |
 | **A9 Projects** | **New job, with its project** |
@@ -74,9 +77,31 @@ Every page has a one-key shortcut. Press <kbd>?</kbd> anywhere for the full list
 
 ![The cutting layout: sheet 3 of 3 drawn to scale, 16 across × 12 down, parts numbered, unused slots in grey](assets/screenshots/tools-layout.png)
 
+**A11 PDF tools.** The stamp with its live preview: the first page of the first file, stamped as it will be written, redrawn as each setting changes.
+
+![PDF tools: two drawings chosen, the stamp settings, and the live preview of the first page](assets/screenshots/tools-pdf.png)
+
+**A12 Drawing register.** One row per drawing number across jobs, here with SUP-011's history open: Rev A, signed by the reviewer, with its revision notes and the reviewed PDF. BRK-023 Rev C is still in review.
+
+![Drawing register: each drawing number with its latest signed revision, what is in review now, and one drawing's history](assets/screenshots/drawing-register.png)
+
+**A6 Reports: estimates against actual time.** Finished jobs whose actual time fell inside the estimate chosen, took longer or shorter, by job type and by person. The job panel shows what a type of job usually takes under its estimate, and asks for the time when you finish your own job.
+
+![Estimates against actual time: within, longer and shorter by job type and by person, with the middle job's difference](assets/screenshots/reports-estimates.png)
+
+**A13 Weekly summary.** Printed or saved as a PDF, it is the sheet alone on one A4 page.
+
+![Weekly summary: the week's numbers, finished jobs by project, the team, overdue and waiting jobs](assets/screenshots/weekly-summary.png)
+
+**A14 Procurement.** The master list (every cell saves as you leave it; **In stock** records the date, time and who) and the assembly checklist that follows from it.
+
+![Procurement master list: items with discipline, category, means, final size or spec, quantity, in-stock time and notes](assets/screenshots/procurement.png)
+
+![Assembly checklist: components and tooling per discipline, in stock or still to come](assets/screenshots/procurement-checklist.png)
+
 **A8 Drawing review.** The queue, and the workspace with the signed reference on the left and the submitted drawing on the right, each with its own page, zoom and rotation. The open comment blocks **Pass board review** until it is resolved.
 
-![Submitting drawings for board review: the signed reference scan, one single-page PDF per drawing, its number, type and change notes](assets/screenshots/review-submit.png)
+![Submitting drawings for board review: the signed reference scan, one single-page PDF per drawing, its number, revision, type and change notes](assets/screenshots/review-submit.png)
 
 ![Drawing review queue: counts, tabs, and a preview of the submission](assets/screenshots/review-queue.png)
 
@@ -95,7 +120,9 @@ A job needs a title and a project. Everything else can be added as the job devel
 | **Project** | Required for every new job. Chosen from the team's project list, or added there and then (**+ Add a project…**). Shown above the title on every card and job row in its own colour, so the project is read first. A job can move to another project; jobs from before 1.4.0 show as *No project* until one is picked. |
 | **Description** and **notes** | Free text. Edits by two people are merged, see C3. |
 | **Priority** | Urgent, high, normal or low. An urgent job notifies everyone. |
-| **Estimate** | Eight buckets from under 15 minutes to over 2 days. |
+| **Estimate** | Eight buckets from under 15 minutes to over 2 days. Once three jobs of a type have recorded their time, the panel says what that type usually takes. |
+| **Actual time** | Typed as you'd say it: `90`, `1.5h`, `3h 30m`, `1d`. Shown against the estimate (within, longer, shorter) and counted in Reports. Finishing your own job without one asks once. |
+| **Release checklist** | When the admin gives the job type one (E13): the items to tick before Review or Done, each tick with its name and time, kept in the history. |
 | **Due date** | Optional. A date alone becomes overdue after local midnight; a time can be added. |
 | **Owner** | One person whose role may hold jobs (engineers out of the box; see E10), or nobody yet. |
 | **Requester** | Who asked for the work. |
@@ -115,7 +142,7 @@ A job needs a title and a project. Everything else can be added as the job devel
                   Waiting / blocked  (says what it is waiting for)
 ```
 
-Drag a card, press <kbd>Shift</kbd>+<kbd>←</kbd> / <kbd>→</kbd>, or use the right-click menu. A dropped card can be undone from the message that appears. Done jobs leave the board after 7 days and stay searchable for ever. Jobs are never deleted: finished ones can be **archived**, and **restored** from their panel.
+Drag a card, press <kbd>Shift</kbd>+<kbd>←</kbd> / <kbd>→</kbd>, or use the right-click menu. A job whose type has a release checklist can't go into Review or Done until it is ticked (or, if the admin chose so, the board asks first). A dropped card can be undone from the message that appears. Done jobs leave the board after 7 days and stay searchable for ever. Jobs are never deleted: finished ones can be **archived**, and **restored** from their panel.
 
 ### B3. Who may do what
 
@@ -153,7 +180,7 @@ Drawing review: engineers submit drawings, hand each one to one or more reviewer
 | **D1** | **Search** | <kbd>F</kbd> or <kbd>/</kbd>. Matches any part of a word in the job number, title, description, notes, file location, reference and tags: `1042`, `housing` and `\\fileserver\proj` all work. Finished and archived jobs are included. |
 | **D2** | **Filters** | On the board: person, priority, job type, tag, due date, created date. Remembered across reloads. |
 | **D3** | **Export to CSV** | What a search shows, ready for Excel. Opens correctly with accents and guards against formula injection. |
-| **D4** | **Full export** | **Admin → Export:** every job as CSV, or everything with full history as JSON. |
+| **D4** | **Full export** | **Admin → Export:** every job as CSV, or everything with full history as JSON, procurement lists included. |
 
 ![Search for "housing": matches any part of a word, with the same filters as the board and an Export to CSV link](assets/screenshots/search.png)
 
@@ -164,7 +191,7 @@ Behind the admin PIN, unlocked per browser for 12 hours. The PIN starts as `1234
 | Item | Task | Notes |
 |---|---|---|
 | **E1** | **Team** | Add people, set engineer, manager or reviewer, choose a badge colour, mark who sees the Admin menu, deactivate leavers, reset a forgotten password. People are never deleted, so history keeps its authors. |
-| **E2** | **Job types and tags** | Reorder, retire and bring back job types. Rename tags; renaming to an existing tag merges them. |
+| **E2** | **Job types and tags** | Reorder, retire and bring back job types, and give each a release checklist (E13). Rename tags; renaming to an existing tag merges them. |
 | **E3** | **Import from Excel** | Save as CSV UTF-8, choose the file, read the preview, then import. Column names are recognised automatically. Nothing is created until you confirm; rows with errors are skipped and explained; a backup is taken first; the whole file goes in or none of it; importing the same file twice is caught. |
 | **E4** | **Backups** | Automatic: daily, and before every import, restore and upgrade. Kept 30 days, newest 7 always. Each is a complete, verified SQLite file in `data\backups`. Point `backupDir` at a network share or OneDrive so a dead PC does not take them with it. |
 | **E5** | **Restore** | From the list, or from an uploaded `.db` file (64 MiB by default, adjustable). The file is checked and prepared first; if anything fails the original data is put back. The current data is backed up before every restore, so a restore can itself be undone. Nobody is signed out. |
@@ -174,12 +201,18 @@ Behind the admin PIN, unlocked per browser for 12 hours. The PIN starts as `1234
 | **E9** | **Passwords** | Everyone signs in with their own password, created at their first sign-in and changeable from the account menu. Admins reset a forgotten one (the person creates a new one next time). If everyone is locked out, an empty file named `RESET-PASSWORDS` next to `start.bat` clears them all on the next start. |
 | **E10** | **Roles** | What engineers, managers and reviewers may do with jobs: create, claim and be assigned, edit any job (see B3). Shipped rules: engineers everything, managers create and edit, reviewers nothing. Taking *claim* away from a role whose members still hold open jobs is refused until those jobs are reassigned. Board review is separate and unaffected. |
 | **E11** | **Tools data** | The materials and standard sheet sizes behind the sheet calculator (the workbook's Materials sheet: ten materials with its typical sizes, to be replaced with the supplier's real ones), and the defaults for its kerf, edge margin and rotation inputs. Materials are retired, never deleted. |
+| **E12** | **Health** | The host PC at a glance, each check OK, Check or Fix now: backups being made (and a failed daily backup, which used to show only in the console window), backups on another disk than the board, free disk space, the database's own check, and the admin PIN. Disk bars, versions, uptime and sizes below. A line at the top of every other Admin page links here while anything needs attention. |
+| **E13** | **Release checklists** | Under **Job types → Checklist**: per job type, what must be ticked before a job goes to Review or Done (title block filled in, BOM checked…). Per type, refuse the move until all is ticked (the default) or ask first. Items are retired, never deleted. Demo data and Excel imports are not held back by them. |
 
 ![The sign-in screen: pick your name, then enter or create your password; the theme can be chosen before signing in](assets/screenshots/sign-in.png)
 
 ![Admin → Team: role, badge colour, admin menu, active, and password reset per person](assets/screenshots/admin.png)
 
 ![Admin → Tools: the materials and standard sheet sizes behind the sheet calculator](assets/screenshots/admin-tools.png)
+
+![Admin → Health: backups, the backup disk, free space, the database check and the PIN, with disk space and details below](assets/screenshots/admin-health.png)
+
+![Admin → Job types: CAD Modification's release checklist open, four items, refusing Review and Done until all are ticked](assets/screenshots/admin-checklists.png)
 
 ## F. Appearance
 
@@ -258,9 +291,9 @@ Copy `config.example.json` to `config.json` next to `start.bat`, edit it, restar
 | **History** | Append-only, enforced by database triggers. Jobs cannot be deleted. |
 | **Concurrency** | Version-checked edits, atomic claiming, idempotent creation. |
 | **Search** | SQLite full-text with trigram matching, so any three letters match. |
-| **Upgrades** | Schema version 10. A backup is taken before a new version changes the database. A board refuses to start on data written by a newer version. |
+| **Upgrades** | Schema version 13. A backup is taken before a new version changes the database. A board refuses to start on data written by a newer version. |
 | **Network** | LAN only; no outbound traffic. Name picker plus a password (scrypt hash) and a signed cookie bound to it; admin behind a hashed PIN; five wrong passwords pause sign-in for 30 seconds. |
-| **Checked by** | 198 backend tests, 39 browser tests, 15 package checks, and a typecheck. The sheet calculator is checked against the workbook's own example. |
+| **Checked by** | 254 backend tests, 47 browser tests, 15 package checks, and a typecheck. Every database upgrade is tested from the version before it. The sheet calculator is checked against the workbook's own example. |
 
 ## J. Documentation
 
@@ -278,6 +311,7 @@ Copy `config.example.json` to `config.json` next to `start.bat`, edit it, restar
 
 | Version | What it brought |
 |---|---|
+| **1.7.0** | **Admin → Health** for the host PC. A **drawing register** across jobs, with a **revision** on every drawing. **Estimates against actual time** in Reports and the job panel. A printable **weekly summary**. **Release checklists** per job type, guarding Review and Done. A **procurement tracker** per project from the team's inventory workbook. Fixed: a reviewer recording a job's last signature was refused. |
 | **1.6.0** | PDF tools on the Tools page: Stamp with a live preview, Negative, Combine by size and Word to PDF, from the team's four scripts. |
 | **1.5.0** | The project name stands out on cards and job rows. Admin-set role capabilities (create, claim and be assigned, edit any job) for engineers, managers and reviewers, leaving board review untouched. **Go to location** beside a job's file path. A **Tools** page with the team's *Sheet Requirement Calculator* workbook as a page, formula for formula, with its cutting layout drawn to scale; its materials and sheet sizes editable by the admin. |
 | **1.4.0** | Projects: every job belongs to a project, chosen or added from the New job form; a Projects page with each project's jobs; project filter, search, card and job-panel display; Project column in import and export. No preset list: projects are added as they are needed. |
@@ -320,7 +354,9 @@ server/src/
   domain/        tickets, rank, search, views, reports, users, job types, auth,
                  permissions, projects, tools, notifications, presence,
                  backup, import and export (transfer), drawing review
-                 (reviews, reviewStore, projectFolder, pdf)
+                 (reviews, reviewStore, projectFolder, pdf, register),
+                 health, estimates, weekly, checklists, procurement,
+                 wordToPdf
 server/test/     node:test suites against a real server and a real SQLite file
 e2e/             browser tests and the build and package check
 scripts/         build, package, lib (markdown, zip, guides), windows/, linux/
