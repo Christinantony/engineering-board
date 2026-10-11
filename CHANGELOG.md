@@ -313,5 +313,5 @@
 - **What:** Draft v1.8 follow-up control: schema 14 for per-item next action, owner, due date and immutable contact log; consolidated outstanding-item queue, HTTP endpoints and a Follow-up Control tab in procurement.
 - **Why:** Prevent missed vendor calls across Mechanical and the two-person Purchase department without duplicating the v1.7 procurement master list.
 - **Files:** migration, domain/procurement, routes, procurement UI, migration test helper, decision and changelog.
-- **Validation:** Code pushed for independent CI and local Node/browser test execution; tests were not executed by this ChatGPT session. Treat as draft until validated and reviewed.
+- **Validation:** CI workflow added to run typecheck, backend tests, build/package checks, and Chromium E2E checks on pull requests; results require verification. Treat as draft until validated and reviewed.
 - **Follow-ups:** Replace numeric user-ID entry with a people selector; clarify Purchase access model in v2.0. Do not begin v1.9 on top of unvalidated changes.

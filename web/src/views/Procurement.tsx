@@ -50,6 +50,7 @@ export function Procurement() {
     replaceParams(p);
   };
   const d = q.data;
+  const followupMode = tab === 'followups';
 
   return (
     <div className="view procurement-view">
@@ -63,6 +64,7 @@ export function Procurement() {
             </p>
           </div>
           <div className="proc-head-buttons">
+            <button className="btn btn-quiet" onClick={() => set('tab','followups')}>All follow-ups</button>
             {projectId && (
               <button className="btn btn-quiet" onClick={() => navigate(`/projects?project=${projectId}`)}>
                 Project jobs
@@ -95,7 +97,7 @@ export function Procurement() {
             </span>
           )}
         </div>
-        {d && (
+        {(d || followupMode) && (
           <div className="seg-tabs proc-tabs" role="tablist" aria-label="Procurement sheets">
             {TABS.map((t) => (
               <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'on' : ''} onClick={() => set('tab', t.id === 'master' ? null : t.id)}>
@@ -107,10 +109,11 @@ export function Procurement() {
         )}
       </header>
 
-      {!projectId && <p className="muted proc-empty">Choose a project to see its procurement list.</p>}
+      {!projectId && !followupMode && <p className="muted proc-empty">Choose a project to see its procurement list.</p>}
       {q.error && !q.data && <ErrorBox message={q.error.message} retry={q.refresh} />}
-      {projectId && !q.data && !q.error && <Spinner />}
-      {d && (
+      {projectId && !q.data && !q.error && !followupMode && <Spinner />}
+      {followupMode && <FollowupControl />}
+      {d && !followupMode && (
         <div className="proc-sheet" data-testid={`proc-${tab}`}>
           <h2 className="print-only">
             {d.project.name} · {TABS.find((t) => t.id === tab)!.label}
@@ -119,7 +122,6 @@ export function Procurement() {
           {tab === 'checklist' && <AssemblyChecklist d={d} />}
           {tab === 'pending' && <Pending d={d} />}
           {tab === 'log' && <Log d={d} />}
-          {tab === 'followups' && <FollowupControl />}
         </div>
       )}
     </div>
