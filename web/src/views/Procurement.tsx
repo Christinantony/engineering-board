@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { PROCUREMENT_MEANS, PROCUREMENT_MEANS_LABEL, type ProcurementItem, type ProcurementLogEntry, type ProcurementMeans } from '@board/shared';
 import { useApp } from '../context.ts';
-import { del, patch, post } from '../lib/api.ts';
+import { del, patch, post, put } from '../lib/api.ts';
 import { ask } from '../lib/dialogs.ts';
 import { dateTime, when } from '../lib/format.ts';
 import { navigate, replaceParams, useLocation } from '../lib/router.ts';
@@ -23,12 +23,13 @@ interface Data {
   copy_from: { id: number; name: string; items: number }[];
 }
 
-type Tab = 'master' | 'checklist' | 'pending' | 'log';
+type Tab = 'master' | 'checklist' | 'pending' | 'log' | 'followups';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'master', label: 'Master list' },
   { id: 'checklist', label: 'Assembly checklist' },
   { id: 'pending', label: 'Pending procurement' },
   { id: 'log', label: 'Procurement log' },
+  { id: 'followups', label: 'Follow-up control' },
 ];
 
 const qty = (i: ProcurementItem) => `${Number.isInteger(i.quantity) ? i.quantity : i.quantity.toFixed(2).replace(/0+$/, '')} ${i.unit}`;
@@ -118,6 +119,7 @@ export function Procurement() {
           {tab === 'checklist' && <AssemblyChecklist d={d} />}
           {tab === 'pending' && <Pending d={d} />}
           {tab === 'log' && <Log d={d} />}
+          {tab === 'followups' && <FollowupControl />}
         </div>
       )}
     </div>
@@ -535,4 +537,61 @@ function Log({ d }: { d: Data }) {
       )}
     </>
   );
+}
+
+
+interface FollowupItem extends ProcurementItem {
+ project_name: string; owner_id: number | null; next_action: string; next_due: string | null;
+ followup_version: number; last_called_at: string | null; last_outcome: string | null;
+}
+interface CallRecord {id:number;user_id:number|null;at:string;outcome:string;note:string;next_due:string|null}
+function FollowupControl() {
+ const q = useQuery<{items:FollowupItem[]}>('/api/procurement/followups');
+ const { user } = useApp();
+ const [opened,setOpened] = useState<number|null>(null);
+ const [owner,setOwner] = useState('');
+ const [action,setAction] = useState('');
+ const [due,setDue] = useState('');
+ const [outcome,setOutcome] = useState('progress');
+ const [notes,setNotes] = useState('');
+ const [callDate,setCallDate] = useState('');
+ const history = useQuery<{calls:CallRecord[]}>(opened ? `/api/procurement/items/${opened}/followups` : null);
+ const items = q.data?.items ?? [];
+ const today = new Date().toLocaleDateString('en-CA');
+ const sorted = items;
+ const choose = (i:FollowupItem) => {setOpened(i.id);setOwner(i.owner_id == null?'':String(i.owner_id));setAction(i.next_action);setDue(i.next_due??'');setOutcome('progress');setNotes('');setCallDate(i.next_due??'');};
+ const save = async(i:FollowupItem) => {try {
+   await put(`/api/procurement/items/${i.id}/followup`,{version:i.followup_version,owner_id:owner ? Number(owner) : null,next_action:action,next_due:due||null});
+   invalidate(k=>k.startsWith('/api/procurement/followups'));toast('Next follow-up saved.',{kind:'success'});
+ }catch(e){toastError(e);invalidate(k=>k.startsWith('/api/procurement/followups'));}};
+ const log = async(i:FollowupItem) => {try {
+   await post(`/api/procurement/items/${i.id}/followups`,{outcome,note:notes,next_due:callDate||null});
+   setNotes('');invalidate(k=>k.startsWith('/api/procurement/followups')||k.includes('/followups'));toast('Call recorded. Update the next action separately if it changed.',{kind:'success'});
+ }catch(e){toastError(e);}};
+ return <div className="proc-stack" data-testid="proc-followups">
+   <h2>Follow-up control</h2>
+   <p className="muted">All outstanding components across projects. An item stays here until it is marked in stock. Every vendor call is kept in its history.</p>
+   <p><strong>{items.filter(i=>i.next_due&&i.next_due<today).length}</strong> overdue · <strong>{items.filter(i=>i.next_due===today).length}</strong> due today · <strong>{items.filter(i=>!i.next_due).length}</strong> without a date</p>
+   {q.error&&<ErrorBox message={q.error.message} retry={q.refresh}/>}
+   {!q.data&&!q.error&&<Spinner/>}
+   {sorted.map(i=><section className="proc-group" key={i.id}>
+     <button className="btn btn-quiet" aria-expanded={opened===i.id} onClick={()=>opened===i.id?setOpened(null):choose(i)}>
+       <strong>{i.name}</strong> · {i.project_name} · {i.next_due ? (i.next_due<today?'Overdue: ': 'Follow up: ')+i.next_due : 'Unscheduled'}
+     </button>
+     <p className="muted">{i.next_action||'No next action assigned'} · {i.last_called_at ? 'Last contact '+dateTime(i.last_called_at):'No contact logged'}</p>
+     {opened===i.id&&<div className="proc-stack">
+       <label>Responsible user ID <input className="field-input" type="number" min="1" placeholder="Leave blank for unassigned" value={owner} onChange={(e:any)=>setOwner(e.target.value)}/></label>
+       <label>Next action <input className="field-input" maxLength={300} value={action} onChange={(e:any)=>setAction(e.target.value)}/></label>
+       <label>Next follow-up <input className="field-input" type="date" value={due} onChange={(e:any)=>setDue(e.target.value)}/></label>
+       <button className="btn btn-primary" onClick={()=>void save(i)}>Save next action</button>
+       <h3>Log a contact</h3>
+       <label>Outcome <select className="field-input" value={outcome} onChange={(e:any)=>setOutcome(e.target.value)}>{[['progress','Progressing'],['delayed','Delayed'],['ready','Vendor says ready'],['unreachable','Not reachable'],['other','Other']].map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label>
+       <label>Notes <textarea className="field-input" rows={2} value={notes} maxLength={1000} onChange={(e:any)=>setNotes(e.target.value)}/></label>
+       <label>Next contact date (as reported) <input className="field-input" type="date" value={callDate} onChange={(e:any)=>setCallDate(e.target.value)}/></label>
+       <button className="btn" disabled={!notes.trim()} onClick={()=>void log(i)}>Record contact</button>
+       <h3>Contact history</h3>
+       {history.data?.calls.map(c=><p key={c.id}><strong>{dateTime(c.at)} — {c.outcome}</strong>: {c.note} {c.next_due ? '(next '+c.next_due+')':''} · {user(c.user_id)?.name??'Unknown'}</p>)}
+     </div>}
+   </section>)}
+ </div>;
 }

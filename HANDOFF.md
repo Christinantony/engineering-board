@@ -7,7 +7,7 @@ Add a row when you start working, remove it when you finish.
 
 | Agent | Branch | Files / areas being touched | Started (IST) |
 |---|---|---|---|
-| _(none)_ | | | |
+| ChatGPT | chatgpt/followup-control-1.8 | Procurement follow-ups: migrations, API, UI, tests/docs | 2026-10-12 |
 
 ## Open questions
 Questions for Christin or another agent. Mark answered ones with the answer and date, and move them to "Resolved".

@@ -552,4 +552,35 @@ BEGIN
 END;
 `,
   },
+  {
+    id: 14,
+    name: 'procurement follow-up control',
+    sql: /* sql */ `
+CREATE TABLE procurement_followups (
+ item_id INTEGER PRIMARY KEY REFERENCES procurement_items(id),
+ owner_id INTEGER REFERENCES users(id),
+ next_action TEXT NOT NULL DEFAULT '' CHECK(length(next_action) <= 300),
+ next_due TEXT CHECK(next_due IS NULL OR length(next_due) = 10),
+ updated_by INTEGER REFERENCES users(id),
+ updated_at TEXT NOT NULL,
+ version INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX idx_procurement_followups_due ON procurement_followups(next_due, owner_id);
+CREATE TABLE procurement_calls (
+ id INTEGER PRIMARY KEY,
+ item_id INTEGER NOT NULL REFERENCES procurement_items(id),
+ user_id INTEGER REFERENCES users(id),
+ at TEXT NOT NULL,
+ outcome TEXT NOT NULL CHECK(outcome IN ('progress','delayed','ready','unreachable','other')),
+ note TEXT NOT NULL CHECK(length(note) BETWEEN 1 AND 1000),
+ next_due TEXT CHECK(next_due IS NULL OR length(next_due) = 10)
+);
+CREATE INDEX idx_procurement_calls_item ON procurement_calls(item_id, id);
+CREATE TRIGGER procurement_calls_no_update BEFORE UPDATE ON procurement_calls
+BEGIN SELECT RAISE(ABORT, 'follow-up history is append-only'); END;
+CREATE TRIGGER procurement_calls_no_delete BEFORE DELETE ON procurement_calls
+WHEN (SELECT p.is_demo FROM procurement_items i JOIN projects p ON p.id=i.project_id WHERE i.id=OLD.item_id) IS NOT 1
+BEGIN SELECT RAISE(ABORT, 'follow-up history is append-only'); END;
+`,
+  },
 ];

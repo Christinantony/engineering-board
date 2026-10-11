@@ -308,3 +308,10 @@
 - **Decisions affected:** none.
 - **Validation:** On Node 22.22.0: typecheck; 254 backend tests; build; 15 package checks; 47 browser tests; `npm run package` writes `dist/EngineeringBoard-1.7.0.zip` with no data, config or `node.exe`. Every new screenshot checked by eye; every image the README links exists and every PNG is linked.
 - **Follow-ups / open issues:** after updating, the admin adds release checklists per job type (none are preset) and should check Admin → Health for the backup disk. The stamp tool's default placement (from the stamp script) runs off the top edge of a landscape sheet; the README picture moves it down. Compare the procurement tracker with the real workbook when convenient.
+
+### 2026-10-12 | ChatGPT | branch: chatgpt/followup-control-1.8
+- **What:** Draft v1.8 follow-up control: schema 14 for per-item next action, owner, due date and immutable contact log; consolidated outstanding-item queue, HTTP endpoints and a Follow-up Control tab in procurement.
+- **Why:** Prevent missed vendor calls across Mechanical and the two-person Purchase department without duplicating the v1.7 procurement master list.
+- **Files:** migration, domain/procurement, routes, procurement UI, migration test helper, decision and changelog.
+- **Validation:** Code pushed for independent CI and local Node/browser test execution; tests were not executed by this ChatGPT session. Treat as draft until validated and reviewed.
+- **Follow-ups:** Replace numeric user-ID entry with a people selector; clarify Purchase access model in v2.0. Do not begin v1.9 on top of unvalidated changes.

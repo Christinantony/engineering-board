@@ -233,3 +233,69 @@ export function procurementCsv(ctx: Ctx, projectId: number, userName: (id: numbe
   ]);
   return '﻿' + [head, ...rows].map((r) => r.map(cell).join(',')).join('\r\n') + '\r\n';
 }
+
+
+export interface FollowupRow {
+ item_id: number; owner_id: number | null; next_action: string; next_due: string | null;
+ updated_by: number | null; updated_at: string; version: number;
+}
+export interface CallRow {
+ id: number; item_id: number; user_id: number | null; at: string;
+ outcome: string; note: string; next_due: string | null;
+}
+const DATE = /^\\d{4}-\\d{2}-\\d{2}$/;
+function followupDate(v: unknown): string | null {
+ if (v === null || v === '') return null;
+ if (typeof v !== 'string' || !DATE.test(v) || Number.isNaN(Date.parse(v)) || new Date(v).toISOString().slice(0,10) !== v) throw badRequest('Choose a valid follow-up date (YYYY-MM-DD).');
+ return v;
+}
+function followupInput(ctx: Ctx, raw: unknown) {
+ if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw badRequest('Invalid follow-up details.');
+ const d = raw as Record<string, unknown>;
+ if (!Number.isSafeInteger(d.version) || Number(d.version) < 0) throw badRequest('Follow-up version is required.');
+ if (typeof d.next_action !== 'string' || d.next_action.length > 300) throw badRequest('Next action must be 300 characters or less.');
+ if (d.owner_id != null && (!Number.isSafeInteger(d.owner_id) || !get(ctx.db, 'SELECT id FROM users WHERE id = ? AND active = 1', d.owner_id))) throw badRequest('Select an active owner.');
+ return { version: Number(d.version), next_action: d.next_action.trim(), owner_id: d.owner_id == null ? null : Number(d.owner_id), next_due: followupDate(d.next_due) };
+}
+/** One action per item. An absent row is version zero; writes are guarded against stale screens. */
+export function setFollowup(ctx: Ctx, actor: User, itemId: number, input: unknown) {
+ const d = followupInput(ctx, input);
+ return tx(ctx.db, () => {
+  const item = liveItem(ctx,itemId);
+  const old = get<FollowupRow>(ctx.db,'SELECT * FROM procurement_followups WHERE item_id = ?',itemId);
+  if ((old?.version ?? 0) !== d.version) throw conflict('This follow-up changed on another screen. Reload and try again.');
+  const at = nowIso(ctx);
+  if (old) run(ctx.db,'UPDATE procurement_followups SET owner_id=?, next_action=?, next_due=?, updated_by=?, updated_at=?, version=version+1 WHERE item_id=?',d.owner_id,d.next_action,d.next_due,actor.id,at,itemId);
+  else run(ctx.db,'INSERT INTO procurement_followups (item_id,owner_id,next_action,next_due,updated_by,updated_at) VALUES (?,?,?,?,?,?)',itemId,d.owner_id,d.next_action,d.next_due,actor.id,at);
+  changed(ctx,item.project_id);
+  return get<FollowupRow>(ctx.db,'SELECT * FROM procurement_followups WHERE item_id = ?',itemId);
+ });
+}
+/** Every contact is immutable; recording one does not silently change ownership or delivery promises. */
+export function recordFollowupCall(ctx: Ctx, actor: User, itemId: number, input: unknown) {
+ if (!input || typeof input !== 'object' || Array.isArray(input)) throw badRequest('Invalid call details.');
+ const d = input as Record<string, unknown>;
+ if (!['progress','delayed','ready','unreachable','other'].includes(String(d.outcome))) throw badRequest('Choose a call outcome.');
+ if (typeof d.note !== 'string' || !d.note.trim() || d.note.length > 1000) throw badRequest('Enter call notes (up to 1000 characters).');
+ const nextDue = followupDate(d.next_due);
+ return tx(ctx.db, () => {
+  const item = liveItem(ctx,itemId);
+  const id = Number(run(ctx.db,'INSERT INTO procurement_calls (item_id,user_id,at,outcome,note,next_due) VALUES (?,?,?,?,?,?)',itemId,actor.id,nowIso(ctx),d.outcome,d.note.trim(),nextDue).lastInsertRowid);
+  changed(ctx,item.project_id);
+  return get<CallRow>(ctx.db,'SELECT * FROM procurement_calls WHERE id = ?',id);
+ });
+}
+/** Shared action queue, including items with no follow-up plan. A stock arrival removes an item from this queue, not its history. */
+export function followupQueue(ctx: Ctx) {
+ return all<ProcurementItem & { project_name: string; owner_id: number | null; next_action: string; next_due: string | null; followup_version: number; last_called_at: string | null; last_outcome: string | null }>(ctx.db,
+ `SELECT ${COLS.split(', ').map(s=>'i.'+s).join(', ')}, p.name AS project_name, f.owner_id, COALESCE(f.next_action,'') next_action, f.next_due, COALESCE(f.version,0) followup_version,
+ (SELECT c.at FROM procurement_calls c WHERE c.item_id=i.id ORDER BY c.id DESC LIMIT 1) last_called_at,
+ (SELECT c.outcome FROM procurement_calls c WHERE c.item_id=i.id ORDER BY c.id DESC LIMIT 1) last_outcome
+ FROM procurement_items i JOIN projects p ON p.id=i.project_id LEFT JOIN procurement_followups f ON f.item_id=i.id
+ WHERE i.removed_at IS NULL AND i.in_stock_at IS NULL
+ ORDER BY CASE WHEN f.next_due IS NULL THEN 1 ELSE 0 END, f.next_due, i.id`);
+}
+export function itemFollowupHistory(ctx: Ctx, itemId: number) {
+ liveItem(ctx,itemId);
+ return all<CallRow>(ctx.db,'SELECT * FROM procurement_calls WHERE item_id = ? ORDER BY id DESC LIMIT 100',itemId);
+}
