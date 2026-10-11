@@ -79,6 +79,9 @@ export function Reports() {
       <header className="view-head">
         <div className="view-head-row">
           <h1>Reports</h1>
+          <button className="btn" onClick={() => navigate('/reports/weekly')}>
+            Weekly summary
+          </button>
           <div className="seg seg-tabs" role="tablist" aria-label="Period">
             {presets.map((p) => (
               <button key={p.id} role="tab" aria-selected={preset?.id === p.id} className={preset?.id === p.id ? 'on' : ''} onClick={() => navigate(`/reports?r=${p.id}`)}>

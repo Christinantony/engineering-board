@@ -1211,3 +1211,26 @@ test('estimates: finishing your job offers to record its time, the panel reads "
   await p.goto(`${BASE}/reports?r=week`);
   await p.waitForSelector('[data-testid=estimate-accuracy] .accuracy-table td:has-text("FEA")');
 });
+
+test('weekly summary: from Reports, a week at a time, ready to print on one page', async () => {
+  const p = await login('Jeffin');
+  await p.goto(`${BASE}/reports`);
+  await p.click('button:has-text("Weekly summary")');
+  await p.waitForSelector('[data-testid=weekly-sheet]');
+  assert.match(await p.textContent('.weekly-head h2'), /^Week of /);
+  assert.match(await p.textContent('[data-testid=weekly-sheet]'), /Waiting or blocked/);
+  assert.equal(await p.locator('button:has-text("Next week →")').isDisabled(), true, 'no weeks after this one');
+  await p.click('button:has-text("← Previous week")');
+  await p.waitForSelector('[data-testid=weekly-sheet]:has-text("as of")');
+  await p.click('button:has-text("This week")');
+  await p.waitForFunction(() => !location.search.includes('week='));
+  // printed: the sheet alone on an A4 page
+  await p.emulateMedia({ media: 'print' });
+  assert.equal(await p.locator('.weekly-tools').isVisible(), false);
+  assert.equal(await p.locator('.topbar').isVisible(), false);
+  assert.equal(await p.locator('[data-testid=weekly-sheet]').isVisible(), true);
+  await p.emulateMedia({ media: 'screen' });
+  // a job number opens the job
+  await p.locator('.weekly-job').first().click();
+  await p.waitForSelector('.panel-title');
+});

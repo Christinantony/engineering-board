@@ -258,3 +258,16 @@
 - **Decisions affected:** new decision #36. No migration, nothing stored; no runtime dependency (#1).
 - **Validation:** On Node 22.22.0: typecheck; 233 backend tests (5 new: times typed fifteen ways including refusals and the working-day length, the bucket comparison at its edges, accuracy overall and by type and person with the middle ratio, typical times appearing at 3 jobs and not at 1, and forgetting jobs older than 180 days); build; 15 package checks; 44 browser tests (1 new: Mark done → the prompt → "4h 30m" saved as 270 minutes and shown back, "longer than the 2–4 hr estimate", "1.5h" typed in the panel → shorter, and the FEA row on Reports).
 - **Follow-ups / open issues:** Workload still plans with the estimates as entered; it could later suggest the typical time for unestimated jobs if the team wants that.
+
+### 2026-10-12 02:00 IST | Claude | branch: claude/weekly-summary
+- **What:** The **weekly summary** (part of 1.7.0, decision #37): Reports → **Weekly summary**, one page for the review meeting.
+  - The week's numbers: finished, new jobs, open now (and unassigned), overdue now, waiting or blocked, drawings signed.
+  - **Finished this week** grouped by project, each job with who did it; **The team**: per person, finished this week, open, in progress, waiting, overdue and due next week.
+  - **Overdue now** (owner, when it was due, calendar days over), **Waiting or blocked** (what it is waiting for, for how many days), **Due next week**, **Urgent or high, nobody on it**, and **Drawing review** (awaiting, returned, waiting for a signature now; signed this week with revisions).
+  - **← Previous week** / **Next week →**; an earlier week says that overdue and waiting are as of today. Job numbers open the job.
+  - **Print or save as PDF**: a print stylesheet keeps only the sheet, black on white, on A4; a normal week fits one page.
+- **Why:** Christin chose this from the 1.7.0 proposals, so Jeffin has the week on one page for the review meeting.
+- **Files:** `server/src/domain/weekly.ts` (new), `server/src/app.ts` (`GET /api/reports/weekly`), `web/src/views/WeeklySummary.tsx` (new), `web/src/views/Reports.tsx`, `web/src/App.tsx`, `web/src/styles.css`, `server/test/weekly.test.ts` (new), `e2e/board.e2e.mjs`, `docs/{USER-GUIDE,API}.md`, `DECISIONS.md`, `CHANGELOG.md`
+- **Decisions affected:** new decision #37. No migration; no runtime dependency (#1): printing is the browser's.
+- **Validation:** On Node 22.22.0: typecheck; 237 backend tests (4 new: the Monday of a week including Sunday, a week with finished jobs in two projects by two people, an overdue job counted in calendar days, a waiting job with its reason and days, next week's due jobs, unassigned urgent work, an earlier week by any of its dates with today's overdue, a bad week refused, reviewers refused); build; 15 package checks; 45 browser tests (1 new: from Reports, previous and this week, the print view showing only the sheet, a job number opening the job). The printed A4 PDF checked by eye: one page with 13 finished jobs.
+- **Follow-ups / open issues:** none.
