@@ -23,6 +23,8 @@ describe('v2 purchase department coordination',()=>{
   assert.equal((await buyer.post('/api/tickets',{title:'Unauthorized'})).status,403);
   assert.equal((await buyer.post(`/api/procurement/items/${item}/stock`,{in_stock:true})).status,403);
   assert.equal((await buyer.get('/api/purchase/queue')).status,200);
+  assert.equal((await buyer.get('/api/review-files/invalid')).status,403);
+  assert.equal((await buyer.get('/api/notifications')).status,403);
   assert.equal((await buyer.get('/api/manufacturing')).status,200);
   assert.equal((await buyer.get('/api/procurement/followups')).status,200);
  });
