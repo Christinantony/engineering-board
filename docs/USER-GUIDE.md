@@ -250,3 +250,9 @@ The Board and an engineer's Workload job list load all matching pages. If loadin
 ### Manufacturing tracking (v1.9)
 
 From Procurement, select **Manufacturing**. This is a consolidated view across projects, so you need not pick a project first. Expand a component, select its current stage, and record quantities that are actually in-process, received, accepted or rejected. The quantities are separate from the **In stock** tick: a vendor saying goods are ready does not mean they have been received or inspected. Keep original and revised vendor commitment dates by recording each new promise in the history. Use **Attention** or **Critical** to flag items that need escalation. Stage labels can be configured per acquisition means by an administrator without changing their stable codes.
+
+### Purchase workspace (v2.0)
+
+Ask the board admin to add each buyer under **Admin → Team → Purchase**, using a separate personal login for each colleague. Purchase users see a dedicated **Purchase** screen, not the engineering board or drawings. They can assign a buyer and supplier to an existing procurement component, enter the PO reference and purchase stage, log vendor call notes, and review history. **Outstanding**, **Assigned to me**, and **Overdue** filters reduce daily chasing effort. Mechanical engineers can view the shared queue but commercial order edits belong to Purchase and the manager.
+
+New requirements are raised by Engineering on their existing project procurement master lists. No second item should be created for Purchase. Vendor statements and purchase statuses do not automatically confirm inspected goods in stock.
