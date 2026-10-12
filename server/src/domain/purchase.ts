@@ -40,7 +40,7 @@ export function updatePurchase(ctx:Ctx,u:User,id:number,raw:unknown){
  return tx(ctx.db,()=>{
   const target=item(ctx,id),old=get<{version:number}>(ctx.db,'SELECT version FROM purchase_orders WHERE item_id=?',id);
   if((old?.version??0)!==d.version)throw conflict('Purchase item changed. Reload and try again');
-  const vendor=d.vendor_id==null?null:d.vendor_id,owner=d.purchase_owner_id==null?null:d.purchase_owner_id;
+  const vendor=d.vendor_id==null?null:d.vendor_id as number,owner=d.purchase_owner_id==null?null:d.purchase_owner_id as number;
   if(vendor!==null&&(!Number.isSafeInteger(vendor)||!get(ctx.db,'SELECT 1 FROM purchase_vendors WHERE id=? AND active=1',vendor)))throw badRequest('Choose an active vendor');
   if(owner!==null&&(!Number.isSafeInteger(owner)||!get(ctx.db,"SELECT 1 FROM users WHERE id=? AND role='purchase' AND active=1",owner)))throw badRequest('Choose an active purchase colleague');
   const now=nowIso(ctx),status=d.order_status as string;
