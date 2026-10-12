@@ -319,3 +319,8 @@
 ### 2026-10-12 | ChatGPT | branch: chatgpt/followup-control-1.8 (release integration)
 - **What:** Add cross-project access without requiring project selection, show follow-ups for all outstanding components, invalidate shared queue on procurement SSE events, document new endpoints, update user instructions and set version 1.8.0.
 - **Validation:** Automated suite configured in `.github/workflows/validate.yml`; GitHub Actions results not available in connector at authoring time. Manual code review completed but execution pending.
+
+### 2026-10-12 | ChatGPT | branch: chatgpt/manufacturing-1.9
+- **What:** Manufacturing tracking v1.9: per-item process stage, partial quantities, escalation level, vendor promise history, means-specific stage labels, team-wide views and migration 15.
+- **Why:** Coordinate outsourced/in-house component manufacturing and receipt among Mechanical and Purchase without duplicating the procurement master list.
+- **Validation:** GitHub Actions checks after push; not yet claimed as passed at commit creation.
