@@ -246,3 +246,7 @@ It also reminds you of your own jobs that are overdue or due today. Opening the 
 ## Large job lists
 
 The Board and an engineer's Workload job list load all matching pages. If loading fails, a message offers **Try again**. During a failed refresh, the last complete list remains visible and is marked as such; a partial page never replaces it.
+
+### Manufacturing tracking (v1.9)
+
+From Procurement, select **Manufacturing**. This is a consolidated view across projects, so you need not pick a project first. Expand a component, select its current stage, and record quantities that are actually in-process, received, accepted or rejected. The quantities are separate from the **In stock** tick: a vendor saying goods are ready does not mean they have been received or inspected. Keep original and revised vendor commitment dates by recording each new promise in the history. Use **Attention** or **Critical** to flag items that need escalation. Stage labels can be configured per acquisition means by an administrator without changing their stable codes.

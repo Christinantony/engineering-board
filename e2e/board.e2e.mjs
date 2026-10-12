@@ -1336,3 +1336,34 @@ test('follow-up control: a pending item is visible without project selection, wi
   const after = await (await fetch(`${BASE}/api/procurement/followups`, { headers: { cookie: s.cookie } })).json();
   assert.ok(after.items.some(x => x.id === item.id), 'a contact never silently marks a component in stock');
 });
+
+
+test('manufacturing: partial receipts and revised commitments are separate from in-stock confirmation', async () => {
+  const s = await api('POST', '/api/session', { user_id: 1, password: PASSWORD });
+  const project = (await (await api('POST', '/api/projects', { name: 'Manufacturing browser test' }, s.cookie)).r.json()).project;
+  const item = (await (await api('POST', `/api/projects/${project.id}/procurement/items`, { name: 'Machined flange', quantity: 12, means: 'outsourced' }, s.cookie)).r.json()).item;
+  const p = await login('Paul');
+  await p.goto(`${BASE}/projects/procurement?tab=manufacturing`);
+  await p.waitForSelector('[data-testid=manufacturing-control] button:has-text("Machined flange")');
+  await p.click('[data-testid=manufacturing-control] button:has-text("Machined flange")');
+  await p.selectOption('label:has-text("Manufacturing stage") select', 'inspection');
+  await p.fill('input[aria-label="in_process"]', '10');
+  await p.fill('input[aria-label="received"]', '5');
+  await p.fill('input[aria-label="accepted"]', '3');
+  await p.fill('input[aria-label="rejected"]', '1');
+  await p.fill('textarea[aria-label="Manufacturing progress note"]', 'Five arrived; one rejected');
+  await p.click('button:has-text("Save manufacturing progress")');
+  await p.waitForFunction(async(id)=>{
+    const r=await(await fetch('/api/manufacturing')).json();
+    return r.items.find(x=>x.id===id)?.accepted===3;
+  },item.id);
+  await p.fill('input[aria-label="Committed delivery date"]', '2026-10-23');
+  await p.fill('textarea[aria-label="Vendor commitment note"]', 'Vendor delayed finishing of remaining seven');
+  await p.click('button:has-text("Record promise")');
+  await p.waitForSelector('[data-testid=manufacturing-control] p:has-text("Promised 2026-10-23")');
+  const rows=await(await fetch(`${BASE}/api/manufacturing`,{headers:{cookie:s.cookie}})).json();
+  const updated=rows.items.find(x=>x.id===item.id);
+  assert.equal(updated.received,5);assert.equal(updated.accepted,3);
+  assert.equal(updated.in_stock_at,null, 'a progress report cannot mark the item in stock');
+  assert.equal(updated.latest_promise,'2026-10-23');
+});

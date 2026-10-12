@@ -583,4 +583,53 @@ WHEN (SELECT p.is_demo FROM procurement_items i JOIN projects p ON p.id=i.projec
 BEGIN SELECT RAISE(ABORT, 'follow-up history is append-only'); END;
 `,
   },
+  {
+    id: 15,
+    name: 'manufacturing progress and vendor commitments',
+    sql: /* sql */ `
+CREATE TABLE manufacturing_tracking (
+ item_id INTEGER PRIMARY KEY REFERENCES procurement_items(id),
+ stage TEXT NOT NULL DEFAULT 'planning' CHECK(stage IN ('planning','queued','fabrication','finishing','inspection','received')),
+ in_process REAL NOT NULL DEFAULT 0 CHECK(in_process >= 0),
+ received REAL NOT NULL DEFAULT 0 CHECK(received >= 0),
+ accepted REAL NOT NULL DEFAULT 0 CHECK(accepted >= 0),
+ rejected REAL NOT NULL DEFAULT 0 CHECK(rejected >= 0),
+ escalation TEXT NOT NULL DEFAULT 'none' CHECK(escalation IN ('none','attention','critical')),
+ updated_by INTEGER REFERENCES users(id),
+ updated_at TEXT NOT NULL,
+ version INTEGER NOT NULL DEFAULT 1
+);
+CREATE TABLE manufacturing_events (
+ id INTEGER PRIMARY KEY,
+ item_id INTEGER NOT NULL REFERENCES procurement_items(id),
+ user_id INTEGER REFERENCES users(id),
+ at TEXT NOT NULL,
+ kind TEXT NOT NULL CHECK(kind IN ('progress','commitment')),
+ detail TEXT NOT NULL,
+ stage TEXT,
+ in_process REAL,
+ received REAL,
+ accepted REAL,
+ rejected REAL,
+ escalation TEXT,
+ promised_date TEXT
+);
+CREATE INDEX idx_manufacturing_events_item ON manufacturing_events(item_id,id);
+CREATE TRIGGER manufacturing_events_no_update BEFORE UPDATE ON manufacturing_events
+BEGIN SELECT RAISE(ABORT,'manufacturing history is append-only'); END;
+CREATE TRIGGER manufacturing_events_no_delete BEFORE DELETE ON manufacturing_events
+WHEN (SELECT p.is_demo FROM procurement_items i JOIN projects p ON p.id=i.project_id WHERE i.id=OLD.item_id) IS NOT 1
+BEGIN SELECT RAISE(ABORT,'manufacturing history is append-only'); END;
+CREATE TABLE manufacturing_stage_labels (
+ means TEXT NOT NULL CHECK(means IN ('outsourced','in_house','bought_out','tools')),
+ stage TEXT NOT NULL CHECK(stage IN ('planning','queued','fabrication','finishing','inspection','received')),
+ label TEXT NOT NULL CHECK(length(label) BETWEEN 1 AND 70),
+ PRIMARY KEY(means,stage)
+);
+INSERT INTO manufacturing_stage_labels(means,stage,label)
+WITH means_list(means) AS (VALUES ('outsourced'),('in_house'),('bought_out'),('tools')),
+ stages(stage,label) AS (VALUES ('planning','Planning'),('queued','Queued / ordered'),('fabrication','Machining / fabrication'),('finishing','Surface finishing'),('inspection','Inspection'),('received','Received'))
+SELECT means_list.means, stages.stage, stages.label FROM means_list CROSS JOIN stages;
+`,
+  },
 ];
