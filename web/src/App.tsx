@@ -33,6 +33,7 @@ import { ReviewWorkspaceView } from './views/ReviewWorkspace.tsx';
 import { DrawingRegister } from './views/DrawingRegister.tsx';
 import { WeeklySummary } from './views/WeeklySummary.tsx';
 import { Procurement } from './views/Procurement.tsx';
+import { Purchase } from './views/Purchase.tsx';
 
 const NAV = [
   { path: '/board', label: 'Board', key: 'b' },
@@ -48,6 +49,7 @@ const NAV = [
 
 /** A reviewer's board is the review queue and nothing else (decision #29). */
 const REVIEWER_NAV = NAV.filter((n) => n.path === '/review');
+const PURCHASE_NAV = [{path:'/purchase',label:'Purchase',key:'p'}];
 const REVIEWER_PATHS = /^\/review(\/\d+)?$/;
 
 const VIEWS: Record<string, () => any> = {
@@ -64,6 +66,7 @@ const VIEWS: Record<string, () => any> = {
   '/review/register': DrawingRegister,
   '/reports/weekly': WeeklySummary,
   '/projects/procurement': Procurement,
+  '/purchase': Purchase,
   '/review': ReviewQueue,
   '/projects': Projects,
 };
@@ -226,11 +229,12 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
   const live = useLiveState();
   // reviewers see only the review queue (decision #29) unless the admin gave them a job capability (decision #31)
   const whole = hasBoardAccess(meta.permissions, me);
+  const purchasing = me.role === 'purchase';
   const can = (cap: Capability) => allows(meta.permissions, me, cap);
   // reviewers don't see projects (decision #29)
   const projects = useQuery<{ projects: Project[] }>(whole ? '/api/projects' : null);
-  const nav = whole ? NAV : REVIEWER_NAV;
-  const home = whole ? '/board' : '/review';
+  const nav = purchasing ? PURCHASE_NAV : whole ? NAV : REVIEWER_NAV;
+  const home = purchasing ? '/purchase' : whole ? '/board' : '/review';
   // a reviewer never opens the job panel
   const jobId = whole ? Number(params.get('job')) || null : null;
 
@@ -242,7 +246,8 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
   useEffect(() => setActionWorkday(meta.workday.hours_per_day), [meta.workday.hours_per_day]);
   useEffect(() => {
     if (path === '/') navigate(home, { replace: true, keepJob: whole });
-    else if (!whole && !REVIEWER_PATHS.test(path)) navigate('/review', { replace: true });
+    else if (purchasing && path !== '/purchase') navigate('/purchase', { replace: true });
+    else if (!whole && !purchasing && !REVIEWER_PATHS.test(path)) navigate('/review', { replace: true });
   }, [path]);
 
   const openJob = useCallback((id: number | null) => setJob(id), []);
@@ -410,7 +415,7 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
 
         <main className="main" id="main" tabIndex={-1}>
           <ErrorBoundary resetKey={path}>
-            <View path={whole || REVIEWER_PATHS.test(path) ? path : '/review'} />
+            <View path={purchasing ? '/purchase' : whole || REVIEWER_PATHS.test(path) ? path : '/review'} />
           </ErrorBoundary>
         </main>
 
@@ -438,6 +443,7 @@ const TITLES: Record<string, string> = {
   '/review/register': 'Drawing register',
   '/reports/weekly': 'Weekly summary',
   '/projects/procurement': 'Procurement',
+  '/purchase': 'Purchase coordination',
 };
 
 function View({ path }: { path: string }) {

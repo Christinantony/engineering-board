@@ -632,4 +632,65 @@ WITH means_list(means) AS (VALUES ('outsourced'),('in_house'),('bought_out'),('t
 SELECT means_list.means, stages.stage, stages.label FROM means_list CROSS JOIN stages;
 `,
   },
+  {
+    id: 16,
+    name: 'restricted purchase team and supplier coordination',
+    rebuildsTables: true,
+    sql: /* sql */ `
+CREATE TABLE users_purchase (
+ id INTEGER PRIMARY KEY,
+ name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+ initials TEXT NOT NULL,
+ color TEXT NOT NULL,
+ role TEXT NOT NULL DEFAULT 'engineer' CHECK(role IN ('engineer','manager','reviewer','purchase')),
+ is_admin INTEGER NOT NULL DEFAULT 0 CHECK(is_admin IN (0,1)),
+ active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+ created_at TEXT NOT NULL,
+ password_hash TEXT
+);
+INSERT INTO users_purchase SELECT id,name,initials,color,role,is_admin,active,created_at,password_hash FROM users;
+DROP TABLE users;
+ALTER TABLE users_purchase RENAME TO users;
+CREATE TABLE purchase_vendors (
+ id INTEGER PRIMARY KEY,
+ name TEXT NOT NULL COLLATE NOCASE UNIQUE,
+ contact TEXT NOT NULL DEFAULT '',
+ phone TEXT NOT NULL DEFAULT '',
+ email TEXT NOT NULL DEFAULT '',
+ process_notes TEXT NOT NULL DEFAULT '',
+ active INTEGER NOT NULL DEFAULT 1,
+ created_at TEXT NOT NULL,
+ updated_at TEXT NOT NULL
+);
+CREATE TABLE purchase_orders (
+ item_id INTEGER PRIMARY KEY REFERENCES procurement_items(id),
+ vendor_id INTEGER REFERENCES purchase_vendors(id),
+ po_ref TEXT NOT NULL DEFAULT '',
+ order_status TEXT NOT NULL DEFAULT 'requested' CHECK(order_status IN ('requested','quoted','ordered','part_received','closed')),
+ purchase_owner_id INTEGER REFERENCES users(id),
+ updated_by INTEGER REFERENCES users(id),
+ updated_at TEXT NOT NULL,
+ version INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX idx_purchase_orders_owner ON purchase_orders(purchase_owner_id,order_status);
+CREATE TABLE purchase_events (
+ id INTEGER PRIMARY KEY,
+ item_id INTEGER NOT NULL REFERENCES procurement_items(id),
+ at TEXT NOT NULL,
+ user_id INTEGER REFERENCES users(id),
+ event TEXT NOT NULL CHECK(event IN ('order','note')),
+ detail TEXT NOT NULL,
+ order_status TEXT,
+ vendor_id INTEGER,
+ po_ref TEXT,
+ purchase_owner_id INTEGER
+);
+CREATE INDEX idx_purchase_events_item ON purchase_events(item_id,id);
+CREATE TRIGGER purchase_events_no_update BEFORE UPDATE ON purchase_events
+BEGIN SELECT RAISE(ABORT,'purchase history is append-only'); END;
+CREATE TRIGGER purchase_events_no_delete BEFORE DELETE ON purchase_events
+WHEN (SELECT p.is_demo FROM procurement_items i JOIN projects p ON p.id=i.project_id WHERE i.id=OLD.item_id) IS NOT 1
+BEGIN SELECT RAISE(ABORT,'purchase history is append-only'); END;
+`,
+  },
 ];

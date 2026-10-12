@@ -167,6 +167,19 @@ export const UNDO: Record<number, string> = {
   13: 'DROP TABLE procurement_log; DROP TABLE procurement_items;',
   14: 'DROP TABLE procurement_calls; DROP TABLE procurement_followups;',
   15: 'DROP TABLE manufacturing_stage_labels; DROP TABLE manufacturing_events; DROP TABLE manufacturing_tracking;',
+  16: `DROP TRIGGER purchase_events_no_update; DROP TRIGGER purchase_events_no_delete;
+      DROP TABLE purchase_events; DROP TABLE purchase_orders; DROP TABLE purchase_vendors;
+      PRAGMA foreign_keys = OFF;
+      CREATE TABLE users_before_purchase (
+        id INTEGER PRIMARY KEY, name TEXT NOT NULL COLLATE NOCASE UNIQUE, initials TEXT NOT NULL,
+        color TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'engineer' CHECK(role IN ('engineer','manager','reviewer')),
+        is_admin INTEGER NOT NULL DEFAULT 0 CHECK(is_admin IN (0,1)),
+        active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)), created_at TEXT NOT NULL, password_hash TEXT
+      );
+      INSERT INTO users_before_purchase SELECT id,name,initials,color,role,is_admin,active,created_at,password_hash FROM users;
+      DROP TABLE users;
+      ALTER TABLE users_before_purchase RENAME TO users;
+      PRAGMA foreign_keys = ON;`,
 };
 
 /** Take a database back to schema `to`, as the version that wrote it would have left it. */

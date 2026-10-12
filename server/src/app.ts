@@ -47,6 +47,7 @@ import { createJobType, listJobTypes, updateJobType } from './domain/jobTypes.ts
 import { createItem, updateItem } from './domain/checklists.ts';
 import { createProject, listProjects } from './domain/projects.ts';
 import { manufacturingQueue, manufacturingHistory, updateManufacturing, recordCommitment, setManufacturingLabels } from './domain/manufacturing.ts';
+import { purchaseQueue, vendorList, createVendor, updateVendor, updatePurchase, purchaseHistory } from './domain/purchase.ts';
 import { addItem, copyList, editItem, procurement, procurementCsv, removeItem, setStock, followupQueue, setFollowup, recordFollowupCall, itemFollowupHistory } from './domain/procurement.ts';
 import { getPermissions, requireCapability, setPermissions } from './domain/permissions.ts';
 import { WordQueue, cleanWordName, convertWithWord, probeWord, type WordConverter, type WordStatus } from './domain/wordToPdf.ts';
@@ -130,7 +131,7 @@ import { jobsNeedingSync, markSyncPending, revisionLog, settleSyncs, syncProject
 /** Default maximum PDF upload for drawing review (merged signed scans can be large). */
 export const DEFAULT_REVIEW_UPLOAD_MAX_MB = 200;
 
-export const APP_VERSION = '1.9.0';
+export const APP_VERSION = '2.0.0';
 
 export interface AppOptions {
   dbPath: string;
@@ -408,17 +409,39 @@ export function createApp(opts: AppOptions): App {
   // ---- projects (decision #30): added by the team when needed, none preset ----
   board('GET', '/api/projects', () => ({ projects: listProjects(ctx) }));
   worker('POST', '/api/projects', (req, user) => new Reply(201, { project: createProject(ctx, user, req.body ?? {}) }), 'create');
+  // ---- purchase coordination: a purchase employee can reach only these purpose-built endpoints ----
+  const coordinationRead = (method: string, path: string, h: (req: Request, user: User) => unknown) =>
+    authed(method,path,(req,user) => {
+      if (user.role === 'reviewer') throw forbidden('Purchase and engineering staff only.');
+      return h(req,user);
+    });
+  const coordinationWrite = (method: string,path: string,h: (req: Request, user: User) => unknown) =>
+    authed(method,path,(req,user) => {
+      if (user.role === 'reviewer') throw forbidden('Purchase and engineering staff only.');
+      return h(req,user);
+    });
+  const purchasingWrite = (method: string,path: string,h: (req: Request, user: User) => unknown) =>
+    authed(method,path,(req,user) => {
+      if (user.role !== 'purchase' && user.role !== 'manager') throw forbidden('Only Purchase or the manager can manage purchase orders and suppliers.');
+      return h(req,user);
+    });
+  coordinationRead('GET','/api/purchase/queue',() => purchaseQueue(ctx));
+  coordinationRead('GET','/api/purchase/vendors',() => ({vendors:vendorList(ctx)}));
+  coordinationRead('GET','/api/purchase/items/:id',(req) => purchaseHistory(ctx,id(req)));
+  purchasingWrite('POST','/api/purchase/vendors',(req,user) => new Reply(201,{vendor:createVendor(ctx,user,req.body??{})}));
+  purchasingWrite('PUT','/api/purchase/vendors/:id',(req,user) => ({vendor:updateVendor(ctx,user,id(req),req.body??{})}));
+  purchasingWrite('PUT','/api/purchase/items/:id',(req,user) => ({order:updatePurchase(ctx,user,id(req),req.body??{})}));
   // ---- component manufacturing and vendor commitments (decision #41) ----
-  board('GET', '/api/manufacturing', () => manufacturingQueue(ctx));
-  board('GET', '/api/manufacturing/items/:id', (req) => manufacturingHistory(ctx,id(req)));
-  worker('PUT', '/api/manufacturing/items/:id', (req,user) => ({ tracking: updateManufacturing(ctx,user,id(req),req.body ?? {}) }));
-  worker('POST', '/api/manufacturing/items/:id/commitments', (req,user) => new Reply(201, { commitment: recordCommitment(ctx,user,id(req),req.body ?? {}) }));
+  coordinationRead('GET', '/api/manufacturing', () => manufacturingQueue(ctx));
+  coordinationRead('GET', '/api/manufacturing/items/:id', (req) => manufacturingHistory(ctx,id(req)));
+  coordinationWrite('PUT', '/api/manufacturing/items/:id', (req,user) => ({ tracking: updateManufacturing(ctx,user,id(req),req.body ?? {}) }));
+  coordinationWrite('POST', '/api/manufacturing/items/:id/commitments', (req,user) => new Reply(201, { commitment: recordCommitment(ctx,user,id(req),req.body ?? {}) }));
   admin('PUT', '/api/admin/manufacturing/labels', (req,user) => setManufacturingLabels(ctx,user,req.body ?? {}));
   // ---- procurement tracker and follow-ups (#39, #40): no reviewer access ----
-  board('GET', '/api/procurement/followups', () => ({ items: followupQueue(ctx) }));
-  board('GET', '/api/procurement/items/:id/followups', (req) => ({ calls: itemFollowupHistory(ctx,id(req)) }));
-  worker('PUT', '/api/procurement/items/:id/followup', (req,user) => ({ followup: setFollowup(ctx,user,id(req),req.body ?? {}) }));
-  worker('POST', '/api/procurement/items/:id/followups', (req,user) => new Reply(201, { call: recordFollowupCall(ctx,user,id(req),req.body ?? {}) }));
+  coordinationRead('GET', '/api/procurement/followups', () => ({ items: followupQueue(ctx) }));
+  coordinationRead('GET', '/api/procurement/items/:id/followups', (req) => ({ calls: itemFollowupHistory(ctx,id(req)) }));
+  coordinationWrite('PUT', '/api/procurement/items/:id/followup', (req,user) => ({ followup: setFollowup(ctx,user,id(req),req.body ?? {}) }));
+  coordinationWrite('POST', '/api/procurement/items/:id/followups', (req,user) => new Reply(201, { call: recordFollowupCall(ctx,user,id(req),req.body ?? {}) }));
   // ---- procurement tracker per project (decision #39): not for reviewers (#29) ----
   board('GET', '/api/projects/:id/procurement', (req) => procurement(ctx, id(req)));
   board('GET', '/api/projects/:id/procurement.csv', (req) => {
