@@ -233,3 +233,18 @@ Restore validates the source schema and references, migrates and initializes a s
 - `PUT /api/admin/manufacturing/labels`: `{means,stage,label}`; administrator-only configurable stage label.
 
 All item operations use the existing board permissions; reviewers cannot view manufacturing records.
+
+### v2.0 Purchase coordination
+
+Purchase users are restricted server-side to Purchase queues, supplier directory, follow-up history/actions, and manufacturing progress/commitments. They cannot read engineering jobs, PDFs, project internals, or the administration area.
+
+| Method | Endpoint | Authorization |
+|---|---|---|
+| GET | `/api/purchase/queue` | Purchase, Engineer, Manager |
+| GET | `/api/purchase/vendors` | Purchase, Engineer, Manager |
+| POST | `/api/purchase/vendors` | Purchase, Manager |
+| PUT | `/api/purchase/vendors/:id` | Purchase, Manager |
+| GET | `/api/purchase/items/:id` | Purchase, Engineer, Manager |
+| PUT | `/api/purchase/items/:id` | Purchase, Manager; requires version, vendor, owner, order status, PO ref and note |
+
+Purchase users may also see and update follow-up and manufacturing records. All modifications to purchase orders are audited; a purchase status never marks a part as physically received or accepted.
