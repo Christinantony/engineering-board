@@ -2,7 +2,7 @@
 
 ### The workboard for the mechanical design team
 
-*Catalogue edition, version 1.8.0*
+*Catalogue edition, version 1.9.0*
 
 One shared board for every design job: who is on it, what it is waiting for, when it is due and how it ended. It runs on a single PC on the office network. Everyone else opens it in a web browser.
 
@@ -291,7 +291,7 @@ Copy `config.example.json` to `config.json` next to `start.bat`, edit it, restar
 | **History** | Append-only, enforced by database triggers. Jobs cannot be deleted. |
 | **Concurrency** | Version-checked edits, atomic claiming, idempotent creation. |
 | **Search** | SQLite full-text with trigram matching, so any three letters match. |
-| **Upgrades** | Schema version 14. A backup is taken before a new version changes the database. A board refuses to start on data written by a newer version. |
+| **Upgrades** | Schema version 15. A backup is taken before a new version changes the database. A board refuses to start on data written by a newer version. |
 | **Network** | LAN only; no outbound traffic. Name picker plus a password (scrypt hash) and a signed cookie bound to it; admin behind a hashed PIN; five wrong passwords pause sign-in for 30 seconds. |
 | **Checked by** | Automated backend and browser checks are provided; v1.8 results must be confirmed on the PR's validation workflow before release. Every database upgrade is tested from the version before it. The sheet calculator is checked against the workbook's own example. |
 
@@ -311,7 +311,7 @@ Copy `config.example.json` to `config.json` next to `start.bat`, edit it, restar
 
 | Version | What it brought |
 |---|---|
-| **1.8.0** | Procurement follow-up control across projects: accountable next actions, follow-up dates, colleague ownership and immutable vendor contact history; items drop from pending only when in stock. |\n| **1.7.0** | **Admin → Health** for the host PC. A **drawing register** across jobs, with a **revision** on every drawing. **Estimates against actual time** in Reports and the job panel. A printable **weekly summary**. **Release checklists** per job type, guarding Review and Done. A **procurement tracker** per project from the team's inventory workbook. Fixed: a reviewer recording a job's last signature was refused. |
+| **1.9.0** | Component manufacturing stages, partial receipt and inspection quantities, escalation status and vendor promised-date history. |\n| **1.8.0** | Procurement follow-up control across projects: accountable next actions, follow-up dates, colleague ownership and immutable vendor contact history; items drop from pending only when in stock. |\n| **1.7.0** | **Admin → Health** for the host PC. A **drawing register** across jobs, with a **revision** on every drawing. **Estimates against actual time** in Reports and the job panel. A printable **weekly summary**. **Release checklists** per job type, guarding Review and Done. A **procurement tracker** per project from the team's inventory workbook. Fixed: a reviewer recording a job's last signature was refused. |
 | **1.6.0** | PDF tools on the Tools page: Stamp with a live preview, Negative, Combine by size and Word to PDF, from the team's four scripts. |
 | **1.5.0** | The project name stands out on cards and job rows. Admin-set role capabilities (create, claim and be assigned, edit any job) for engineers, managers and reviewers, leaving board review untouched. **Go to location** beside a job's file path. A **Tools** page with the team's *Sheet Requirement Calculator* workbook as a page, formula for formula, with its cutting layout drawn to scale; its materials and sheet sizes editable by the admin. |
 | **1.4.0** | Projects: every job belongs to a project, chosen or added from the New job form; a Projects page with each project's jobs; project filter, search, card and job-panel display; Project column in import and export. No preset list: projects are added as they are needed. |

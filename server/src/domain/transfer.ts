@@ -140,6 +140,11 @@ export function exportJson(ctx: Ctx, opts: { activity: boolean } = { activity: t
         'SELECT project_id, item_id, user_id, at, kind, item_name, item_spec FROM procurement_log ORDER BY id',
       ).map(({ user_id, ...l }) => ({ ...l, project: pName.get(l.project_id) ?? null, by: user_id ? byId.get(user_id) ?? null : null })),
     },
+    manufacturing: {
+      tracking: all<Record<string,unknown>>(ctx.db, 'SELECT * FROM manufacturing_tracking ORDER BY item_id'),
+      events: all<Record<string,unknown>>(ctx.db, 'SELECT * FROM manufacturing_events ORDER BY id'),
+      stage_labels: all<Record<string,unknown>>(ctx.db, 'SELECT * FROM manufacturing_stage_labels ORDER BY means, stage'),
+    },
     tickets: tickets.map((t) => {
       const { overdue: _o, due_today: _d, board_rank: _b, my_rank: _m, version: _v, ...rest } = t;
       return {

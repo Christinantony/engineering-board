@@ -4,6 +4,7 @@
 // log shows when each item came into stock.
 
 import { useEffect, useMemo, useState } from 'react';
+import { ManufacturingControl } from './ManufacturingControl.tsx';
 import { PROCUREMENT_MEANS, PROCUREMENT_MEANS_LABEL, type ProcurementItem, type ProcurementLogEntry, type ProcurementMeans } from '@board/shared';
 import { useApp } from '../context.ts';
 import { del, patch, post, put } from '../lib/api.ts';
@@ -23,13 +24,14 @@ interface Data {
   copy_from: { id: number; name: string; items: number }[];
 }
 
-type Tab = 'master' | 'checklist' | 'pending' | 'log' | 'followups';
+type Tab = 'master' | 'checklist' | 'pending' | 'log' | 'followups' | 'manufacturing';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'master', label: 'Master list' },
   { id: 'checklist', label: 'Assembly checklist' },
   { id: 'pending', label: 'Pending procurement' },
   { id: 'log', label: 'Procurement log' },
   { id: 'followups', label: 'Follow-up control' },
+  { id: 'manufacturing', label: 'Manufacturing' },
 ];
 
 const qty = (i: ProcurementItem) => `${Number.isInteger(i.quantity) ? i.quantity : i.quantity.toFixed(2).replace(/0+$/, '')} ${i.unit}`;
@@ -50,7 +52,7 @@ export function Procurement() {
     replaceParams(p);
   };
   const d = q.data;
-  const followupMode = tab === 'followups';
+  const followupMode = tab === 'followups' || tab === 'manufacturing';
 
   return (
     <div className="view procurement-view">
@@ -65,6 +67,7 @@ export function Procurement() {
           </div>
           <div className="proc-head-buttons">
             <button className="btn btn-quiet" onClick={() => set('tab','followups')}>All follow-ups</button>
+            <button className="btn btn-quiet" onClick={() => set('tab','manufacturing')}>Manufacturing</button>
             {projectId && (
               <button className="btn btn-quiet" onClick={() => navigate(`/projects?project=${projectId}`)}>
                 Project jobs
@@ -112,7 +115,8 @@ export function Procurement() {
       {!projectId && !followupMode && <p className="muted proc-empty">Choose a project to see its procurement list.</p>}
       {q.error && !q.data && <ErrorBox message={q.error.message} retry={q.refresh} />}
       {projectId && !q.data && !q.error && !followupMode && <Spinner />}
-      {followupMode && <FollowupControl />}
+      {tab === 'followups' && <FollowupControl />}
+      {tab === 'manufacturing' && <ManufacturingControl />}
       {d && !followupMode && (
         <div className="proc-sheet" data-testid={`proc-${tab}`}>
           <h2 className="print-only">

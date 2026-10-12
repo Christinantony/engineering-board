@@ -223,3 +223,13 @@ What each role may do with jobs is a setting (decision #31): `{engineer, manager
 `POST /api/admin/restore/upload` requires an active name session and an unexpired admin unlock before any body is read or `100 Continue` is sent. Only `application/octet-stream` is accepted. Both advertised Content-Length and received bytes are checked against the configured limit. The file streams with backpressure to a unique private directory beside the database; rejected, interrupted and completed uploads are cleaned up. Authorization is checked again before activating the restored database.
 
 Restore validates the source schema and references, migrates and initializes a staged candidate, then activates it while keeping the original database available for rollback. Activation failures reopen the original database; a pre-restore safety backup remains available. If disk or connection failure also prevents rollback, the original recovery files are retained and their location is logged.
+
+### Manufacturing tracking (decision #41)
+
+- `GET /api/manufacturing`: cross-project inventory items, stage-label configuration, tracked quantities, last/original promised dates and escalation status.
+- `GET /api/manufacturing/items/:id`: the item's immutable manufacturing and vendor commitment history.
+- `PUT /api/manufacturing/items/:id`: `{version, stage, in_process, received, accepted, rejected, escalation, detail}`; stale version returns 409, quantities are checked against the procurement item's requested quantity.
+- `POST /api/manufacturing/items/:id/commitments`: `{promised_date, detail}`; append-only original and latest vendor dates.
+- `PUT /api/admin/manufacturing/labels`: `{means,stage,label}`; administrator-only configurable stage label.
+
+All item operations use the existing board permissions; reviewers cannot view manufacturing records.

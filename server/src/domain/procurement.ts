@@ -135,6 +135,12 @@ export function editItem(ctx: Ctx, actor: User, id: number, input: unknown): Pro
       notes: d.notes ?? cur.notes,
       sort_order: d.sort_order ?? cur.sort_order,
     };
+    // A reduced requested quantity must not invalidate already recorded manufacturing facts.
+    const progress = get<{ in_process:number; received:number; accepted:number; rejected:number }>(ctx.db,
+      'SELECT in_process, received, accepted, rejected FROM manufacturing_tracking WHERE item_id = ?', id);
+    if (progress && (progress.in_process > next.quantity || progress.received > next.quantity ||
+      progress.accepted + progress.rejected > next.quantity))
+      throw badRequest('Requested quantity cannot be less than quantities already recorded in manufacturing.');
     run(
       ctx.db,
       `UPDATE procurement_items SET name = ?, discipline = ?, category = ?, means = ?, spec = ?, quantity = ?, unit = ?, notes = ?, sort_order = ?,
