@@ -7,7 +7,7 @@ Add a row when you start working, remove it when you finish.
 
 | Agent | Branch | Files / areas being touched | Started (IST) |
 |---|---|---|---|
-| ChatGPT | chatgpt/purchase-coordination-2.0 | purchase role, procurement coordination, migration 16, UI, tests and docs | 2026-10-12 |
+| _(none)_ | | | |
 
 ## Open questions
 Questions for Christin or another agent. Mark answered ones with the answer and date, and move them to "Resolved".
