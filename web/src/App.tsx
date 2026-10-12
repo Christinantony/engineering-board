@@ -40,6 +40,7 @@ const NAV = [
   { path: '/today', label: 'Today', key: 't' },
   { path: '/my-work', label: 'My work', key: 'm' },
   { path: '/projects', label: 'Projects', key: 'p' },
+  { path: '/purchase', label: 'Purchase', key: 'u' },
   { path: '/dashboard', label: 'Dashboard', key: 'd' },
   { path: '/review', label: 'Review', key: 'v' },
   { path: '/workload', label: 'Workload', key: 'w' },
@@ -223,7 +224,7 @@ function SignIn({ user, back }: { user: User; back: () => void }) {
 
 function Shell({ me, meta }: { me: User; meta: Meta }) {
   const users = useQuery<{ users: User[] }>('/api/users?all=1');
-  const types = useQuery<{ job_types: JobType[] }>('/api/job-types');
+  const types = useQuery<{ job_types: JobType[] }>(me.role === 'purchase' ? null : '/api/job-types');
   const { path, params } = useLocation();
   const [creating, setCreating] = useState(false);
   const live = useLiveState();
@@ -284,17 +285,17 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
   }, [whole, meta.permissions]);
 
   const state = useMemo<AppState | null>(() => {
-    if (!users.data || !types.data || (whole && !projects.data)) return null;
+    if (!users.data || (whole && !types.data) || (whole && !projects.data)) return null;
     const all = users.data.users;
     const byId = new Map(all.map((u) => [u.id, u]));
-    const jt = new Map(types.data.job_types.map((j) => [j.id, j]));
+    const jt = new Map((types.data?.job_types ?? []).map((j) => [j.id, j]));
     const projectList = projects.data?.projects ?? [];
     const pr = new Map(projectList.map((p) => [p.id, p]));
     return {
       me: byId.get(me.id) ?? me,
       users: all,
       workers: all.filter((u) => allows(meta.permissions, u, 'claim')),
-      jobTypes: types.data.job_types,
+      jobTypes: types.data?.job_types ?? [],
       projects: projectList,
       meta,
       can,
@@ -367,7 +368,7 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
           <button className="help-btn" onClick={() => void ask({ type: 'help' })} aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)">
             ?
           </button>
-          <Bell />
+          {!purchasing && <Bell />}
           <ThemePicker />
           {whole && can('create') && (
             <button className="btn btn-primary new-job" onClick={() => setCreating(true)} title="New job (N)">
