@@ -6,7 +6,7 @@ import type {User} from '@board/shared';
 const STAGES = ['planning','queued','fabrication','finishing','inspection','received'] as const;
 const MEANS = ['outsourced','in_house','bought_out','tools'] as const;
 const ESCALATIONS = ['none','attention','critical'] as const;
-const DATE = /^\\d{4}-\\d{2}-\\d{2}$/;
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
 type Stage = typeof STAGES[number];
 type Escalation = typeof ESCALATIONS[number];
 interface Tracking {item_id:number;stage:Stage;in_process:number;received:number;accepted:number;rejected:number;escalation:Escalation;version:number;updated_at:string;updated_by:number|null;}
