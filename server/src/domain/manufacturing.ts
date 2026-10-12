@@ -67,7 +67,7 @@ export function recordCommitment(ctx:Ctx,actor:User,itemId:number,raw:unknown){
  if(typeof d.detail!=='string'||!d.detail.trim()||d.detail.length>700)throw badRequest('Explain the new vendor commitment (1–700 characters).');
  return tx(ctx.db,()=>{
   const item=existing(ctx,itemId),at=nowIso(ctx);
-  const id=Number(run(ctx.db,'INSERT INTO manufacturing_events(item_id,user_id,at,kind,detail,promised_date) VALUES(?,?,?,\'commitment\',?,?)',itemId,actor.id,at,d.detail.trim(),promised).lastInsertRowid);
+  const id=Number(run(ctx.db,'INSERT INTO manufacturing_events(item_id,user_id,at,kind,detail,promised_date) VALUES(?,?,?,\'commitment\',?,?)',itemId,actor.id,at,(d.detail as string).trim(),promised).lastInsertRowid);
   ctx.events.emit({type:'procurement',id:item.project_id});
   return get<any>(ctx.db,'SELECT * FROM manufacturing_events WHERE id=?',id);
  });
