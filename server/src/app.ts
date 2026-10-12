@@ -287,6 +287,15 @@ export function createApp(opts: AppOptions): App {
     router.add(method, path, (req) => {
       const user = currentUser(req);
       if (!user) throw new HttpError(401, 'unauthenticated', 'Please sign in first.');
+      // Purchase is an allowlisted workflow role, not a general engineering-board user.
+      // Restrict at the authentication wrapper, including review routes that do not
+      // pass through board()/worker(). Navigation alone is not a security boundary.
+      if (user.role === 'purchase' && !new Set([
+        '/api/purchase/queue','/api/purchase/vendors','/api/purchase/vendors/:id','/api/purchase/items/:id',
+        '/api/procurement/followups','/api/procurement/items/:id/followups','/api/procurement/items/:id/followup',
+        '/api/manufacturing','/api/manufacturing/items/:id','/api/manufacturing/items/:id/commitments',
+        '/api/events','/api/presence','/api/me/password',
+      ]).has(path)) throw forbidden('Purchase accounts can access only purchasing and component coordination.');
       return h(req, user);
     });
   const REVIEWER_ONLY = 'Reviewers see only the drawings handed to them for review.';
