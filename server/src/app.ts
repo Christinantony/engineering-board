@@ -46,7 +46,7 @@ import { createUser, getUser, listUsers, requireUser, updateUser } from './domai
 import { createJobType, listJobTypes, updateJobType } from './domain/jobTypes.ts';
 import { createItem, updateItem } from './domain/checklists.ts';
 import { createProject, listProjects } from './domain/projects.ts';
-import { addItem, copyList, editItem, procurement, procurementCsv, removeItem, setStock } from './domain/procurement.ts';
+import { addItem, copyList, editItem, procurement, procurementCsv, removeItem, setStock, followupQueue, setFollowup, recordFollowupCall, itemFollowupHistory } from './domain/procurement.ts';
 import { getPermissions, requireCapability, setPermissions } from './domain/permissions.ts';
 import { WordQueue, cleanWordName, convertWithWord, probeWord, type WordConverter, type WordStatus } from './domain/wordToPdf.ts';
 import {
@@ -129,7 +129,7 @@ import { jobsNeedingSync, markSyncPending, revisionLog, settleSyncs, syncProject
 /** Default maximum PDF upload for drawing review (merged signed scans can be large). */
 export const DEFAULT_REVIEW_UPLOAD_MAX_MB = 200;
 
-export const APP_VERSION = '1.7.0';
+export const APP_VERSION = '1.8.0';
 
 export interface AppOptions {
   dbPath: string;
@@ -407,6 +407,11 @@ export function createApp(opts: AppOptions): App {
   // ---- projects (decision #30): added by the team when needed, none preset ----
   board('GET', '/api/projects', () => ({ projects: listProjects(ctx) }));
   worker('POST', '/api/projects', (req, user) => new Reply(201, { project: createProject(ctx, user, req.body ?? {}) }), 'create');
+  // ---- procurement tracker and follow-ups (#39, #40): no reviewer access ----
+  board('GET', '/api/procurement/followups', () => ({ items: followupQueue(ctx) }));
+  board('GET', '/api/procurement/items/:id/followups', (req) => ({ calls: itemFollowupHistory(ctx,id(req)) }));
+  worker('PUT', '/api/procurement/items/:id/followup', (req,user) => ({ followup: setFollowup(ctx,user,id(req),req.body ?? {}) }));
+  worker('POST', '/api/procurement/items/:id/followups', (req,user) => new Reply(201, { call: recordFollowupCall(ctx,user,id(req),req.body ?? {}) }));
   // ---- procurement tracker per project (decision #39): not for reviewers (#29) ----
   board('GET', '/api/projects/:id/procurement', (req) => procurement(ctx, id(req)));
   board('GET', '/api/projects/:id/procurement.csv', (req) => {

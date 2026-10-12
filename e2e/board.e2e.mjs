@@ -1311,3 +1311,28 @@ test('procurement: from a project, type the master list, mark items in stock, an
   assert.equal(await p.locator('[data-testid=proc-log] tbody tr').count(), 2);
   assert.equal(await p.getAttribute('a:has-text("Export to Excel (CSV)")', 'href'), `/api/projects/${project.id}/procurement.csv`);
 });
+
+test('follow-up control: a pending item is visible without project selection, with an assigned action and contact history', async () => {
+  const s = await api('POST', '/api/session', { user_id: 1, password: PASSWORD });
+  const project = (await (await api('POST', '/api/projects', { name: 'Follow-up browser test' }, s.cookie)).r.json()).project;
+  const item = (await (await api('POST', `/api/projects/${project.id}/procurement/items`, { name: 'Follow-up bracket', means: 'outsourced' }, s.cookie)).r.json()).item;
+  const p = await login('Paul');
+  await p.goto(`${BASE}/projects/procurement?tab=followups`);
+  await p.waitForSelector('[data-testid=proc-followups] button:has-text("Follow-up bracket")');
+  await p.click('[data-testid=proc-followups] button:has-text("Follow-up bracket")');
+  await p.selectOption('label:has-text("Responsible colleague") select', { label: 'Paul' });
+  await p.fill('label:has-text("Next action") input', 'Call fabrication supplier');
+  await p.fill('label:has-text("Next follow-up") input', '2026-10-15');
+  await p.click('button:has-text("Save next action")');
+  await p.waitForFunction(async (id) => {
+    const d = await (await fetch('/api/procurement/followups')).json();
+    return d.items.find(x => x.id === id)?.next_action === 'Call fabrication supplier';
+  }, item.id);
+  await p.fill('label:has-text("Notes") textarea', 'Vendor is machining the bracket');
+  await p.click('button:has-text("Record contact")');
+  await p.waitForSelector('[data-testid=proc-followups] p:has-text("Vendor is machining the bracket")');
+  const calls = await (await fetch(`${BASE}/api/procurement/items/${item.id}/followups`, { headers: { cookie: s.cookie } })).json();
+  assert.equal(calls.calls.length, 1);
+  const after = await (await fetch(`${BASE}/api/procurement/followups`, { headers: { cookie: s.cookie } })).json();
+  assert.ok(after.items.some(x => x.id === item.id), 'a contact never silently marks a component in stock');
+});

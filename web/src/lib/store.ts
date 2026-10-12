@@ -116,7 +116,7 @@ export function setCached<T>(key: string, fn: (prev: T | undefined) => T) {
 }
 
 export const TICKET_KEYS = (k: string) =>
-  /^\/api\/(tickets|dashboard|today|my-work|workload|activity|tags|notifications|reports|reviews|projects|drawings|estimates)/.test(k);
+  /^\/api\/(tickets|dashboard|today|my-work|workload|activity|tags|notifications|reports|reviews|projects|drawings|estimates|procurement)/.test(k);
 
 // ---------------------------------------------------------------------------
 // Live updates (Server-Sent Events) with a 30-second polling fallback
@@ -233,7 +233,7 @@ export function startLive(meId?: number, loadedVersion?: string) {
       else if (e.type === 'job_types') invalidate((k) => k.startsWith('/api/job-types') || TICKET_KEYS(k));
       else if (e.type === 'projects') invalidate('/api/projects');
       // the procurement tracker of one project (decision #39)
-      else if (e.type === 'procurement') invalidate((k) => k.startsWith(`/api/projects/${e.id}/procurement`));
+      else if (e.type === 'procurement') invalidate((k) => k.startsWith(`/api/projects/${e.id}/procurement`) || k.startsWith('/api/procurement/'));
       else if (e.type === 'permissions') invalidate((k) => k === '/api/meta' || k.startsWith('/api/admin/permissions'));
       else if (e.type === 'tools') invalidate((k) => k.startsWith('/api/tools'));
       else if (e.type === 'reload') invalidate();
