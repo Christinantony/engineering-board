@@ -324,3 +324,7 @@
 - **What:** Manufacturing tracking v1.9: per-item process stage, partial quantities, escalation level, vendor promise history, means-specific stage labels, team-wide views and migration 15.
 - **Why:** Coordinate outsourced/in-house component manufacturing and receipt among Mechanical and Purchase without duplicating the procurement master list.
 - **Validation:** GitHub Actions checks after push; not yet claimed as passed at commit creation.
+
+### 2026-10-12 | ChatGPT | v1.9 validation and handoff
+- **Validation:** [GitHub Actions run 38190268324](https://github.com/Christinantony/engineering-board/actions/runs/38190268324) passed typecheck, backend tests (including migration and manufacturing invariants), build, package checks and Chromium E2E (including partial-quantity and promise scenario).
+- **Notes:** PR #27 is stacked on PR #25 (v1.8), which is still open. Merge #25 first, retarget #27 to main, then merge after checking its final diff. Office-specific vendor workflow testing remains for deployment.
