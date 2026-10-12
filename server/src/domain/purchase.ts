@@ -22,7 +22,7 @@ export function updateVendor(ctx:Ctx,u:User,id:number,raw:unknown){void u;if(!ra
 export function purchaseQueue(ctx:Ctx){
  const query='SELECT i.id,i.project_id,p.name project_name,i.name,i.spec,i.means,i.quantity,i.unit,i.in_stock_at,'+
  'o.vendor_id,o.po_ref,o.order_status,o.purchase_owner_id,COALESCE(o.version,0) version,'+
- 'f.owner_id followup_owner_id,f.next_action,f.next_due,m.stage,m.received,m.accepted,m.escalation,'+
+ 'f.owner_id followup_owner_id,COALESCE(f.version,0) followup_version,f.next_action,f.next_due,m.stage,m.received,m.accepted,m.escalation,'+
  "(SELECT promised_date FROM manufacturing_events WHERE item_id=i.id AND kind='commitment' ORDER BY id DESC LIMIT 1) latest_promise "+
  'FROM procurement_items i JOIN projects p ON p.id=i.project_id LEFT JOIN purchase_orders o ON o.item_id=i.id '+
  'LEFT JOIN procurement_followups f ON f.item_id=i.id LEFT JOIN manufacturing_tracking m ON m.item_id=i.id '+
