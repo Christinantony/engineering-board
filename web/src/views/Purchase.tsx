@@ -7,7 +7,7 @@ import {toast,toastError} from '../lib/toasts.ts';
 import {Spinner,ErrorBox} from '../components/bits.tsx';
 import {dateTime} from '../lib/format.ts';
 type Vendor={id:number;name:string;phone:string;contact:string;email:string;process_notes:string;active:number};
-type Item={id:number;project_name:string;name:string;quantity:number;unit:string;in_stock_at:string|null;vendor_id:number|null;po_ref:string|null;order_status:string|null;purchase_owner_id:number|null;version:number;next_action:string|null;next_due:string|null;latest_promise:string|null;};
+type Item={id:number;project_name:string;name:string;quantity:number;unit:string;in_stock_at:string|null;vendor_id:number|null;po_ref:string|null;order_status:string|null;purchase_owner_id:number|null;version:number;next_action:string|null;next_due:string|null;followup_owner_id:number|null;followup_version:number;latest_promise:string|null;};
 type Data={items:Item[];vendors:Vendor[]};
 export function Purchase(){
  const {me,users,user,meta}=useApp();
@@ -16,11 +16,13 @@ export function Purchase(){
  const [vendorName,setVendorName]=useState(''),[vendorPhone,setVendorPhone]=useState(''),[vendorContact,setVendorContact]=useState(''),[vendorNotes,setVendorNotes]=useState('');
  const [draft,setDraft]=useState({vendor_id:'',po_ref:'',order_status:'requested',purchase_owner_id:'',detail:''});
  const [call,setCall]=useState({outcome:'progress',note:'',next_due:''});
+ const [next,setNext]=useState({owner_id:'',next_action:'',next_due:''});
  const history=useQuery<{events:{id:number;at:string;user_id:number|null;detail:string;order_status:string|null}[]}>(id?'/api/purchase/items/'+id:null);
  const today=meta.today,selected=q.data?.items.find(x=>x.id===id);
  const items=(q.data?.items??[]).filter(x=>filter==='all'||(filter==='open'&&!x.in_stock_at)||(filter==='mine'&&!x.in_stock_at&&x.purchase_owner_id===me.id)||(filter==='overdue'&&!x.in_stock_at&&((!!x.next_due&&x.next_due<today)||(!!x.latest_promise&&x.latest_promise<today))));
- const open=(x:Item)=>{setId(id===x.id?null:x.id);setDraft({vendor_id:String(x.vendor_id??''),po_ref:x.po_ref??'',order_status:x.order_status??'requested',purchase_owner_id:String(x.purchase_owner_id??''),detail:''});setCall({outcome:'progress',note:'',next_due:''});};
+ const open=(x:Item)=>{setId(id===x.id?null:x.id);setDraft({vendor_id:String(x.vendor_id??''),po_ref:x.po_ref??'',order_status:x.order_status??'requested',purchase_owner_id:String(x.purchase_owner_id??''),detail:''});setCall({outcome:'progress',note:'',next_due:''});setNext({owner_id:String(x.followup_owner_id??''),next_action:x.next_action??'',next_due:x.next_due??''});};
  const save=async()=>{if(!selected)return;try{await put('/api/purchase/items/'+selected.id,{version:selected.version,vendor_id:draft.vendor_id?Number(draft.vendor_id):null,po_ref:draft.po_ref,order_status:draft.order_status,purchase_owner_id:draft.purchase_owner_id?Number(draft.purchase_owner_id):null,detail:draft.detail});setDraft(v=>({...v,detail:''}));invalidate('/api/purchase/queue');toast('Purchase record saved.',{kind:'success'});}catch(e){toastError(e);invalidate('/api/purchase/queue');}};
+ const saveFollowup=async()=>{if(!selected)return;try{await put('/api/procurement/items/'+selected.id+'/followup',{version:selected.followup_version,owner_id:next.owner_id?Number(next.owner_id):null,next_action:next.next_action,next_due:next.next_due||null});invalidate('/api/purchase/queue');toast('Follow-up assigned.',{kind:'success'});}catch(e){toastError(e);invalidate('/api/purchase/queue');}};
  const log=async()=>{if(!selected)return;try{await post('/api/procurement/items/'+selected.id+'/followups',{outcome:call.outcome,note:call.note,next_due:call.next_due||null});setCall(v=>({...v,note:''}));invalidate('/api/purchase/queue');toast('Vendor call recorded.',{kind:'success'});}catch(e){toastError(e);}};
  const addVendor=async()=>{try{await post('/api/purchase/vendors',{name:vendorName,phone:vendorPhone,contact:vendorContact,email:'',process_notes:vendorNotes});setVendorName('');setVendorPhone('');setVendorContact('');setVendorNotes('');invalidate('/api/purchase/queue');toast('Supplier added.',{kind:'success'});}catch(e){toastError(e);}};
  return <div className="proc-stack" data-testid="purchase-workspace">
@@ -41,6 +43,11 @@ export function Purchase(){
      <label>PO reference <input className="field-input" value={draft.po_ref} maxLength={100} onChange={(e:any)=>setDraft(v=>({...v,po_ref:e.target.value}))}/></label>
      <label>Update note <textarea className="field-input" aria-label="Purchase update note" rows={2} maxLength={700} value={draft.detail} onChange={(e:any)=>setDraft(v=>({...v,detail:e.target.value}))}/></label>
      <button className="btn btn-primary" disabled={me.role==='engineer'||!draft.detail.trim()} onClick={()=>void save()}>Save purchase update</button>
+     <h3>Next action — Mechanical or Purchase</h3>
+     <label>Follow-up owner <select className="field-input" value={next.owner_id} onChange={(e:any)=>setNext(v=>({...v,owner_id:e.target.value}))}><option value="">Unassigned</option>{users.filter(u=>u.active&&(u.role==='purchase'||u.role==='engineer'||u.role==='manager')).map(u=><option key={u.id} value={u.id}>{u.name}</option>)}</select></label>
+     <label>Next action <input className="field-input" maxLength={300} value={next.next_action} onChange={(e:any)=>setNext(v=>({...v,next_action:e.target.value}))}/></label>
+     <label>Follow-up date <input className="field-input" type="date" value={next.next_due} onChange={(e:any)=>setNext(v=>({...v,next_due:e.target.value}))}/></label>
+     <button className="btn" onClick={()=>void saveFollowup()}>Save next action</button>
      <h3>Vendor contact</h3>
      <label>Outcome <select className="field-input" value={call.outcome} onChange={(e:any)=>setCall(v=>({...v,outcome:e.target.value}))}>{['progress','delayed','ready','unreachable','other'].map(s=><option key={s}>{s}</option>)}</select></label>
      <label>Notes <textarea className="field-input" aria-label="Vendor contact notes" rows={2} maxLength={1000} value={call.note} onChange={(e:any)=>setCall(v=>({...v,note:e.target.value}))}/></label>
