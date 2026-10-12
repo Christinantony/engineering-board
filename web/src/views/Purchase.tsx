@@ -40,7 +40,7 @@ export function Purchase(){
      <label>Status <select className="field-input" value={draft.order_status} onChange={(e:any)=>setDraft(v=>({...v,order_status:e.target.value}))}>{[['requested','Requested'],['quoted','Quotation received'],['ordered','Ordered'],['part_received','Part received'],['closed','Closed']].map(([a,b])=><option key={a} value={a}>{b}</option>)}</select></label>
      <label>PO reference <input className="field-input" value={draft.po_ref} maxLength={100} onChange={(e:any)=>setDraft(v=>({...v,po_ref:e.target.value}))}/></label>
      <label>Update note <textarea className="field-input" aria-label="Purchase update note" rows={2} maxLength={700} value={draft.detail} onChange={(e:any)=>setDraft(v=>({...v,detail:e.target.value}))}/></label>
-     <button className="btn btn-primary" disabled={!draft.detail.trim()} onClick={()=>void save()}>Save purchase update</button>
+     <button className="btn btn-primary" disabled={me.role==='engineer'||!draft.detail.trim()} onClick={()=>void save()}>Save purchase update</button>
      <h3>Vendor contact</h3>
      <label>Outcome <select className="field-input" value={call.outcome} onChange={(e:any)=>setCall(v=>({...v,outcome:e.target.value}))}>{['progress','delayed','ready','unreachable','other'].map(s=><option key={s}>{s}</option>)}</select></label>
      <label>Notes <textarea className="field-input" aria-label="Vendor contact notes" rows={2} maxLength={1000} value={call.note} onChange={(e:any)=>setCall(v=>({...v,note:e.target.value}))}/></label>
@@ -52,12 +52,12 @@ export function Purchase(){
   </>}
   {tab==='vendors'&&<section className="proc-group">
    <h2>Supplier directory</h2>{q.data?.vendors.map(v=><p key={v.id}><strong>{v.name}</strong> · {v.contact} · {v.phone} · {v.process_notes}</p>)}
-   <h3>Add supplier</h3>
+   {me.role!=='engineer'&&<><h3>Add supplier</h3>
    <label>Name <input className="field-input" value={vendorName} maxLength={100} onChange={(e:any)=>setVendorName(e.target.value)}/></label>
    <label>Contact <input className="field-input" value={vendorContact} onChange={(e:any)=>setVendorContact(e.target.value)}/></label>
    <label>Phone <input className="field-input" value={vendorPhone} onChange={(e:any)=>setVendorPhone(e.target.value)}/></label>
    <label>Typical processes <textarea className="field-input" rows={2} value={vendorNotes} onChange={(e:any)=>setVendorNotes(e.target.value)}/></label>
-   <button className="btn btn-primary" disabled={!vendorName.trim()} onClick={()=>void addVendor()}>Add supplier</button>
+   <button className="btn btn-primary" disabled={!vendorName.trim()} onClick={()=>void addVendor()}>Add supplier</button></>}
   </section>}
  </div>;
 }
