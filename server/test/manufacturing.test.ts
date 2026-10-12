@@ -30,6 +30,10 @@ describe('manufacturing progress v1.9',()=>{
   assert.throws(()=>run(h.app.ctx.db,'UPDATE manufacturing_events SET detail=? WHERE id=?','edited',history.events[0].id),/append-only/);
   const proc=(await paul.get('/api/manufacturing')).body.items.find((x:any)=>x.id===id);
   assert.equal(proc.in_stock_at,null);
+  const current=(await paul.get('/api/projects')).body.projects.find((p:any)=>p.name==='Production build');
+  const list=(await paul.get(`/api/projects/${current.id}/procurement`)).body.items.find((x:any)=>x.id===id);
+  assert.equal((await paul.patch(`/api/procurement/items/${id}`,{version:list.version,quantity:6})).status,400);
+  assert.equal((await paul.patch(`/api/procurement/items/${id}`,{version:list.version,quantity:25})).status,200);
  });
  it('keeps original and latest vendor commitments, with every change auditable',async()=>{
   let r=await allen.post(`/api/manufacturing/items/${id}/commitments`,{promised_date:'2026-10-13',detail:'Vendor original promise'});assert.equal(r.status,201,JSON.stringify(r.body));
