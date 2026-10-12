@@ -4,6 +4,7 @@
 // log shows when each item came into stock.
 
 import { useEffect, useMemo, useState } from 'react';
+import { ManufacturingControl } from './ManufacturingControl.tsx';
 import { PROCUREMENT_MEANS, PROCUREMENT_MEANS_LABEL, type ProcurementItem, type ProcurementLogEntry, type ProcurementMeans } from '@board/shared';
 import { useApp } from '../context.ts';
 import { del, patch, post, put } from '../lib/api.ts';
