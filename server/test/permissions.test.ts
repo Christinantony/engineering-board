@@ -23,6 +23,7 @@ const set = (p: Partial<Record<keyof RolePermissions, Partial<RolePermissions['e
   engineer: { ...DEFAULT_PERMISSIONS.engineer, ...p.engineer },
   manager: { ...DEFAULT_PERMISSIONS.manager, ...p.manager },
   reviewer: { ...DEFAULT_PERMISSIONS.reviewer, ...p.reviewer },
+  purchase: { ...DEFAULT_PERMISSIONS.purchase, ...p.purchase },
 });
 
 describe('role capabilities', () => {

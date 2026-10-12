@@ -328,3 +328,13 @@
 ### 2026-10-12 | ChatGPT | v1.9 validation and handoff
 - **Validation:** [GitHub Actions run 38190268324](https://github.com/Christinantony/engineering-board/actions/runs/38190268324) passed typecheck, backend tests (including migration and manufacturing invariants), build, package checks and Chromium E2E (including partial-quantity and promise scenario).
 - **Notes:** PR #27 is stacked on PR #25 (v1.8), which is still open. Merge #25 first, retarget #27 to main, then merge after checking its final diff. Office-specific vendor workflow testing remains for deployment.
+
+### 2026-10-12 | ChatGPT | branch: chatgpt/purchase-coordination-2.0
+- **What:** v2.0 purchase workspace and role with server-enforced restricted access, shared purchase order queue, supplier directory and immutable purchase event history; schema 16; app version, guides and tests.
+- **Why:** Two-person Purchase department coordinates design and production orders with Mechanical without gaining access to unrelated engineering jobs or confidential drawings.
+- **Validation:** CI checks required before PR ready; no runtime dependencies.
+
+### 2026-10-12 | ChatGPT | v2.0 release validation and handoff
+- **Validation:** [GitHub Actions run 38196178609](https://github.com/Christinantony/engineering-board/actions/runs/38196178609) passed typecheck, backend tests including upgrade/restore safety and role security tests, production build, package checks and Chromium E2E including Purchase supplier/order interaction.
+- **Security:** Purchase accounts are explicitly allowlisted to purchasing, follow-up and manufacturing routes; unrelated review files, jobs and notifications are forbidden at HTTP authentication boundary.
+- **Deployment note:** Set up named buyer accounts in Admin → Team. Verify real purchase workflow with both buyers; README screenshots may be from older versions until re-shot on a local workstation.

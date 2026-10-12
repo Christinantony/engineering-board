@@ -1367,3 +1367,39 @@ test('manufacturing: partial receipts and revised commitments are separate from 
   assert.equal(updated.in_stock_at,null, 'a progress report cannot mark the item in stock');
   assert.equal(updated.latest_promise,'2026-10-23');
 });
+
+
+test('purchase role: buyer sees only purchase queue, creates vendor and records PO', async()=>{
+  const s=await api('POST','/api/session',{user_id:1,password:PASSWORD});
+  const unlocked=await api('POST','/api/admin/unlock',{pin:'1234'},s.cookie);
+  const cookie=s.cookie+'; '+unlocked.cookie;
+  const created=await api('POST','/api/admin/users',{name:'Buyer Browser',role:'purchase'},cookie);
+  assert.equal(created.r.status,201);
+  const buyer=(await created.r.json()).user;
+  assert.equal((await api('POST','/api/session/password',{user_id:buyer.id,password:PASSWORD})).r.status,200);
+  const project=(await (await api('POST','/api/projects',{name:'Purchase UI test'},s.cookie)).r.json()).project;
+  const item=(await (await api('POST',`/api/projects/${project.id}/procurement/items`,{name:'Vendor laser-cut blank',quantity:4},s.cookie)).r.json()).item;
+  const p=await freshPage();
+  await p.goto(BASE+'/');
+  await signIn(p,'Buyer Browser');
+  await p.waitForSelector('[data-testid=purchase-workspace]');
+  assert.equal(await p.locator('nav a:has-text("Board")').count(),0);
+  await p.click('button:has-text("Suppliers")');
+  await p.fill('label:has-text("Name") input','Local Laser Shop');
+  await p.fill('label:has-text("Phone") input','5550100');
+  await p.click('button:has-text("Add supplier")');
+  await p.waitForSelector('text=Local Laser Shop');
+  await p.click('button:has-text("Purchase queue")');
+  await p.click('button:has-text("Vendor laser-cut blank")');
+  await p.selectOption('label:has-text("Supplier") select',{label:'Local Laser Shop'});
+  await p.selectOption('label:has-text("Purchase owner") select',{label:'Buyer Browser'});
+  await p.selectOption('label:has-text("Status") select','ordered');
+  await p.fill('label:has-text("PO reference") input','PO-200');
+  await p.fill('textarea[aria-label="Purchase update note"]','PO sent to laser shop');
+  await p.click('button:has-text("Save purchase update")');
+  await p.waitForFunction(async id=>{
+    const j=await(await fetch('/api/purchase/queue')).json();return j.items.find(x=>x.id===id)?.po_ref==='PO-200';
+  },item.id);
+  const session=await api('POST','/api/session',{user_id:buyer.id,password:PASSWORD});
+  assert.equal((await api('GET','/api/tickets',null,session.cookie)).r.status,403);
+});

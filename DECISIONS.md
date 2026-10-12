@@ -115,6 +115,8 @@ Asked for by Christin on 11 October 2026, from a list of proposals: host health,
 
 | 41 | **Manufacturing progression is separate from the procurement master list and stock proof.** Migration 15 adds a version-checked per-item manufacturing record and append-only event history. Quantity counters represent distinct states: in-process is a subset of requested, received cannot exceed ordered, accepted plus rejected cannot exceed received. Stage labels are administratively configurable for each acquisition means; the underlying stage codes remain fixed. Vendor promise changes are separate append-only events: original and latest dates are retained. Calling a part ready does not change stock or inspection acceptance. | Engineers coordinate vendors and purchasing without replacing existing procurement entries or physical approvals. Recording claims, receipts and inspections independently prevents false completion. |
 
+| 42 | **Dedicated Purchase role accesses only narrowly scoped procurement, manufacturing and contact endpoints, not engineering jobs, drawing review or project internals.** Purchase employees use `/purchase`, maintain vendors and PO status while engineers raise existing procurement requirements and coordinate follow-ups. No duplicate component records; order changes have an immutable log. | Two-person Purchase team needs a single shared actionable queue without broad engineering access or repeated manual status requests. The security boundary is enforced at HTTP routes, not just in navigation. |
+
 ## Known limits
 
 - The host PC must be on for others to reach the board.

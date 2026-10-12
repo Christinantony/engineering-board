@@ -33,12 +33,14 @@ import { ReviewWorkspaceView } from './views/ReviewWorkspace.tsx';
 import { DrawingRegister } from './views/DrawingRegister.tsx';
 import { WeeklySummary } from './views/WeeklySummary.tsx';
 import { Procurement } from './views/Procurement.tsx';
+import { Purchase } from './views/Purchase.tsx';
 
 const NAV = [
   { path: '/board', label: 'Board', key: 'b' },
   { path: '/today', label: 'Today', key: 't' },
   { path: '/my-work', label: 'My work', key: 'm' },
   { path: '/projects', label: 'Projects', key: 'p' },
+  { path: '/purchase', label: 'Purchase', key: 'u' },
   { path: '/dashboard', label: 'Dashboard', key: 'd' },
   { path: '/review', label: 'Review', key: 'v' },
   { path: '/workload', label: 'Workload', key: 'w' },
@@ -48,6 +50,7 @@ const NAV = [
 
 /** A reviewer's board is the review queue and nothing else (decision #29). */
 const REVIEWER_NAV = NAV.filter((n) => n.path === '/review');
+const PURCHASE_NAV = [{path:'/purchase',label:'Purchase',key:'p'}];
 const REVIEWER_PATHS = /^\/review(\/\d+)?$/;
 
 const VIEWS: Record<string, () => any> = {
@@ -64,6 +67,7 @@ const VIEWS: Record<string, () => any> = {
   '/review/register': DrawingRegister,
   '/reports/weekly': WeeklySummary,
   '/projects/procurement': Procurement,
+  '/purchase': Purchase,
   '/review': ReviewQueue,
   '/projects': Projects,
 };
@@ -220,17 +224,18 @@ function SignIn({ user, back }: { user: User; back: () => void }) {
 
 function Shell({ me, meta }: { me: User; meta: Meta }) {
   const users = useQuery<{ users: User[] }>('/api/users?all=1');
-  const types = useQuery<{ job_types: JobType[] }>('/api/job-types');
+  const types = useQuery<{ job_types: JobType[] }>(me.role === 'purchase' ? null : '/api/job-types');
   const { path, params } = useLocation();
   const [creating, setCreating] = useState(false);
   const live = useLiveState();
   // reviewers see only the review queue (decision #29) unless the admin gave them a job capability (decision #31)
   const whole = hasBoardAccess(meta.permissions, me);
+  const purchasing = me.role === 'purchase';
   const can = (cap: Capability) => allows(meta.permissions, me, cap);
   // reviewers don't see projects (decision #29)
   const projects = useQuery<{ projects: Project[] }>(whole ? '/api/projects' : null);
-  const nav = whole ? NAV : REVIEWER_NAV;
-  const home = whole ? '/board' : '/review';
+  const nav = purchasing ? PURCHASE_NAV : whole ? NAV : REVIEWER_NAV;
+  const home = purchasing ? '/purchase' : whole ? '/board' : '/review';
   // a reviewer never opens the job panel
   const jobId = whole ? Number(params.get('job')) || null : null;
 
@@ -242,7 +247,8 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
   useEffect(() => setActionWorkday(meta.workday.hours_per_day), [meta.workday.hours_per_day]);
   useEffect(() => {
     if (path === '/') navigate(home, { replace: true, keepJob: whole });
-    else if (!whole && !REVIEWER_PATHS.test(path)) navigate('/review', { replace: true });
+    else if (purchasing && path !== '/purchase') navigate('/purchase', { replace: true });
+    else if (!whole && !purchasing && !REVIEWER_PATHS.test(path)) navigate('/review', { replace: true });
   }, [path]);
 
   const openJob = useCallback((id: number | null) => setJob(id), []);
@@ -279,17 +285,17 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
   }, [whole, meta.permissions]);
 
   const state = useMemo<AppState | null>(() => {
-    if (!users.data || !types.data || (whole && !projects.data)) return null;
+    if (!users.data || (whole && !types.data) || (whole && !projects.data)) return null;
     const all = users.data.users;
     const byId = new Map(all.map((u) => [u.id, u]));
-    const jt = new Map(types.data.job_types.map((j) => [j.id, j]));
+    const jt = new Map((types.data?.job_types ?? []).map((j) => [j.id, j]));
     const projectList = projects.data?.projects ?? [];
     const pr = new Map(projectList.map((p) => [p.id, p]));
     return {
       me: byId.get(me.id) ?? me,
       users: all,
       workers: all.filter((u) => allows(meta.permissions, u, 'claim')),
-      jobTypes: types.data.job_types,
+      jobTypes: types.data?.job_types ?? [],
       projects: projectList,
       meta,
       can,
@@ -362,7 +368,7 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
           <button className="help-btn" onClick={() => void ask({ type: 'help' })} aria-label="Keyboard shortcuts" title="Keyboard shortcuts (?)">
             ?
           </button>
-          <Bell />
+          {!purchasing && <Bell />}
           <ThemePicker />
           {whole && can('create') && (
             <button className="btn btn-primary new-job" onClick={() => setCreating(true)} title="New job (N)">
@@ -410,7 +416,7 @@ function Shell({ me, meta }: { me: User; meta: Meta }) {
 
         <main className="main" id="main" tabIndex={-1}>
           <ErrorBoundary resetKey={path}>
-            <View path={whole || REVIEWER_PATHS.test(path) ? path : '/review'} />
+            <View path={purchasing ? '/purchase' : whole || REVIEWER_PATHS.test(path) ? path : '/review'} />
           </ErrorBoundary>
         </main>
 
@@ -438,6 +444,7 @@ const TITLES: Record<string, string> = {
   '/review/register': 'Drawing register',
   '/reports/weekly': 'Weekly summary',
   '/projects/procurement': 'Procurement',
+  '/purchase': 'Purchase coordination',
 };
 
 function View({ path }: { path: string }) {

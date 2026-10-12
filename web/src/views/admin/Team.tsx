@@ -15,7 +15,7 @@ const refresh = () => {
 export function TeamSection() {
   const q = useQuery<{ users: User[] }>('/api/admin/users');
   const [name, setName] = useState('');
-  const [role, setRole] = useState<'engineer' | 'manager' | 'reviewer'>('engineer');
+  const [role, setRole] = useState<'engineer' | 'manager' | 'reviewer' | 'purchase'>('engineer');
   if (!q.data) return <Spinner />;
 
   const add = async (e: any) => {
@@ -65,6 +65,7 @@ export function TeamSection() {
           <option value="engineer">Engineer</option>
           <option value="manager">Manager</option>
           <option value="reviewer">Reviewer</option>
+          <option value="purchase">Purchase</option>
         </select>
         <button className="btn btn-primary" disabled={!name.trim()}>
           Add person
@@ -136,6 +137,7 @@ function UserRow({ u }: { u: User }) {
           <option value="engineer">Engineer</option>
           <option value="manager">Manager</option>
           <option value="reviewer">Reviewer</option>
+          <option value="purchase">Purchase</option>
         </select>
       </td>
       <td>

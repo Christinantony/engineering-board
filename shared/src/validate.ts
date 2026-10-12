@@ -273,7 +273,7 @@ export const projectSchema = v.object({
 });
 
 const capabilityFlags = v.object({ create: v.bool(), claim: v.bool(), edit: v.bool() });
-export const permissionsSchema = v.object({ engineer: capabilityFlags, manager: capabilityFlags, reviewer: capabilityFlags });
+export const permissionsSchema = v.object({ engineer: capabilityFlags, manager: capabilityFlags, reviewer: capabilityFlags, purchase: v.withDefault(capabilityFlags, {create:false,claim:false,edit:false}) });
 
 // ---- tools: sheet calculator reference data (decision #32, the team's workbook) ----
 const mm = v.number({ min: 0.01, max: 100_000 });

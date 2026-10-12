@@ -35,9 +35,9 @@ export const PRIORITIES = ['urgent', 'high', 'normal', 'low'] as const;
 export type Priority = (typeof PRIORITIES)[number];
 export const PRIORITY_RANK: Record<Priority, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
 
-export const ROLES = ['engineer', 'manager', 'reviewer'] as const;
+export const ROLES = ['engineer', 'manager', 'reviewer', 'purchase'] as const;
 export type Role = (typeof ROLES)[number];
-export const ROLE_LABEL: Record<Role, string> = { engineer: 'Engineer', manager: 'Manager', reviewer: 'Reviewer' };
+export const ROLE_LABEL: Record<Role, string> = { engineer: 'Engineer', manager: 'Manager', reviewer: 'Reviewer', purchase: 'Purchase' };
 /** Who may pass or return drawings in board review (never engineers). */
 export const canReview = (u: { role: Role; active: boolean }) => u.active && (u.role === 'manager' || u.role === 'reviewer');
 /**
@@ -45,7 +45,7 @@ export const canReview = (u: { role: Role; active: boolean }) => u.active && (u.
  * handed to them; engineers and the manager see every drawing. This is about
  * the review process only and is not changed by the role capabilities below.
  */
-export const seesWholeBoard = (u: { role: Role }) => u.role !== 'reviewer';
+export const seesWholeBoard = (u: { role: Role }) => u.role !== 'reviewer' && u.role !== 'purchase';
 
 /**
  * Job capabilities per role (decision #31), set by the admin under Admin → Roles.
@@ -65,15 +65,16 @@ export const DEFAULT_PERMISSIONS: RolePermissions = {
   engineer: { create: true, claim: true, edit: true },
   manager: { create: true, claim: false, edit: true },
   reviewer: { create: false, claim: false, edit: false },
+  purchase: { create: false, claim: false, edit: false },
 };
-export const allows = (perms: RolePermissions, u: { role: Role }, cap: Capability): boolean => !!perms[u.role]?.[cap];
+export const allows = (perms: RolePermissions, u: { role: Role }, cap: Capability): boolean => u.role !== 'purchase' && !!perms[u.role]?.[cap];
 /**
  * Who sees the Kanban board, its pages and the job panel: everyone but
  * reviewers, unless the admin has given reviewers a job capability (jobs are
  * sometimes created for them too). Review visibility stays as seesWholeBoard.
  */
 export const hasBoardAccess = (perms: RolePermissions, u: { role: Role }): boolean =>
-  u.role !== 'reviewer' || CAPABILITIES.some((c) => allows(perms, u, c));
+  (u.role !== 'reviewer' && u.role !== 'purchase') || (u.role === 'reviewer' && CAPABILITIES.some((c) => allows(perms, u, c)));
 /** Can this person change this job: edit any job, or claim-holders on the job assigned to them. */
 export const canChangeJob = (perms: RolePermissions, u: { id: number; role: Role }, t: { assigned_to: number | null }): boolean =>
   allows(perms, u, 'edit') || (allows(perms, u, 'claim') && t.assigned_to === u.id);
