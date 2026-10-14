@@ -338,3 +338,8 @@
 - **Validation:** [GitHub Actions run 38196178609](https://github.com/Christinantony/engineering-board/actions/runs/38196178609) passed typecheck, backend tests including upgrade/restore safety and role security tests, production build, package checks and Chromium E2E including Purchase supplier/order interaction.
 - **Security:** Purchase accounts are explicitly allowlisted to purchasing, follow-up and manufacturing routes; unrelated review files, jobs and notifications are forbidden at HTTP authentication boundary.
 - **Deployment note:** Set up named buyer accounts in Admin → Team. Verify real purchase workflow with both buyers; README screenshots may be from older versions until re-shot on a local workstation.
+
+### 2026-10-14 | Claude | branch: claude/mixed-nesting (release 2.1.0)
+- **What:** Sheet calculator, second tab **Mixed parts on one sheet**: nests different parts together on one stock size, with "any order" (laser, plasma, waterjet, CNC) or "straight cuts right across" (panel saw, shear), kerf, edge margin and rotation; a lettered scale drawing per sheet with the strip left whole, a positions table and CSV, and a DXF in millimetres. New `shared/src/nesting.ts`, `web/src/views/tools/MixedSheets.tsx`; decision #43; user guide, README and two screenshots; version 2.1.0. No migration; the workbook mode is unchanged.
+- **Why:** Christin needed six 550 × 200 and five 850 × 250 from one 2400 × 1200, which the one-part-per-sheet workbook could not answer.
+- **Validation:** `npm run typecheck`, `npm test` (275 pass, incl. 8 nesting tests: overlaps, kerf, margin, straight-cut check, area minimum on a 900-piece job, determinism, DXF), `npm run build`, `npm run check:build` (15 pass) and `npm run e2e` (51 pass) all pass locally.

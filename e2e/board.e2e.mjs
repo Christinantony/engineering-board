@@ -1403,3 +1403,43 @@ test('purchase role: buyer sees only purchase queue, creates vendor and records 
   const session=await api('POST','/api/session',{user_id:buyer.id,password:PASSWORD});
   assert.equal((await api('GET','/api/tickets',null,session.cookie)).r.status,403);
 });
+
+test('mixed nesting: different parts on one 2400 × 1200 sheet, both cut modes, positions and a DXF', async () => {
+  const p = await login('Paul');
+  await p.goto(`${BASE}/tools?tool=sheets`);
+  await p.click('.sheet-modes button:has-text("Mixed parts on one sheet")');
+  await p.waitForFunction(() => location.search.includes('mode=mixed'));
+  await p.selectOption('select[aria-label="Sheet to cut from"]', 'custom');
+  await p.fill('input[aria-label="Sheet length (mm)"]', '2400');
+  await p.fill('input[aria-label="Sheet width (mm)"]', '1200');
+  await p.fill('input[aria-label="Part 1 name"]', 'Panel 550 x 200');
+  await p.fill('input[aria-label="Part 1 length (mm)"]', '550');
+  await p.fill('input[aria-label="Part 1 width (mm)"]', '200');
+  await p.fill('input[aria-label="Part 1 number"]', '6');
+  await p.click('button:has-text("+ Add part")');
+  await p.fill('input[aria-label="Part 2 name"]', 'Panel 850 x 250');
+  await p.fill('input[aria-label="Part 2 length (mm)"]', '850');
+  await p.fill('input[aria-label="Part 2 width (mm)"]', '250');
+  await p.fill('input[aria-label="Part 2 number"]', '5');
+  await p.fill('input[aria-label="Spacing / kerf between parts (mm)"]', '10');
+  await p.fill('input[aria-label="Edge margin on sheet (mm)"]', '0');
+  await p.waitForSelector('[data-testid=mix-total]:has-text("1")');
+  assert.equal(await p.locator('[data-testid=mix-sheet] svg [data-part]').count(), 11);
+  assert.equal(await p.locator('[data-testid=mix-sheet] .form-error').count(), 0, 'the layout check passes');
+  // straight cuts for a saw: still one sheet
+  await p.click('label:has-text("Straight cuts right across") input');
+  await p.waitForSelector('[data-testid=mix-total]:has-text("1")');
+  await p.click('button:has-text("Show part positions")');
+  assert.equal(await p.locator('.mix-table tbody tr').count(), 11);
+  // the DXF for the cutting machine
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('button:has-text("Download DXF")')]);
+  assert.equal(dl.suggestedFilename(), 'nesting 2400x1200.dxf');
+  const dxf = await readFileAsync(await dl.path(), 'utf8');
+  assert.ok(dxf.includes('A1 Panel 550 x 200') && dxf.includes('B5 Panel 850 x 250'));
+  // a part too big for the sheet is reported, not drawn
+  await p.fill('input[aria-label="Part 2 length (mm)"]', '2600');
+  await p.waitForSelector('[data-testid=mix-unplaced]:has-text("Panel 850 x 250 × 5")');
+  // the workbook mode is still there, unchanged
+  await p.click('.sheet-modes button:has-text("One part per sheet")');
+  await p.waitForSelector('.sheet-table input[aria-label="Component 1 name"]');
+});

@@ -176,6 +176,16 @@ After a drawing passes, the board removes the earlier attempts' PDFs (the histor
 
 It is a straight-grid estimate, as the workbook says: a nesting program may save a little more. Rows missing a material, size or number are listed as not counted. The list is remembered in your browser; **Print** gives a copy for the purchase request. The materials and stock sizes come from **Admin → Tools**.
 
+**Mixed parts on one sheet** (the second tab) cuts several different parts from the same sheet, for example six 550 × 200 and five 850 × 250 from one 2400 × 1200:
+
+- Choose the **sheet** (a stock size from Admin → Tools, or **Another size…** to type one), then one row per part: a **name**, **length**, **width** and **number**. Each part gets a letter (A, B, C…) and each piece a number (A1, A2…).
+- Set the **kerf** (the gap between parts), the **edge margin** and whether parts may be **turned 90°**, as in the workbook mode.
+- Choose how it will be cut. **Any order** suits a laser, plasma, waterjet or CNC router. **Straight cuts right across** suits a panel saw or a shear: every cut runs from one edge of a piece of the sheet to the other, so the layout comes out in rows and strips.
+- The board shows the sheets needed, the utilisation and, for each sheet, a drawing to scale with every piece lettered and the strip left whole at the far end. **Show part positions** lists where each piece starts (from the bottom-left corner of the sheet).
+- **Download DXF** gives the layout in millimetres for the cutting program (layers SHEET, MARGIN, PARTS and LABELS); **Positions (CSV)** gives the table for a spreadsheet; **Print** a copy for the shop floor.
+
+The layout is worked out in your browser, in a moment, and is good rather than proven best; a part too big for the sheet is listed as not placed. Check the kerf against the machine before cutting.
+
 ### PDF tools
 
 The team's four PDF scripts, on one page with a tab each. The first three work inside your browser: the files never leave your PC, and nothing is installed. Results are downloaded one by one, or all at once as a `.zip`.

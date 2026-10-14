@@ -19,6 +19,7 @@ _(none)_
 - [x] The application source was not in this repo yet. **Answer:** Claude imported the full source and its history (phases 2 to 7) on branch `claude/import-app-source`, 2026-10-02.
 
 ## Notes for the next agent
+- **2.1.0 (Claude, 2026-10-14):** the sheet calculator has a second tab, mixed parts on one sheet (decision #43, `shared/src/nesting.ts`). It is separate from the workbook mode, which must stay formula for formula (#32). No migration; schema stays 16.
 - **Where the project stands:** 1.7.0 is proposed as eight stacked PRs (#17 to #24), to be merged in order: Health (#34), the last-signature fix, the drawing register and revisions (#35), estimates (#36), the weekly summary (#37), release checklists (#38), procurement (#39), then the release (version, README, screenshots). Schema 13.
 - **Releases:** `npm run package` writes `dist/EngineeringBoard-<version>.zip`. Bump `version` in `package.json` and `APP_VERSION` in `server/src/app.ts` together; `check:build` fails if they differ.
 - **README screenshots:** `assets/screenshots/` is written by `node scripts/screenshots.mjs` (build first; set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` if Playwright's own Chromium isn't installed). Re-run it after visible changes. It also shoots the sheet calculator (the workbook's example plus a second part), its cutting layout, Admin → Roles and Admin → Tools; every PNG in that folder is referenced from the README, so remove a shot from both places together.

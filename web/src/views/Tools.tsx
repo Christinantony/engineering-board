@@ -12,6 +12,7 @@ import { useQuery } from '../lib/store.ts';
 import { toast } from '../lib/toasts.ts';
 import { ErrorBox, Spinner } from '../components/bits.tsx';
 import { PdfTools } from './tools/PdfTools.tsx';
+import { MixedSheets } from './tools/MixedSheets.tsx';
 
 interface Data {
   materials: SheetMaterial[];
@@ -23,7 +24,7 @@ const TOOLS = [
   {
     id: 'sheets',
     name: 'Sheet calculator',
-    blurb: 'How many standard sheets a component needs: parts per sheet in a straight grid with kerf and edge margin, sheets to buy, parts on the last sheet, utilisation, waste, and the cutting layout.',
+    blurb: 'How many standard sheets a component needs (one part per sheet, as in the workbook), or several different parts nested together on one sheet, with the cutting layout, part positions and a DXF.',
   },
   {
     id: 'pdf',
@@ -100,7 +101,43 @@ const fmt = (n: number, d = 0) => n.toLocaleString(undefined, { maximumFractionD
 const m2 = (n: number) => `${fmt(n, 3)} m²`;
 const pct = (n: number) => `${fmt(n * 100, 1)}%`;
 
+/** The two ways of counting sheets: the workbook's (one part size per sheet) and mixed nesting (decision #43). */
 export function SheetCalculator() {
+  const { params } = useLocation();
+  const mixed = params.get('mode') === 'mixed';
+  const data = useQuery<Data>('/api/tools/sheet');
+  const go = (m: 'one' | 'mixed') => {
+    const p = new URLSearchParams(params);
+    if (m === 'mixed') p.set('mode', 'mixed');
+    else p.delete('mode');
+    navigate(`/tools?${p}`);
+  };
+  return (
+    <>
+      <div className="seg-tabs sheet-modes" role="tablist" aria-label="How to count sheets">
+        <button role="tab" aria-selected={!mixed} className={mixed ? '' : 'on'} onClick={() => go('one')}>
+          One part per sheet (the workbook)
+        </button>
+        <button role="tab" aria-selected={mixed} className={mixed ? 'on' : ''} onClick={() => go('mixed')}>
+          Mixed parts on one sheet
+        </button>
+      </div>
+      {mixed ? (
+        data.error && !data.data ? (
+          <ErrorBox message={data.error.message} retry={data.refresh} />
+        ) : !data.data ? (
+          <Spinner />
+        ) : (
+          <MixedSheets materials={data.data.materials} sizes={data.data.sizes} defaults={data.data.settings} />
+        )
+      ) : (
+        <WorkbookCalculator />
+      )}
+    </>
+  );
+}
+
+function WorkbookCalculator() {
   const { me } = useApp();
   const data = useQuery<Data>('/api/tools/sheet');
   const [saved] = useState(loadSaved);

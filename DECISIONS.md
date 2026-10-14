@@ -117,6 +117,14 @@ Asked for by Christin on 11 October 2026, from a list of proposals: host health,
 
 | 42 | **Dedicated Purchase role accesses only narrowly scoped procurement, manufacturing and contact endpoints, not engineering jobs, drawing review or project internals.** Purchase employees use `/purchase`, maintain vendors and PO status while engineers raise existing procurement requirements and coordinate follow-ups. No duplicate component records; order changes have an immutable log. | Two-person Purchase team needs a single shared actionable queue without broad engineering access or repeated manual status requests. The security boundary is enforced at HTTP routes, not just in navigation. |
 
+## Version 2.1.0
+
+Asked for by Christin on 14 October 2026: "from a sheet of 2400 x 1200 I need to cut out 6 sheets of 550 x 200 and 5 sheets of 850 x 250", which the workbook calculator could not answer.
+
+| # | Decision | Why |
+|---|---|---|
+| 43 | **The sheet calculator gains a second mode, mixed parts on one sheet, beside the workbook mode, which stays formula for formula (#32).** `shared/src/nesting.ts` nests any list of parts (name, length, width, quantity) on one stock size: every part is grown by the kerf and the usable area by one kerf, so neighbours end up exactly a kerf apart and the far edges need none. Two cut modes: **any order** (MaxRects, for laser, plasma, waterjet and CNC) and **straight cuts right across** (guillotine splits only, for a panel saw or shear). Each tries five sort orders with several placement rules and keeps the best by: fewest parts left over, fewest sheets, smallest used corner on the last sheet (so the offcut left whole is as big as possible), then utilisation. Deterministic, Node built-ins only (#1), and run in the browser; up to 1500 pieces. Results: sheets to buy, a scale drawing of each sheet with lettered parts (A1, B3…), the strip left whole, a positions table and CSV, and a DXF (R12 ASCII, millimetres, layers SHEET, MARGIN, PARTS, LABELS) for the cutting program. The list is kept in the browser like the workbook mode; nothing is stored on the server. | The workbook answers "how many sheets for this one part", which is the purchase question; the shop floor also needs "how do these different parts share a sheet, and where do I cut". Keeping the modes apart means the workbook's numbers never change under the team. A heuristic, not an optimiser, is honest about what a browser can do instantly; the tests check every layout for overlaps, kerf and margin, that straight-cut layouts really can be cut straight across, and that a large job uses no more sheets than its area needs. |
+
 ## Known limits
 
 - The host PC must be on for others to reach the board.

@@ -5318,3 +5318,77 @@ fieldset.panel-editable {
 .proc-stack .proc-table td {
   overflow-wrap: anywhere;
 }
+
+/* ======================= Mixed nesting (2.1) ======================= */
+.sheet-modes {
+  margin-bottom: 14px;
+}
+.mix-sheet {
+  margin-bottom: 10px;
+}
+.mix-sheet select {
+  width: auto;
+}
+.mix-cut {
+  gap: 6px 18px;
+}
+.mix-cut label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.mix-of {
+  font-weight: 400;
+  margin-left: 6px;
+}
+.mix-key {
+  display: inline-block;
+  min-width: 22px;
+  padding: 0 5px;
+  border-radius: 4px;
+  text-align: center;
+  font-family: var(--font-tech);
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--ink);
+  border: 1px solid currentColor;
+}
+.mix-legend {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  padding: 0;
+  margin: 8px 0 12px;
+}
+.mix-part {
+  fill-opacity: 0.3;
+  stroke-width: 0.9;
+}
+.mix-axis {
+  fill: var(--muted);
+  font-size: 9px;
+  font-family: var(--font-tech);
+}
+.mix-table {
+  margin-top: 6px;
+}
+/* one colour per part, in every theme */
+.mix-c0 { fill: var(--c-inbox); stroke: var(--c-inbox); background: color-mix(in srgb, var(--c-inbox) 22%, transparent); }
+.mix-c1 { fill: var(--c-progress); stroke: var(--c-progress); background: color-mix(in srgb, var(--c-progress) 22%, transparent); }
+.mix-c2 { fill: var(--c-done); stroke: var(--c-done); background: color-mix(in srgb, var(--c-done) 22%, transparent); }
+.mix-c3 { fill: var(--c-review); stroke: var(--c-review); background: color-mix(in srgb, var(--c-review) 22%, transparent); }
+.mix-c4 { fill: var(--c-waiting); stroke: var(--c-waiting); background: color-mix(in srgb, var(--c-waiting) 22%, transparent); }
+.mix-c5 { fill: var(--c-claimed); stroke: var(--c-claimed); background: color-mix(in srgb, var(--c-claimed) 22%, transparent); }
+.mix-c6 { fill: var(--p-high); stroke: var(--p-high); background: color-mix(in srgb, var(--p-high) 22%, transparent); }
+.mix-c7 { fill: var(--muted); stroke: var(--muted); background: color-mix(in srgb, var(--muted) 22%, transparent); }
+@media print {
+  .sheet-modes,
+  .mix-cut,
+  .mix-sheet-card .link-btn {
+    display: none !important;
+  }
+  .mix-sheet-card {
+    break-inside: avoid;
+  }
+}
