@@ -4356,6 +4356,26 @@ fieldset.panel-editable {
   font-size: 9px;
   font-family: var(--font-tech);
 }
+.sheet-svg-turned {
+  fill-opacity: 0.42;
+}
+/* the offcut left in one piece (decision #44) */
+.sheet-svg-offcut rect {
+  fill: var(--c-done);
+  fill-opacity: 0.12;
+  stroke: var(--c-done);
+  stroke-width: 1;
+  stroke-dasharray: 6 3;
+}
+.sheet-svg-offcut text {
+  fill: var(--c-done);
+  font-size: 11px;
+  font-weight: 600;
+}
+.mix-stale {
+  opacity: 0.6;
+  transition: opacity 0.2s 0.15s;
+}
 @media print {
   .topbar,
   .sheet-inputs .inline-form,

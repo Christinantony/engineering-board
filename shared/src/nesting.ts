@@ -17,9 +17,16 @@
 //     plasma, waterjet or CNC, where parts can be cut in any order;
 //   - "guillotine": every cut runs straight across the piece being cut, for
 //     panel saws and shears.
-// Each runs with several part orders and placement rules; the result with
-// the fewest sheets wins, then the one leaving the last sheet's offcut in the
-// biggest single piece. Deterministic: the same input gives the same layout.
+// Each runs with several part orders and placement rules, and (when turning
+// is allowed) with each part turned as it fits, or all with their long side
+// along the sheet, or all across it; the result with the fewest sheets wins,
+// then the one leaving the last sheet's offcut in the biggest single piece.
+// The last sheet's parts are then packed again into the shortest strip of the
+// sheet (or the narrowest) they fit, so what is left comes off with one
+// straight cut (decision #44). Deterministic: the same input gives the same
+// layout.
+
+import { offcutOf, reachOfParts, type Offcut } from './patterns.ts';
 
 export interface NestPart {
   name: string;
@@ -58,6 +65,8 @@ export interface NestedSheet {
   /** how far the parts reach, from the sheet's corner (margin included) */
   reach_length: number;
   reach_width: number;
+  /** what comes off in one piece with one straight cut beyond the parts (decision #44) */
+  offcut: Offcut | null;
 }
 
 export interface NestResult {
@@ -85,6 +94,8 @@ interface Rect {
 interface Item {
   part: number;
   n: number;
+  /** turned before packing (a fixed-orientation strategy) */
+  pre?: boolean;
   /** grown by the kerf */
   w: number;
   h: number;
@@ -197,7 +208,7 @@ interface Run {
   unplaced: Item[];
 }
 
-function pack(items: Item[], W: number, H: number, rotate: boolean, rule: Rule, make: () => Bin, kerf: number, margin: number): Run {
+function pack(items: Item[], W: number, H: number, rotate: boolean, rule: Rule, make: () => Bin, kerf: number, margin: number, maxBins = Infinity): Run | null {
   const bins: Run['bins'] = [];
   const unplaced: Item[] = [];
   for (const it of items) {
@@ -207,11 +218,12 @@ function pack(items: Item[], W: number, H: number, rotate: boolean, rule: Rule, 
       const p = b.bin.find(it, rotate, rule);
       if (!p) continue;
       b.bin.place(p.rect);
-      b.placed.push({ part: it.part, n: it.n, x: margin + p.rect.x, y: margin + p.rect.y, length: p.rect.w - kerf, width: p.rect.h - kerf, rotated: p.rotated });
+      b.placed.push({ part: it.part, n: it.n, x: margin + p.rect.x, y: margin + p.rect.y, length: p.rect.w - kerf, width: p.rect.h - kerf, rotated: p.rotated !== !!it.pre });
       done = true;
       break;
     }
     if (done) continue;
+    if (bins.length >= maxBins) return null; // more sheets than allowed: give up early
     const bin = make();
     const p = bin.find(it, rotate, rule);
     if (!p) {
@@ -219,7 +231,7 @@ function pack(items: Item[], W: number, H: number, rotate: boolean, rule: Rule, 
       continue;
     }
     bin.place(p.rect);
-    bins.push({ bin, placed: [{ part: it.part, n: it.n, x: margin + p.rect.x, y: margin + p.rect.y, length: p.rect.w - kerf, width: p.rect.h - kerf, rotated: p.rotated }] });
+    bins.push({ bin, placed: [{ part: it.part, n: it.n, x: margin + p.rect.x, y: margin + p.rect.y, length: p.rect.w - kerf, width: p.rect.h - kerf, rotated: p.rotated !== !!it.pre }] });
   }
   return { bins, unplaced };
 }
@@ -232,6 +244,45 @@ const ORDERS: ((a: Item, b: Item) => number)[] = [
   (a, b) => b.w + b.h - (a.w + a.h),
 ];
 
+type Orient = 'free' | 'long' | 'across';
+
+interface Strategy {
+  order: (a: Item, b: Item) => number;
+  orient: Orient;
+  rule: Rule;
+  make: (W: number, H: number) => Bin;
+}
+
+/** Every part turned the same way round first, or each turned as it fits. */
+function orientItems(items: Item[], orient: Orient): Item[] {
+  if (orient === 'free') return items;
+  return items.map((it) => {
+    const turn = orient === 'long' ? it.w < it.h : it.w > it.h;
+    return turn ? { ...it, w: it.h, h: it.w, pre: !it.pre } : it;
+  });
+}
+
+function strategies(s: NestSettings): Strategy[] {
+  const rules: Rule[] = s.cut === 'guillotine' ? ['area', 'short', 'long', 'bottomleft'] : ['short', 'long', 'area', 'bottomleft'];
+  const makers: Strategy['make'][] =
+    s.cut === 'guillotine' ? [(W, H) => new GuillotineBin(W, H, 'shorter'), (W, H) => new GuillotineBin(W, H, 'longer')] : [(W, H) => new MaxRectsBin(W, H)];
+  // turning parts where it helps: each part as it fits best, or all with their long side along the sheet, or all across it
+  const orients: Orient[] = s.rotate ? ['free', 'long', 'across'] : ['free'];
+  const out: Strategy[] = [];
+  for (const orient of orients) for (const order of ORDERS) for (const rule of rules) for (const make of makers) out.push({ order, orient, rule, make });
+  return out;
+}
+
+function runStrategy(base: Item[], st: Strategy, W: number, H: number, s: NestSettings, maxBins = Infinity): Run | null {
+  const items = orientItems(base, st.orient).sort((a, b) => st.order(a, b) || a.part - b.part || a.n - b.n);
+  return pack(items, W, H, s.rotate && st.orient === 'free', st.rule, () => st.make(W, H), s.kerf, s.margin, maxBins);
+}
+
+/** Up to this many parts on the last sheet, its squeeze tries every strategy. */
+const SQUEEZE_FULL = 300;
+
+const offcutArea = (o: Offcut | null) => (o ? o.length * o.width : 0);
+
 /** Nest the parts onto sheets of one size. */
 export function nestParts(parts: NestPart[], sheet: { length: number; width: number }, s: NestSettings): NestResult {
   const usableL = sheet.length - 2 * s.margin;
@@ -242,38 +293,35 @@ export function nestParts(parts: NestPart[], sheet: { length: number; width: num
   parts.forEach((p, part) => {
     for (let n = 1; n <= p.quantity; n++) base.push({ part, n, w: p.length + s.kerf, h: p.width + s.kerf });
   });
-  const rules: Rule[] = s.cut === 'guillotine' ? ['area', 'short', 'long', 'bottomleft'] : ['short', 'long', 'area', 'bottomleft'];
-  const makers: (() => Bin)[] =
-    usableL <= 0 || usableW <= 0
-      ? []
-      : s.cut === 'guillotine'
-        ? [() => new GuillotineBin(W, H, 'shorter'), () => new GuillotineBin(W, H, 'longer')]
-        : [() => new MaxRectsBin(W, H)];
+  const all = usableL > 0 && usableW > 0 ? strategies(s) : [];
+  const offcut = (placed: PlacedPart[]) => offcutOf(sheet, reachOfParts(placed), s);
   let best: Run | null = null;
   let bestKey: number[] | null = null;
-  for (const order of ORDERS) {
-    const items = [...base].sort((a, b) => order(a, b) || a.part - b.part || a.n - b.n);
-    for (const rule of rules)
-      for (const make of makers) {
-        const run = pack(items, W, H, s.rotate, rule, make, s.kerf, s.margin);
-        const last = run.bins[run.bins.length - 1];
-        const reach = last ? reachOf(last.placed) : { l: 0, w: 0 };
-        // fewest unplaced, then fewest sheets, then the last sheet's parts in the smallest corner (the offcut in one piece)
-        const key = [run.unplaced.length, run.bins.length, Math.round(reach.l * reach.w), Math.round(Math.max(reach.l / sheet.length, reach.w / sheet.width) * 1000)];
-        if (!bestKey || lessThan(key, bestKey)) {
-          best = run;
-          bestKey = key;
-        }
-      }
+  for (const st of all) {
+    const run = runStrategy(base, st, W, H, s)!;
+    const last = run.bins[run.bins.length - 1];
+    const reach = last ? reachOf(last.placed) : { l: 0, w: 0 };
+    // fewest unplaced, then fewest sheets, then the biggest offcut left in one piece on the last sheet
+    const key = [run.unplaced.length, run.bins.length, -Math.round(last ? offcutArea(offcut(last.placed)) : 0), Math.round(reach.l * reach.w)];
+    if (!bestKey || lessThan(key, bestKey)) {
+      best = run;
+      bestKey = key;
+    }
   }
   const run = best ?? { bins: [], unplaced: base };
+  // gather the last sheet's parts into as short (or as narrow) a block as they go, for the biggest offcut
+  if (run.bins.length) {
+    const last = run.bins[run.bins.length - 1];
+    const squeezed = squeeze(last.placed, all, W, H, s, sheet);
+    if (squeezed && offcutArea(offcut(squeezed)) > offcutArea(offcut(last.placed)) + EPS) last.placed = squeezed;
+  }
   const area = (p: { length: number; width: number }) => p.length * p.width;
   const sheetArea = sheet.length * sheet.width;
   const sheets: NestedSheet[] = run.bins.map((b) => {
     const placed = [...b.placed].sort((a, c) => a.y - c.y || a.x - c.x);
     const pa = placed.reduce((t, p) => t + area(p), 0);
     const r = reachOf(placed);
-    return { parts: placed, parts_area: pa, utilisation: pa / sheetArea, reach_length: r.l, reach_width: r.w };
+    return { parts: placed, parts_area: pa, utilisation: pa / sheetArea, reach_length: r.l, reach_width: r.w, offcut: offcut(placed) };
   });
   const unplaced = new Map<number, number>();
   for (const it of run.unplaced) unplaced.set(it.part, (unplaced.get(it.part) ?? 0) + 1);
@@ -290,6 +338,63 @@ export function nestParts(parts: NestPart[], sheet: { length: number; width: num
     utilisation: purchased ? partsArea / purchased : 0,
     waste_area: purchased - partsArea,
   };
+}
+
+/**
+ * The same parts packed into the shortest strip of the full width, and into
+ * the narrowest strip of the full length (each found by halving, to the
+ * millimetre); the arrangement leaving the bigger offcut wins. Null if
+ * neither does better than the area the parts already fit.
+ */
+function squeeze(placed: PlacedPart[], all: Strategy[], W: number, H: number, s: NestSettings, sheet: { length: number; width: number }): PlacedPart[] | null {
+  const items: Item[] = placed.map((p) => {
+    // back to the part's own way round, so every strategy can turn it again
+    const [l, w] = p.rotated ? [p.width, p.length] : [p.length, p.width];
+    return { part: p.part, n: p.n, w: l + s.kerf, h: w + s.kerf };
+  });
+  const area = items.reduce((t, it) => t + it.w * it.h, 0);
+  const minSide = (it: Item) => (s.rotate ? Math.min(it.w, it.h) : it.w);
+  const minSideH = (it: Item) => (s.rotate ? Math.min(it.w, it.h) : it.h);
+  // a big last sheet gets fewer tries per width, so the page stays quick
+  const tries = items.length > SQUEEZE_FULL ? all.filter((st) => st.order === ORDERS[0] || st.order === ORDERS[1]) : all;
+  const fitOne = (w: number, h: number): PlacedPart[] | null => {
+    for (const st of tries) {
+      const r = runStrategy(items, st, w, h, s, 1);
+      if (r && !r.unplaced.length && r.bins.length === 1) return r.bins[0].placed;
+    }
+    return null;
+  };
+  const shortest = (lo: number, hi: number, fit: (v: number) => PlacedPart[] | null): PlacedPart[] | null => {
+    let found: PlacedPart[] | null = null;
+    let a = Math.ceil(lo);
+    let b = Math.floor(hi);
+    while (a <= b) {
+      const m = Math.floor((a + b) / 2);
+      const f = fit(m);
+      if (f) {
+        found = f;
+        b = m - 1;
+      } else a = m + 1;
+    }
+    return found;
+  };
+  const reach = reachOf(placed);
+  const cands: PlacedPart[][] = [];
+  const endHi = reach.l - s.margin + s.kerf - 1; // something shorter than now
+  const endLo = Math.max(area / H, ...items.map(minSide));
+  if (endLo <= endHi) {
+    const f = shortest(endLo, endHi, (v) => fitOne(v, H));
+    if (f) cands.push(f);
+  }
+  const edgeHi = reach.w - s.margin + s.kerf - 1;
+  const edgeLo = Math.max(area / W, ...items.map(minSideH));
+  if (edgeLo <= edgeHi) {
+    const f = shortest(edgeLo, edgeHi, (v) => fitOne(W, v));
+    if (f) cands.push(f);
+  }
+  if (!cands.length) return null;
+  const score = (c: PlacedPart[]) => offcutArea(offcutOf(sheet, reachOfParts(c), s));
+  return cands.reduce((a, b) => (score(b) > score(a) + EPS ? b : a));
 }
 
 /** Compares two score lists entry by entry: the first difference decides. */
@@ -345,7 +450,8 @@ export function partLetter(i: number): string {
 /**
  * The layout as a DXF (AutoCAD R12 ASCII, millimetres) that laser, plasma and
  * CAM software read: each sheet's outline and margin line, every part as a
- * closed outline with its label, sheets placed one below the other. Y is
+ * closed outline with its label, the offcut kept in one piece on layer
+ * OFFCUT, sheets placed one below the other. Y is
  * flipped to DXF's upward axis.
  */
 export function nestingDxf(r: NestResult, parts: NestPart[], s: { margin: number }, letters: string[] = parts.map((_, i) => partLetter(i))): string {
@@ -363,7 +469,7 @@ export function nestingDxf(r: NestResult, parts: NestPart[], s: { margin: number
   const text = (layer: string, x: number, y: number, h: number, value: string) => add(0, 'TEXT', 8, layer, 10, x, 20, y, 30, 0, 40, h, 1, value.replace(/[\r\n]/g, ' '));
   add(0, 'SECTION', 2, 'HEADER', 9, '$ACADVER', 1, 'AC1009', 9, '$INSUNITS', 70, 4, 0, 'ENDSEC');
   add(0, 'SECTION', 2, 'TABLES', 0, 'TABLE', 2, 'LAYER', 70, 4);
-  for (const [name, colour] of [['SHEET', 8], ['MARGIN', 9], ['PARTS', 1], ['LABELS', 3]] as const) add(0, 'LAYER', 2, name, 70, 0, 62, colour, 6, 'CONTINUOUS');
+  for (const [name, colour] of [['SHEET', 8], ['MARGIN', 9], ['PARTS', 1], ['LABELS', 3], ['OFFCUT', 5]] as const) add(0, 'LAYER', 2, name, 70, 0, 62, colour, 6, 'CONTINUOUS');
   add(0, 'ENDTAB', 0, 'ENDSEC', 0, 'SECTION', 2, 'ENTITIES');
   const L = r.sheet.length;
   const Wd = r.sheet.width;
@@ -378,6 +484,13 @@ export function nestingDxf(r: NestResult, parts: NestPart[], s: { margin: number
       box('PARTS', p.x, Y(p.y + p.width), p.length, p.width);
       const h = Math.max(4, Math.min(p.width * 0.25, p.length * 0.12, 40));
       text('LABELS', p.x + h * 0.5, Y(p.y + p.width / 2) - h / 2, h, `${letters[p.part] ?? partLetter(p.part)}${p.n} ${parts[p.part]?.name ?? ''}`.trim());
+    }
+    // the offcut kept in one piece, on its own layer so the cutting program can leave it out
+    const o = sh.offcut;
+    if (o) {
+      box('OFFCUT', o.x, Y(o.y + o.width), o.length, o.width);
+      const h = Math.max(6, Math.min(o.width * 0.12, o.length * 0.06, 40));
+      text('OFFCUT', o.x + h, Y(o.y + o.width / 2) - h / 2, h, `OFFCUT ${fmtNum(o.length)} x ${fmtNum(o.width)}`);
     }
   });
   add(0, 'ENDSEC', 0, 'EOF');

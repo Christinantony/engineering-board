@@ -9,6 +9,9 @@
 //   per sheet, orientation 2 (b along the length)          (Calculator!B21)
 //                  = MAX(0, INT((UL + k) / (b + k))) × MAX(0, INT((UW + k) / (a + k)))
 //   parts per sheet = MAX of the two when rotation is allowed, else orientation 1   (B22)
+//                  — and, since 2.2 (decision #44), when rotation is allowed, the
+//                    most parts with blocks turned both ways (patterns.ts), if
+//                    that is more; the workbook's two counts stay beside it
 //   sheets required = ROUNDUP(n / parts per sheet)         (Calculator!B26)
 //   parts on last sheet = n − (sheets − 1) × parts per sheet                       (B27)
 //   total parts area, sheet area purchased, utilisation, waste                     (B28–B31)
@@ -20,6 +23,8 @@
 // than one stock size for a material, for each size, keeping the one that
 // needs the fewest sheets. Pure functions, shared by the Tools page and the
 // server tests.
+
+import { IdenticalPacker, type SheetPattern } from './patterns.ts';
 
 export interface SheetMaterial {
   id: number;
@@ -80,9 +85,11 @@ export interface SizeResult {
   usable_width: number;
   per_sheet_1: number;
   per_sheet_2: number;
+  /** the most parts with some turned 90° where it fits more (decision #44); per_sheet_1 when rotation is off */
+  per_sheet_mixed: number;
   per_sheet: number;
-  /** 'a along length' | 'b along length (rotated)' | 'Does not fit' */
-  orientation: 'along' | 'rotated' | 'none';
+  /** 'a along length' | 'b along length (rotated)' | some each way | 'Does not fit' */
+  orientation: 'along' | 'rotated' | 'mixed' | 'none';
   sheets: number;
   last_sheet_parts: number;
   /** m² */
@@ -91,6 +98,9 @@ export interface SizeResult {
   utilisation: number;
   waste_area: number;
   layout: SheetLayout | null;
+  /** where the parts go on a full sheet and on the last sheet, gathered so the offcut comes off in one piece (decision #44) */
+  full_sheet: SheetPattern | null;
+  last_sheet: SheetPattern | null;
 }
 
 export interface ComponentResult extends ComponentInput {
@@ -128,8 +138,11 @@ export function fitOnSize(c: { length: number; width: number; quantity: number }
   const usable_width = size.width - 2 * s.margin;
   const per_sheet_1 = gridFit(usable_length, usable_width, c.length, c.width, s.kerf);
   const per_sheet_2 = gridFit(usable_length, usable_width, c.width, c.length, s.kerf);
-  const per_sheet = s.rotate ? Math.max(per_sheet_1, per_sheet_2) : per_sheet_1;
-  const orientation: SizeResult['orientation'] = per_sheet === 0 ? 'none' : per_sheet === per_sheet_1 ? 'along' : 'rotated';
+  const packer = new IdenticalPacker(usable_length, usable_width, c.length, c.width, s.kerf, s.rotate);
+  const per_sheet_mixed = s.rotate ? Math.max(packer.perSheet(), per_sheet_1, per_sheet_2) : per_sheet_1;
+  const per_sheet = s.rotate ? Math.max(per_sheet_1, per_sheet_2, per_sheet_mixed) : per_sheet_1;
+  const orientation: SizeResult['orientation'] =
+    per_sheet === 0 ? 'none' : per_sheet === per_sheet_1 ? 'along' : per_sheet === per_sheet_2 ? 'rotated' : 'mixed';
   const sheets = per_sheet ? Math.ceil(c.quantity / per_sheet) : 0;
   const parts_area = (c.quantity * c.length * c.width) / 1e6;
   const purchased_area = (sheets * size.length * size.width) / 1e6;
@@ -149,20 +162,26 @@ export function fitOnSize(c: { length: number; width: number; quantity: number }
       strip_width: down ? usable_width - (down * pw + (down - 1) * s.kerf) : 0,
     };
   }
+  const last_sheet_parts = per_sheet ? c.quantity - (sheets - 1) * per_sheet : 0;
+  const full_sheet = per_sheet ? packer.arrange(per_sheet, size, s.margin) : null;
+  const last_sheet = per_sheet ? (last_sheet_parts === per_sheet ? full_sheet : packer.arrange(last_sheet_parts, size, s.margin)) : null;
   return {
     usable_length,
     usable_width,
     per_sheet_1,
     per_sheet_2,
+    per_sheet_mixed,
     per_sheet,
     orientation,
     sheets,
-    last_sheet_parts: per_sheet ? c.quantity - (sheets - 1) * per_sheet : 0,
+    last_sheet_parts,
     parts_area,
     purchased_area,
     utilisation: purchased_area ? parts_area / purchased_area : 0,
     waste_area: purchased_area ? purchased_area - parts_area : 0,
     layout,
+    full_sheet,
+    last_sheet,
   };
 }
 

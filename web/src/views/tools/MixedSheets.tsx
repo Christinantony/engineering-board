@@ -3,7 +3,7 @@
 // every part's position, and a DXF for the cutting machine. The workbook's
 // one-part-per-sheet method stays as the sheet calculator's other mode.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import {
   NEST_MAX_PIECES,
   checkSheet,
@@ -97,10 +97,17 @@ export function MixedSheets({ materials, sizes, defaults }: { materials: SheetMa
   const letters = parts.map((p) => partLetter(p.row));
   const tooMany = pieces > NEST_MAX_PIECES;
 
-  const result = useMemo<NestResult | null>(() => {
-    if (!size || !parts.length || tooMany) return null;
-    return nestParts(parts, size, { ...settings, cut });
-  }, [JSON.stringify(parts), size?.length, size?.width, settings.kerf, settings.margin, settings.rotate, cut]);
+  // nested from a deferred copy of the inputs, so typing stays quick on a big job;
+  // the results below always show the parts and settings they were nested from
+  const job = JSON.stringify({ parts, size, settings: { kerf: settings.kerf, margin: settings.margin, rotate: settings.rotate }, cut, tooMany });
+  const deferredJob = useDeferredValue(job);
+  const done = useMemo(() => {
+    const j = JSON.parse(deferredJob) as { parts: (NestPart & { row: number })[]; size: { length: number; width: number } | null; settings: SheetSettings; cut: CutMode; tooMany: boolean };
+    const result: NestResult | null = !j.size || !j.parts.length || j.tooMany ? null : nestParts(j.parts, j.size, { ...j.settings, cut: j.cut });
+    return { result, parts: j.parts, letters: j.parts.map((p) => partLetter(p.row)), settings: j.settings };
+  }, [deferredJob]);
+  const result = done.result;
+  const stale = deferredJob !== job;
 
   const update = (i: number, patch: Partial<Row>) => setRows(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   const remove = (i: number) => setRows(rows.length > 1 ? rows.filter((_, j) => j !== i) : [{ ...EMPTY }]);
@@ -111,15 +118,19 @@ export function MixedSheets({ materials, sizes, defaults }: { materials: SheetMa
 
   const exportDxf = () => {
     if (!result) return;
-    download(`${fileBase}.dxf`, nestingDxf(result, parts, settings, letters), 'application/dxf');
+    download(`${fileBase}.dxf`, nestingDxf(result, done.parts, done.settings, done.letters), 'application/dxf');
     toast('DXF saved: one outline per part, sheets one below the other (mm).', { kind: 'success' });
   };
   const exportCsv = () => {
     if (!result) return;
     const head = 'Sheet,Label,Part,Length along sheet (mm),Width along sheet (mm),X (mm),Y (mm),Rotated';
     const lines = result.sheets.flatMap((s, k) =>
-      s.parts.map((p) => [k + 1, `${letters[p.part]}${p.n}`, `"${parts[p.part].name.replace(/"/g, '""')}"`, p.length, p.width, p.x, p.y, p.rotated ? 'yes' : 'no'].join(',')),
+      s.parts.map((p) => [k + 1, `${done.letters[p.part]}${p.n}`, `"${done.parts[p.part].name.replace(/"/g, '""')}"`, p.length, p.width, p.x, p.y, p.rotated ? 'yes' : 'no'].join(',')),
     );
+    if (result.sheets.length && result.sheets[result.sheets.length - 1].offcut) {
+      const o = result.sheets[result.sheets.length - 1].offcut!;
+      lines.push([result.sheets.length, 'Offcut', '"Left in one piece"', o.length, o.width, o.x, o.y, 'no'].join(','));
+    }
     download(`${fileBase}.csv`, '﻿' + [head, ...lines].join('\r\n') + '\r\n', 'text/csv');
   };
 
@@ -246,7 +257,7 @@ export function MixedSheets({ materials, sizes, defaults }: { materials: SheetMa
         </div>
       </section>
 
-      <section className="sheet-results" aria-live="polite">
+      <section className={`sheet-results${stale ? ' mix-stale' : ''}`} aria-live="polite">
         <h2>
           Sheets required <span className="sheet-total" data-testid="mix-total">{result ? result.sheets.length : '–'}</span>
           {result && size && <span className="muted small mix-of"> of {sheetName} mm</span>}
@@ -262,7 +273,7 @@ export function MixedSheets({ materials, sizes, defaults }: { materials: SheetMa
           <>
             {!!result.unplaced.length && (
               <p className="form-error" data-testid="mix-unplaced">
-                Too big for the sheet{settings.rotate ? '' : ' (rotation is off)'}: {result.unplaced.map((u) => `${parts[u.part].name} × ${u.count}`).join(', ')}.
+                Too big for the sheet{settings.rotate ? '' : ' (rotation is off)'}: {result.unplaced.map((u) => `${done.parts[u.part].name} × ${u.count}`).join(', ')}.
               </p>
             )}
             <dl className="sheet-facts mix-facts">
@@ -274,7 +285,7 @@ export function MixedSheets({ materials, sizes, defaults }: { materials: SheetMa
               </div>
               <div>
                 <dt>Parts</dt>
-                <dd>{fmt(pieces - result.unplaced.reduce((t, u) => t + u.count, 0))}</dd>
+                <dd>{fmt(done.parts.reduce((t, p) => t + p.quantity, 0) - result.unplaced.reduce((t, u) => t + u.count, 0))}</dd>
               </div>
               <div>
                 <dt>Total area of parts</dt>
@@ -294,14 +305,14 @@ export function MixedSheets({ materials, sizes, defaults }: { materials: SheetMa
               </div>
             </dl>
             <ul className="mix-legend">
-              {parts.map((p, i) => (
+              {done.parts.map((p, i) => (
                 <li key={p.row}>
-                  <span className={`mix-key mix-c${p.row % COLOURS}`}>{letters[i]}</span> {p.name} · {fmt(p.length)} × {fmt(p.width)} mm × {p.quantity}
+                  <span className={`mix-key mix-c${p.row % COLOURS}`}>{done.letters[i]}</span> {p.name} · {fmt(p.length)} × {fmt(p.width)} mm × {p.quantity}
                 </li>
               ))}
             </ul>
             {result.sheets.map((s, k) => (
-              <MixedLayout key={k} r={result} sheet={k} parts={parts} letters={letters} settings={settings} />
+              <MixedLayout key={k} r={result} sheet={k} parts={done.parts} letters={done.letters} settings={done.settings} />
             ))}
             <details className="sheet-method">
               <summary>How this is nested</summary>
@@ -309,7 +320,9 @@ export function MixedSheets({ materials, sizes, defaults }: { materials: SheetMa
                 Each part is a rectangle grown by the kerf, packed into the sheet less its edge margin. <strong>Any order</strong> uses maximal-rectangles
                 packing: a part can sit in any free space, for cutters that follow each outline. <strong>Straight cuts right across</strong> only makes layouts
                 that can be cut with one straight cut through each piece after another, for a panel saw or shear. Several part orders and placement rules are
-                tried; the one using the fewest sheets wins, then the one leaving the last sheet's offcut in one piece. Every result is checked: each part inside
+                tried, with each part turned as it fits best or all turned the same way round when rotation is allowed; the one using the fewest sheets wins,
+                then the one leaving the biggest offcut on the last sheet. The last sheet's parts are then gathered into the shortest strip of the sheet (or the
+                narrowest) they fit, so the rest comes off with one straight cut as a single piece to keep. Every result is checked: each part inside
                 the margin, and at least one kerf from every other part. It is a good, fast layout rather than a proven optimum: for very large jobs a nesting
                 program may save a little more.
               </p>
@@ -328,8 +341,8 @@ function MixedLayout({ r, sheet, parts, letters, settings }: { r: NestResult; sh
   const W = 640;
   const scale = W / r.sheet.length;
   const H = r.sheet.width * scale;
-  const freeL = r.sheet.length - settings.margin - s.reach_length;
-  const freeW = r.sheet.width - settings.margin - s.reach_width;
+  const off = s.offcut;
+  const turned = s.parts.filter((p) => p.rotated).length;
   return (
     <article className="sheet-group mix-sheet-card" data-testid="mix-sheet">
       <header className="sheet-group-head">
@@ -340,16 +353,31 @@ function MixedLayout({ r, sheet, parts, letters, settings }: { r: NestResult; sh
           <strong>{s.parts.length}</strong> parts · {pct(s.utilisation)} used
         </span>
       </header>
-      <p className="muted small">
-        Parts reach {fmt(s.reach_length)} mm along the length and {fmt(s.reach_width)} mm along the width
-        {freeL > 1 || freeW > 1
-          ? `. Left whole: ${[freeL > 1 ? `${fmt(freeL)} mm across the far end` : '', freeW > 1 ? `${fmt(freeW)} mm along the bottom edge` : ''].filter(Boolean).join(' and ')}.`
-          : '.'}
+      <p className="muted small" data-testid="mix-offcut-note">
+        {off ? (
+          <>
+            Offcut left in one piece: <strong>{fmt(off.length)} × {fmt(off.width)} mm</strong>, with one straight cut{' '}
+            {off.side === 'end' ? `across the sheet at ${fmt(off.x)} mm along the length` : `along the sheet at ${fmt(off.y)} mm across the width`}.
+          </>
+        ) : (
+          'No offcut big enough to keep.'
+        )}{' '}
+        Parts reach {fmt(s.reach_length)} × {fmt(s.reach_width)} mm{turned ? `; ${turned} turned 90°` : ''}.
       </p>
       {problems.length > 0 && <p className="form-error">Layout check failed: {problems.join('; ')}. Please report this.</p>}
       <svg className="sheet-svg mix-svg" viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label={`Cutting layout of sheet ${sheet + 1}: ${s.parts.length} parts`}>
         <rect x={0} y={0} width={W} height={H} className="sheet-svg-sheet" />
         {settings.margin > 0 && <rect x={settings.margin * scale} y={settings.margin * scale} width={r.usable_length * scale} height={r.usable_width * scale} className="sheet-svg-usable" />}
+        {off && (
+          <g className="sheet-svg-offcut" data-testid="mix-offcut">
+            <rect x={off.x * scale} y={off.y * scale} width={off.length * scale} height={off.width * scale} />
+            {off.length * scale > 60 && off.width * scale > 16 && (
+              <text x={(off.x + off.length / 2) * scale} y={(off.y + off.width / 2) * scale} textAnchor="middle" dominantBaseline="central">
+                Offcut {fmt(off.length)} × {fmt(off.width)}
+              </text>
+            )}
+          </g>
+        )}
         {s.parts.map((p) => {
           const w = p.length * scale;
           const h = p.width * scale;

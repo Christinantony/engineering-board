@@ -1045,13 +1045,20 @@ test('tools: the sheet calculator gives the workbook\'s answer and draws its lay
   await p.click('button:has-text("Show cutting layout")');
   await p.waitForSelector('.sheet-svg');
   assert.equal(await p.locator('.sheet-svg .sheet-svg-part').count(), 192);
-  assert.match(await p.textContent('.sheet-layout'), /16 across × 12 down/);
   await p.fill('input[aria-label="Sheet number to view"]', '3');
   await p.waitForFunction(() => document.querySelectorAll('.sheet-svg .sheet-svg-part').length === 116);
-  assert.equal(await p.locator('.sheet-svg .sheet-svg-empty').count(), 192 - 116, 'grey unused slots on the last sheet');
-  // rotation off keeps orientation 1 only; a bigger kerf changes the count, as in the workbook
+  // the last sheet's parts gathered at one end: the rest comes off in one piece (decision #44)
+  await p.waitForSelector('[data-testid=sheet-offcut]');
+  assert.match(await p.textContent('[data-testid=sheet-layout-note]'), /offcut left in one piece: 1,?\d{3} × 1,?250 mm/);
+  // a bigger kerf: the workbook's grids give 165 and 154, turning a block of parts fits 174 (decision #44)
   await p.fill('input[aria-label="Spacing / kerf between parts (mm)"]', '10');
-  await p.waitForFunction(() => document.querySelector('[data-testid=per-sheet]')?.textContent === '165'); // INT(2500/160)=15 × INT(1250/110)=11
+  await p.waitForFunction(() => document.querySelector('[data-testid=per-sheet]')?.textContent === '174');
+  assert.equal(await p.textContent('[data-testid=per-sheet-mixed]'), '174');
+  assert.match(await p.textContent('.sheet-facts'), /a along length165/);
+  assert.match(await p.textContent('.sheet-facts'), /some each way round/);
+  // rotation off: the workbook's orientation 1 only, INT(2500/160)=15 × INT(1250/110)=11
+  await p.click('input[aria-label="Allow rotation by 90 degrees"]');
+  await p.waitForFunction(() => document.querySelector('[data-testid=per-sheet]')?.textContent === '165');
   await p.click('button:has-text("Back to the defaults")');
   await p.waitForFunction(() => document.querySelector('[data-testid=per-sheet]')?.textContent === '192');
   // the list is remembered in this browser
@@ -1426,6 +1433,9 @@ test('mixed nesting: different parts on one 2400 × 1200 sheet, both cut modes, 
   await p.waitForSelector('[data-testid=mix-total]:has-text("1")');
   assert.equal(await p.locator('[data-testid=mix-sheet] svg [data-part]').count(), 11);
   assert.equal(await p.locator('[data-testid=mix-sheet] .form-error').count(), 0, 'the layout check passes');
+  // the offcut kept in one piece, drawn and measured (decision #44)
+  await p.waitForSelector('[data-testid=mix-offcut]');
+  assert.match(await p.textContent('[data-testid=mix-offcut-note]'), /Offcut left in one piece: \d{3} × 1,?200 mm/);
   // straight cuts for a saw: still one sheet
   await p.click('label:has-text("Straight cuts right across") input');
   await p.waitForSelector('[data-testid=mix-total]:has-text("1")');
@@ -1436,6 +1446,7 @@ test('mixed nesting: different parts on one 2400 × 1200 sheet, both cut modes, 
   assert.equal(dl.suggestedFilename(), 'nesting 2400x1200.dxf');
   const dxf = await readFileAsync(await dl.path(), 'utf8');
   assert.ok(dxf.includes('A1 Panel 550 x 200') && dxf.includes('B5 Panel 850 x 250'));
+  assert.ok(dxf.includes('OFFCUT'), 'the offcut on its own layer');
   // a part too big for the sheet is reported, not drawn
   await p.fill('input[aria-label="Part 2 length (mm)"]', '2600');
   await p.waitForSelector('[data-testid=mix-unplaced]:has-text("Panel 850 x 250 × 5")');

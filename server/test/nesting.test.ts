@@ -127,9 +127,42 @@ describe('mixed nesting', () => {
     assert.equal(entities('LINE', 'MARGIN'), 4);
     assert.equal(entities('LINE', 'PARTS'), 11 * 4);
     assert.equal(entities('TEXT', 'LABELS'), 11 + 1);
+    // the offcut, on its own layer
+    assert.ok(r.sheets[0].offcut);
+    assert.equal(entities('LINE', 'OFFCUT'), 4);
+    assert.ok(dxf.includes(`OFFCUT ${r.sheets[0].offcut!.length} x ${r.sheets[0].offcut!.width}`));
     assert.ok(dxf.includes('A1 Panel 550 x 200'));
     // custom letters, as the page passes when a row above is left empty
     assert.ok(nestingDxf(r, EXAMPLE, { margin: 5 }, ['C', 'D']).includes('D1 Panel 850 x 250'));
+  });
+
+  it('leaves the example\'s offcut in one piece that one straight cut takes off (decision #44)', () => {
+    for (const cut of ['any', 'guillotine'] as const) {
+      const r = nestParts(EXAMPLE, SHEET, { kerf: 10, margin: 0, rotate: true, cut });
+      const o = r.sheets[0].offcut!;
+      assert.ok(o, cut);
+      // a strip right across the sheet: the whole width at the far end, or the whole length along the edge
+      assert.ok((o.side === 'end' && o.y === 0 && o.width === 1200 && o.x + o.length === 2400) || (o.side === 'edge' && o.x === 0 && o.length === 2400 && o.y + o.width === 1200));
+      // bigger than the 2400 × 270 strip the first layout left, and clear of every part by a kerf
+      assert.ok(o.length * o.width >= 800 * 1000, `${cut}: ${o.length} × ${o.width}`);
+      for (const p of r.sheets[0].parts) assert.ok(p.x + p.length + 10 <= o.x + 1e-6 || p.y + p.width + 10 <= o.y + 1e-6, `${cut}: part clear of the offcut`);
+      if (cut === 'guillotine') assert.ok(guillotineCuttable(asRects(r.sheets[0])));
+    }
+  });
+
+  it('turns some parts and not others when that fits more on a sheet', () => {
+    // eleven 850 × 250 fit a 2400 × 1200 sheet only with some turned (the best straight grid takes 9)
+    for (const cut of ['any', 'guillotine'] as const) {
+      const r = nestParts([{ name: 'B', length: 850, width: 250, quantity: 11 }], SHEET, { kerf: 3, margin: 5, rotate: true, cut });
+      assert.equal(r.sheets.length, 1, cut);
+      const turned = r.sheets[0].parts.filter((p) => p.rotated).length;
+      assert.ok(turned > 0 && turned < 11, `${cut}: ${turned} turned`);
+      assert.deepEqual(checkSheet(r.sheets[0], SHEET, { kerf: 3, margin: 5 }), []);
+    }
+    // and never when turning is off
+    const fixed = nestParts([{ name: 'B', length: 850, width: 250, quantity: 11 }], SHEET, { kerf: 3, margin: 5, rotate: false, cut: 'any' });
+    assert.ok(fixed.sheets.every((s) => s.parts.every((p) => !p.rotated)));
+    assert.equal(fixed.sheets.length, 2);
   });
 
   it('names parts A … Z, then AA, AB …', () => {

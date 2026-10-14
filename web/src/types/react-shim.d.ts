@@ -21,6 +21,7 @@ declare module 'react' {
   export function useRef<T>(init: T): MutableRef<T>;
   export function useRef<T>(init: T | null): MutableRef<T | null>;
   export function useMemo<T>(fn: () => T, deps: readonly unknown[]): T;
+  export function useDeferredValue<T>(value: T): T;
   export function useCallback<T extends (...args: any[]) => any>(fn: T, deps: readonly unknown[]): T;
   export function useSyncExternalStore<T>(subscribe: (cb: () => void) => () => void, get: () => T): T;
   export function useId(): string;

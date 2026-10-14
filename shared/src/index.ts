@@ -5,4 +5,5 @@ export * from './constants.ts';
 export * from './validate.ts';
 export * from './sheets.ts';
 export * from './nesting.ts';
+export * from './patterns.ts';
 export * from './estimates.ts';
