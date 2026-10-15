@@ -1297,6 +1297,27 @@ test('procurement: from a project, type the master list, mark items in stock, an
   await addItem('Spiral antenna element', 'RF', 'Single Antenna', 'outsourced', 'Ø76 mm', 5);
   await addItem('Alignment jig', 'Mechanical', 'Tool', 'tools', 'Printed PLA', 1);
   await p.waitForSelector('[data-testid=proc-totals]:has-text("2 items · 0 in stock · 2 pending")');
+  // the workbook's quantity drivers: 5 arrays × 4 antennas + 2 spare = 22 antennas to build (decision #45)
+  await p.fill('input[aria-label="Number of arrays"]', '5');
+  await p.fill('input[aria-label="Antennas per array"]', '4');
+  await p.fill('input[aria-label="Extra antennas (spare)"]', '2');
+  await p.waitForSelector('[data-testid=proc-for-arrays]:has-text("20")');
+  await p.waitForSelector('[data-testid=proc-antennas]:has-text("22")');
+  await p.click('[data-testid=proc-build] button:has-text("Save")');
+  // the category set the basis: a Single Antenna item is per antenna (5 × 22), a Tool in total
+  await p.waitForSelector('tr[data-item="Spiral antenna element"] [data-testid=proc-need]:has-text("110")');
+  await p.waitForSelector('tr[data-item="Alignment jig"] [data-testid=proc-need]:has-text("1")');
+  // inventory: a count, NIL, or a note (then Check); and the material
+  assert.equal(await p.textContent('tr[data-item="Spiral antenna element"] [data-testid=proc-to-procure]'), 'Check');
+  await p.fill('input[aria-label="Inventory of Spiral antenna element"]', '6');
+  await p.press('input[aria-label="Inventory of Spiral antenna element"]', 'Enter');
+  await p.waitForSelector('tr[data-item="Spiral antenna element"] [data-testid=proc-to-procure]:has-text("104")');
+  await p.fill('input[aria-label="Inventory of Alignment jig"]', 'NIL');
+  await p.press('input[aria-label="Inventory of Alignment jig"]', 'Enter');
+  await p.waitForSelector('tr[data-item="Alignment jig"] [data-testid=proc-to-procure]:has-text("1")');
+  await p.fill('input[aria-label="Material of Spiral antenna element"]', 'ALUMINIUM 6061-T651');
+  await p.press('input[aria-label="Material of Spiral antenna element"]', 'Enter');
+  await p.waitForFunction(async (id) => (await (await fetch(`/api/projects/${id}/procurement`)).json()).items[0].material === 'ALUMINIUM 6061-T651', project.id);
   // edit a cell: it saves when you leave it
   await p.fill('input[aria-label="Notes of Spiral antenna element"]', 'PO 4512');
   await p.press('input[aria-label="Notes of Spiral antenna element"]', 'Enter');

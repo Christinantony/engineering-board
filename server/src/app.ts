@@ -48,7 +48,7 @@ import { createItem, updateItem } from './domain/checklists.ts';
 import { createProject, listProjects } from './domain/projects.ts';
 import { manufacturingQueue, manufacturingHistory, updateManufacturing, recordCommitment, setManufacturingLabels } from './domain/manufacturing.ts';
 import { purchaseQueue, vendorList, createVendor, updateVendor, updatePurchase, purchaseHistory } from './domain/purchase.ts';
-import { addItem, copyList, editItem, procurement, procurementCsv, removeItem, setStock, followupQueue, setFollowup, recordFollowupCall, itemFollowupHistory } from './domain/procurement.ts';
+import { addItem, basisFromCategory, copyList, editItem, procurement, procurementCsv, removeItem, setBuild, setStock, followupQueue, setFollowup, recordFollowupCall, itemFollowupHistory } from './domain/procurement.ts';
 import { getPermissions, requireCapability, setPermissions } from './domain/permissions.ts';
 import { WordQueue, cleanWordName, convertWithWord, probeWord, type WordConverter, type WordStatus } from './domain/wordToPdf.ts';
 import {
@@ -131,7 +131,7 @@ import { jobsNeedingSync, markSyncPending, revisionLog, settleSyncs, syncProject
 /** Default maximum PDF upload for drawing review (merged signed scans can be large). */
 export const DEFAULT_REVIEW_UPLOAD_MAX_MB = 200;
 
-export const APP_VERSION = '2.2.0';
+export const APP_VERSION = '2.3.0';
 
 export interface AppOptions {
   dbPath: string;
@@ -462,6 +462,8 @@ export function createApp(opts: AppOptions): App {
     });
   });
   worker('POST', '/api/projects/:id/procurement/items', (req, user) => new Reply(201, { item: addItem(ctx, user, id(req), req.body ?? {}) }));
+  worker('PUT', '/api/projects/:id/procurement/build', (req, user) => ({ build: setBuild(ctx, user, id(req), req.body ?? {}) }));
+  worker('POST', '/api/projects/:id/procurement/basis-from-category', (req, user) => basisFromCategory(ctx, user, id(req)));
   worker('POST', '/api/projects/:id/procurement/copy', (req, user) => copyList(ctx, user, id(req), req.body ?? {}));
   worker('PATCH', '/api/procurement/items/:id', (req, user) => ({ item: editItem(ctx, user, id(req), req.body ?? {}) }));
   worker('POST', '/api/procurement/items/:id/stock', (req, user) => ({ item: setStock(ctx, user, id(req), req.body ?? {}) }));

@@ -99,10 +99,24 @@ let procurementProject;
     ['M3 × 8 screws', 'Mechanical', 'Array', 'bought_out', 'A2 stainless, DIN 912', 40, 'pcs', true, ''],
     ['Alignment jig', 'Mechanical', 'Tool', 'tools', 'Printed PLA', 1, 'set', false, ''],
   ];
+  // 2.3: the workbook's quantity drivers, material and inventory
+  await api('PUT', `/api/projects/${procurementProject}/procurement/build`, { version: 0, arrays: 5, per_array: 4, spares: 2 }, s.cookie);
+  const extra = {
+    'Spiral antenna element': ['RT DUROID 5880', 24],
+    Balun: ['RO4003', 'sheet 18 x 24 - 1'],
+    'Cavity backing': ['ALUMINIUM 6061-T651', 22],
+    'Mounting plate': ['ALUMINIUM 6061-T651', 0],
+    'M3 × 8 screws': ['SS A2', 150],
+    'SMA cable': ['RG-402', 0],
+  };
   for (const [name, discipline, category, means, spec, quantity, unit, inStock, notes] of items) {
-    const it = (await api('POST', `/api/projects/${procurementProject}/procurement/items`, { name, discipline, category, means, spec, quantity, unit, notes }, s.cookie)).body.item;
+    const [material, inv] = extra[name] ?? ['', 1];
+    const inventory = typeof inv === 'number' ? { inventory: inv } : { inventory: null, inventory_note: inv };
+    const perUnit = { 'Spiral antenna element': 1, Balun: 1, 'Cavity backing': 1, 'SMA cable': 5, 'M3 × 8 screws': 8 }[name] ?? quantity;
+    const it = (await api('POST', `/api/projects/${procurementProject}/procurement/items`, { name, discipline, category, means, spec, quantity: perUnit, unit, notes, material, ...inventory }, s.cookie)).body.item;
     if (inStock) await api('POST', `/api/procurement/items/${it.id}/stock`, { in_stock: true }, s.cookie);
   }
+  await api('POST', `/api/projects/${procurementProject}/procurement/basis-from-category`, {}, s.cookie);
 }
 // a file location on the bracket job, so its panel shows Copy and Go to location
 {

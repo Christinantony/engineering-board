@@ -8,11 +8,16 @@
 // can start from another project's list (the workbook's template and Reset).
 
 import {
+  PROCUREMENT_BASIS_LABEL,
+  basisForCategory,
+  type ProcurementBasis,
   PROCUREMENT_MEANS_LABEL,
+  procurementBuildSchema,
   procurementCopySchema,
   procurementEditSchema,
   procurementItemSchema,
   procurementStockSchema,
+  type ProcurementBuild,
   type ProcurementItem,
   type ProcurementLogEntry,
   type User,
@@ -21,10 +26,24 @@ import { all, get, run, tx } from '../db/connection.ts';
 import { badRequest, conflict, notFound, nowIso, type Ctx } from '../lib/core.ts';
 import { getProject } from './projects.ts';
 
-const COLS = `id, project_id, name, discipline, category, means, spec, quantity, unit, notes, sort_order, in_stock_at, in_stock_by, created_by, created_at, updated_at, version`;
+const COLS = `id, project_id, name, discipline, category, means, spec, quantity, basis, unit, notes, material, inventory, inventory_note, sort_order, in_stock_at, in_stock_by, created_by, created_at, updated_at, version`;
+
+/**
+ * The total an item's project needs (decision #45): its quantity times the
+ * build's antennas or arrays, or the quantity itself. For queries over
+ * `procurement_items i` joined with BUILD_JOIN; manufacturing and purchasing
+ * use it too, so everyone works to the same number.
+ */
+export const BUILD_JOIN = 'LEFT JOIN procurement_builds b ON b.project_id = i.project_id';
+export const REQUIRED_SQL = `ROUND(i.quantity * CASE i.basis WHEN 'antenna' THEN COALESCE(b.arrays * b.per_array + b.spares, 0) WHEN 'array' THEN COALESCE(b.arrays, 0) ELSE 1 END, 3)`;
+/** The workbook's "In procurement" (Master List!G): total less inventory, never below 0; NULL (CHECK) when the inventory isn't counted. */
+export const TO_PROCURE_SQL = `CASE WHEN i.inventory IS NULL THEN NULL ELSE MAX(0, ROUND(${REQUIRED_SQL} - i.inventory, 3)) END`;
+const ITEM_COLS = `${COLS.split(', ')
+  .map((c) => `i.${c}`)
+  .join(', ')}, ${REQUIRED_SQL} AS required, ${TO_PROCURE_SQL} AS to_procure`;
 
 function itemRow(ctx: Ctx, id: number): ProcurementItem & { removed_at: string | null } {
-  const r = get<ProcurementItem & { removed_at: string | null }>(ctx.db, `SELECT ${COLS}, removed_at FROM procurement_items WHERE id = ?`, id);
+  const r = get<ProcurementItem & { removed_at: string | null }>(ctx.db, `SELECT ${ITEM_COLS}, i.removed_at FROM procurement_items i ${BUILD_JOIN} WHERE i.id = ?`, id);
   if (!r) throw notFound('Item');
   return r;
 }
@@ -51,10 +70,66 @@ function logEntry(ctx: Ctx, item: { id: number; project_id: number; name: string
 
 const changed = (ctx: Ctx, projectId: number) => ctx.events.emit({ type: 'procurement', id: projectId });
 
+/** What a project builds; all zero until someone saves it. */
+export function getBuild(ctx: Ctx, projectId: number): ProcurementBuild {
+  const b = get<{ arrays: number; per_array: number; spares: number; version: number; updated_by: number | null; updated_at: string }>(
+    ctx.db,
+    'SELECT arrays, per_array, spares, version, updated_by, updated_at FROM procurement_builds WHERE project_id = ?',
+    projectId,
+  );
+  if (!b) return { arrays: 0, per_array: 0, spares: 0, antennas: 0, version: 0, updated_by: null, updated_at: null };
+  return { ...b, antennas: b.arrays * b.per_array + b.spares };
+}
+
+/**
+ * Items whose new total would fall below what manufacturing has already
+ * recorded (decision #41): a build or quantity change must not make those
+ * facts impossible.
+ */
+function belowRecorded(ctx: Ctx, where: string, ...args: (number | string)[]): string[] {
+  return all<{ name: string }>(
+    ctx.db,
+    `SELECT i.name FROM procurement_items i ${BUILD_JOIN} JOIN manufacturing_tracking t ON t.item_id = i.id
+     WHERE i.removed_at IS NULL AND ${where}
+       AND (t.in_process > ${REQUIRED_SQL} + 1e-7 OR t.received > ${REQUIRED_SQL} + 1e-7 OR t.accepted + t.rejected > ${REQUIRED_SQL} + 1e-7)
+     ORDER BY i.sort_order, i.id`,
+    ...args,
+  ).map((r) => r.name);
+}
+
+/** Save what the project builds. `version` guards against two people overwriting each other; every change is logged. */
+export function setBuild(ctx: Ctx, actor: User, projectId: number, input: unknown): ProcurementBuild {
+  const d = procurementBuildSchema(input);
+  return tx(ctx.db, () => {
+    getProject(ctx, projectId);
+    const cur = getBuild(ctx, projectId);
+    if (cur.version !== d.version) throw conflict('Someone else changed what this project builds a moment ago. Here is their version.', { current: cur });
+    if (cur.arrays === d.arrays && cur.per_array === d.per_array && cur.spares === d.spares && cur.version) return cur;
+    const now = nowIso(ctx);
+    if (cur.version)
+      run(ctx.db, 'UPDATE procurement_builds SET arrays = ?, per_array = ?, spares = ?, updated_by = ?, updated_at = ?, version = version + 1 WHERE project_id = ?', d.arrays, d.per_array, d.spares, actor.id, now, projectId);
+    else run(ctx.db, 'INSERT INTO procurement_builds (project_id, arrays, per_array, spares, updated_by, updated_at) VALUES (?, ?, ?, ?, ?, ?)', projectId, d.arrays, d.per_array, d.spares, actor.id, now);
+    const short = belowRecorded(ctx, 'i.project_id = ?', projectId);
+    if (short.length)
+      throw badRequest(
+        `That build needs fewer of ${short.slice(0, 3).join(', ')}${short.length > 3 ? ` and ${short.length - 3} more` : ''} than manufacturing has already recorded. Correct the manufacturing quantities first.`,
+      );
+    run(ctx.db, 'INSERT INTO procurement_build_log (project_id, user_id, at, arrays, per_array, spares) VALUES (?, ?, ?, ?, ?, ?)', projectId, actor.id, now, d.arrays, d.per_array, d.spares);
+    changed(ctx, projectId);
+    return getBuild(ctx, projectId);
+  });
+}
+
 /** A project's tracker: its items in master-list order, the log (newest first) and the totals. */
 export function procurement(ctx: Ctx, projectId: number) {
   const project = getProject(ctx, projectId);
-  const items = all<ProcurementItem>(ctx.db, `SELECT ${COLS} FROM procurement_items WHERE project_id = ? AND removed_at IS NULL ORDER BY sort_order, id`, projectId);
+  const items = all<ProcurementItem>(ctx.db, `SELECT ${ITEM_COLS} FROM procurement_items i ${BUILD_JOIN} WHERE i.project_id = ? AND i.removed_at IS NULL ORDER BY i.sort_order, i.id`, projectId);
+  const build = getBuild(ctx, projectId);
+  const buildLog = all<{ id: number; user_id: number | null; at: string; arrays: number; per_array: number; spares: number }>(
+    ctx.db,
+    'SELECT id, user_id, at, arrays, per_array, spares FROM procurement_build_log WHERE project_id = ? ORDER BY id DESC LIMIT 50',
+    projectId,
+  );
   const log = all<ProcurementLogEntry>(
     ctx.db,
     'SELECT id, item_id, user_id, at, kind, item_name, item_spec FROM procurement_log WHERE project_id = ? ORDER BY id DESC LIMIT 500',
@@ -62,7 +137,7 @@ export function procurement(ctx: Ctx, projectId: number) {
   );
   const inStock = items.filter((i) => i.in_stock_at).length;
   // what the team has typed before, offered as suggestions (the workbook's drop-downs)
-  const used = (col: 'discipline' | 'category' | 'unit') =>
+  const used = (col: 'discipline' | 'category' | 'unit' | 'material') =>
     all<{ v: string }>(ctx.db, `SELECT DISTINCT ${col} v FROM procurement_items WHERE ${col} <> '' AND removed_at IS NULL ORDER BY ${col} COLLATE NOCASE`).map((r) => r.v);
   const others = all<{ id: number; name: string; items: number }>(
     ctx.db,
@@ -72,6 +147,8 @@ export function procurement(ctx: Ctx, projectId: number) {
   );
   return {
     project: { id: project.id, name: project.name },
+    build,
+    build_log: buildLog,
     items,
     log,
     totals: { items: items.length, in_stock: inStock, pending: items.length - inStock },
@@ -79,6 +156,7 @@ export function procurement(ctx: Ctx, projectId: number) {
       disciplines: [...new Set(['RF', 'Mechanical', ...used('discipline')])],
       categories: [...new Set(['Single Antenna', 'Array', 'Tool', ...used('category')])],
       units: [...new Set(['pcs', 'set', 'm', 'kg', ...used('unit')])],
+      materials: used('material'),
     },
     copy_from: others,
   };
@@ -93,8 +171,8 @@ export function addItem(ctx: Ctx, actor: User, projectId: number, input: unknown
     const id = Number(
       run(
         ctx.db,
-        `INSERT INTO procurement_items (project_id, name, discipline, category, means, spec, quantity, unit, notes, sort_order, created_by, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO procurement_items (project_id, name, discipline, category, means, spec, quantity, basis, unit, notes, material, inventory, inventory_note, sort_order, created_by, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         projectId,
         d.name,
         d.discipline,
@@ -102,8 +180,12 @@ export function addItem(ctx: Ctx, actor: User, projectId: number, input: unknown
         d.means,
         d.spec,
         d.quantity,
+        d.basis,
         d.unit,
         d.notes,
+        d.material,
+        d.inventory,
+        d.inventory_note,
         max + 10,
         actor.id,
         now,
@@ -131,34 +213,62 @@ export function editItem(ctx: Ctx, actor: User, id: number, input: unknown): Pro
       means: d.means ?? cur.means,
       spec: d.spec ?? cur.spec,
       quantity: d.quantity ?? cur.quantity,
+      basis: d.basis ?? cur.basis,
       unit: d.unit ?? cur.unit,
       notes: d.notes ?? cur.notes,
+      material: d.material ?? cur.material,
+      inventory: d.inventory !== undefined ? d.inventory : cur.inventory,
+      inventory_note: d.inventory_note ?? cur.inventory_note,
       sort_order: d.sort_order ?? cur.sort_order,
     };
-    // A reduced requested quantity must not invalidate already recorded manufacturing facts.
-    const progress = get<{ in_process:number; received:number; accepted:number; rejected:number }>(ctx.db,
-      'SELECT in_process, received, accepted, rejected FROM manufacturing_tracking WHERE item_id = ?', id);
-    if (progress && (progress.in_process > next.quantity || progress.received > next.quantity ||
-      progress.accepted + progress.rejected > next.quantity))
-      throw badRequest('Requested quantity cannot be less than quantities already recorded in manufacturing.');
     run(
       ctx.db,
-      `UPDATE procurement_items SET name = ?, discipline = ?, category = ?, means = ?, spec = ?, quantity = ?, unit = ?, notes = ?, sort_order = ?,
-       updated_at = ?, version = version + 1 WHERE id = ?`,
+      `UPDATE procurement_items SET name = ?, discipline = ?, category = ?, means = ?, spec = ?, quantity = ?, basis = ?, unit = ?, notes = ?, material = ?, inventory = ?,
+       inventory_note = ?, sort_order = ?, updated_at = ?, version = version + 1 WHERE id = ?`,
       next.name,
       next.discipline,
       next.category,
       next.means,
       next.spec,
       next.quantity,
+      next.basis,
       next.unit,
       next.notes,
+      next.material,
+      next.inventory,
+      next.inventory_note,
       next.sort_order,
       nowIso(ctx),
       id,
     );
+    // A smaller total needed must not invalidate already recorded manufacturing facts (rolled back with the edit).
+    if (belowRecorded(ctx, 'i.id = ?', id).length) throw badRequest('Requested quantity cannot be less than quantities already recorded in manufacturing.');
     changed(ctx, cur.project_id);
     return liveItem(ctx, id);
+  });
+}
+
+/**
+ * Count items by their category, as the workbook does (decision #45): "Single
+ * Antenna" per antenna, "Array" per array, "Tool" in total. Items with any
+ * other category are left alone. Each change is one ordinary, versioned edit.
+ */
+export function basisFromCategory(ctx: Ctx, actor: User, projectId: number): { changed: number } {
+  return tx(ctx.db, () => {
+    getProject(ctx, projectId);
+    const items = all<{ id: number; category: string; basis: ProcurementBasis; version: number }>(
+      ctx.db,
+      'SELECT id, category, basis, version FROM procurement_items WHERE project_id = ? AND removed_at IS NULL ORDER BY sort_order, id',
+      projectId,
+    );
+    let n = 0;
+    for (const i of items) {
+      const b = basisForCategory(i.category);
+      if (!b || b === i.basis) continue;
+      editItem(ctx, actor, i.id, { version: i.version, basis: b });
+      n++;
+    }
+    return { changed: n };
   });
 }
 
@@ -198,16 +308,20 @@ export function copyList(ctx: Ctx, actor: User, projectId: number, input: unknow
   return tx(ctx.db, () => {
     getProject(ctx, projectId);
     getProject(ctx, from_project_id);
-    const source = all<ProcurementItem>(ctx.db, `SELECT ${COLS} FROM procurement_items WHERE project_id = ? AND removed_at IS NULL ORDER BY sort_order, id`, from_project_id);
+    const source = all<ProcurementItem>(ctx.db, `SELECT ${ITEM_COLS} FROM procurement_items i ${BUILD_JOIN} WHERE i.project_id = ? AND i.removed_at IS NULL ORDER BY i.sort_order, i.id`, from_project_id);
     // compared in JavaScript: SQLite's lower() leaves "Ø" and other non-ASCII letters alone
     const key = (name: string, spec: string) => `${name.trim().toLowerCase()}|${spec.trim().toLowerCase()}`;
     const have = new Set(
       all<{ name: string; spec: string }>(ctx.db, 'SELECT name, spec FROM procurement_items WHERE project_id = ? AND removed_at IS NULL', projectId).map((r) => key(r.name, r.spec)),
     );
+    // a project with no build yet takes the other project's, so per-antenna and per-array totals come out right
+    const fromBuild = getBuild(ctx, from_project_id);
+    if (!getBuild(ctx, projectId).version && fromBuild.version)
+      setBuild(ctx, actor, projectId, { version: 0, arrays: fromBuild.arrays, per_array: fromBuild.per_array, spares: fromBuild.spares });
     let copied = 0;
     for (const s of source) {
       if (have.has(key(s.name, s.spec))) continue;
-      addItem(ctx, actor, projectId, { name: s.name, discipline: s.discipline, category: s.category, means: s.means, spec: s.spec, quantity: s.quantity, unit: s.unit });
+      addItem(ctx, actor, projectId, { name: s.name, discipline: s.discipline, category: s.category, means: s.means, spec: s.spec, quantity: s.quantity, basis: s.basis, unit: s.unit, material: s.material });
       copied++;
     }
     return { copied, skipped: source.length - copied };
@@ -216,28 +330,35 @@ export function copyList(ctx: Ctx, actor: User, projectId: number, input: unknow
 
 /** The master list as CSV for Excel (UTF-8 with a BOM, formula-safe), like the jobs export. */
 export function procurementCsv(ctx: Ctx, projectId: number, userName: (id: number | null) => string): string {
-  const { items } = procurement(ctx, projectId);
+  const { items, build } = procurement(ctx, projectId);
   const cell = (v: string | number) => {
     let s = String(v);
     if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
     return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const head = ['No.', 'Item', 'Discipline', 'Category', 'Means', 'Final size / spec', 'Quantity', 'Unit', 'Status', 'In stock since', 'Marked by', 'Notes'];
+  const head = ['No.', 'Item', 'Final size / spec', 'Qty / unit', 'Per', 'Total qty', 'Unit', 'Inventory', 'In procurement', 'Material', 'Discipline', 'Category', 'Means', 'Status', 'In stock since', 'Marked by', 'Notes'];
   const rows = items.map((i, n) => [
     n + 1,
     i.name,
+    i.spec,
+    i.quantity,
+    PROCUREMENT_BASIS_LABEL[i.basis],
+    i.required,
+    i.unit,
+    i.inventory ?? i.inventory_note,
+    i.to_procure ?? 'CHECK',
+    i.material,
     i.discipline,
     i.category,
     PROCUREMENT_MEANS_LABEL[i.means],
-    i.spec,
-    i.quantity,
-    i.unit,
     i.in_stock_at ? 'In stock' : 'Pending',
     i.in_stock_at ?? '',
     i.in_stock_at ? userName(i.in_stock_by) : '',
     i.notes,
   ]);
-  return '﻿' + [head, ...rows].map((r) => r.map(cell).join(',')).join('\r\n') + '\r\n';
+  // what the project builds, below the list, so the totals can be checked
+  const buildLine = [`Build: ${build.arrays} arrays × ${build.per_array} antennas per array + ${build.spares} extra antennas (spare) = ${build.antennas} antennas to build`];
+  return '﻿' + [head, ...rows, [], buildLine].map((r) => r.map(cell).join(',')).join('\r\n') + '\r\n';
 }
 
 
@@ -296,10 +417,10 @@ export function recordFollowupCall(ctx: Ctx, actor: User, itemId: number, input:
 /** Shared action queue, including items with no follow-up plan. A stock arrival removes an item from this queue, not its history. */
 export function followupQueue(ctx: Ctx) {
  return all<ProcurementItem & { project_name: string; owner_id: number | null; next_action: string; next_due: string | null; followup_version: number; last_called_at: string | null; last_outcome: string | null }>(ctx.db,
- `SELECT ${COLS.split(', ').map(s=>'i.'+s).join(', ')}, p.name AS project_name, f.owner_id, COALESCE(f.next_action,'') next_action, f.next_due, COALESCE(f.version,0) followup_version,
+ `SELECT ${ITEM_COLS}, p.name AS project_name, f.owner_id, COALESCE(f.next_action,'') next_action, f.next_due, COALESCE(f.version,0) followup_version,
  (SELECT c.at FROM procurement_calls c WHERE c.item_id=i.id ORDER BY c.id DESC LIMIT 1) last_called_at,
  (SELECT c.outcome FROM procurement_calls c WHERE c.item_id=i.id ORDER BY c.id DESC LIMIT 1) last_outcome
- FROM procurement_items i JOIN projects p ON p.id=i.project_id LEFT JOIN procurement_followups f ON f.item_id=i.id
+ FROM procurement_items i JOIN projects p ON p.id=i.project_id ${BUILD_JOIN} LEFT JOIN procurement_followups f ON f.item_id=i.id
  WHERE i.removed_at IS NULL AND i.in_stock_at IS NULL
  ORDER BY CASE WHEN f.next_due IS NULL THEN 1 ELSE 0 END, f.next_due, i.id`);
 }

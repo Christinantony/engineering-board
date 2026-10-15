@@ -417,6 +417,62 @@ export const PROCUREMENT_MEANS_LABEL: Record<ProcurementMeans, string> = {
   tools: 'Tools',
 };
 
+/** What an item's quantity counts (decision #45): the project's total, or so many per antenna or per array. */
+export const PROCUREMENT_BASES = ['total', 'antenna', 'array'] as const;
+export type ProcurementBasis = (typeof PROCUREMENT_BASES)[number];
+export const PROCUREMENT_BASIS_LABEL: Record<ProcurementBasis, string> = {
+  total: 'in total',
+  antenna: 'per antenna',
+  array: 'per array',
+};
+
+/** What a project builds (decision #45). */
+export interface ProcurementBuild {
+  arrays: number;
+  /** antennas in each array */
+  per_array: number;
+  /** extra antennas (spares): built as antennas but in no array */
+  spares: number;
+  /** arrays × per_array + spares */
+  antennas: number;
+  /** 0 until the build is first saved */
+  version: number;
+  updated_by: number | null;
+  updated_at: string | null;
+}
+
+/**
+ * The basis the inventory workbook gives an item by its category: "Single
+ * Antenna" per antenna, "Array" per array, "Tool" once for the project
+ * (Master List!E: Qty/unit × Total antennas to build, × Number of arrays, × 1).
+ * Null for any other category: the board then leaves the item as it is.
+ */
+export function basisForCategory(category: string): ProcurementBasis | null {
+  const c = category.trim().toLowerCase();
+  if (!c) return null;
+  if (/\barray/.test(c)) return 'array';
+  if (/\btool/.test(c)) return 'total';
+  if (/\bantenna/.test(c)) return 'antenna';
+  return null;
+}
+
+/**
+ * What is still to procure (the workbook's "In procurement", Master List!G):
+ * with a counted inventory, the total less what is in hand, never below 0;
+ * with no count (blank, or a note instead of a number) null, which the
+ * workbook shows as CHECK.
+ */
+export function toProcure(required: number, inventory: number | null): number | null {
+  if (inventory == null) return null;
+  return Math.max(0, Math.round((required - inventory) * 1000) / 1000);
+}
+
+/** How many of an item the build needs: its quantity times the antennas or arrays, or the quantity itself. */
+export function requiredQuantity(quantity: number, basis: ProcurementBasis, build: Pick<ProcurementBuild, 'arrays' | 'antennas'>): number {
+  const n = basis === 'antenna' ? build.antennas : basis === 'array' ? build.arrays : 1;
+  return Math.round(quantity * n * 1000) / 1000;
+}
+
 export interface ProcurementItem {
   id: number;
   project_id: number;
@@ -426,7 +482,18 @@ export interface ProcurementItem {
   means: ProcurementMeans;
   /** Final size or specification. */
   spec: string;
+  /** per antenna, per array or in total, as `basis` says */
   quantity: number;
+  basis: ProcurementBasis;
+  /** the total the project's build needs (decision #45) */
+  required: number;
+  material: string;
+  /** what is in hand: a count (the workbook's NIL is 0), or null when not counted */
+  inventory: number | null;
+  /** what the inventory cell says when it isn't a plain count, e.g. "18 x 24 sheet - 1" */
+  inventory_note: string;
+  /** required less inventory, or null when the inventory isn't counted (the workbook's CHECK) */
+  to_procure: number | null;
   unit: string;
   notes: string;
   sort_order: number;

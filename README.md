@@ -99,11 +99,11 @@ Every page has a one-key shortcut. Press <kbd>?</kbd> anywhere for the full list
 
 ![Weekly summary: the week's numbers, finished jobs by project, the team, overdue and waiting jobs](assets/screenshots/weekly-summary.png)
 
-**A14 Procurement.** The master list (every cell saves as you leave it; **In stock** records the date, time and who) and the assembly checklist that follows from it.
+**A14 Procurement.** The workbook's quantity drivers, the master list (every cell saves as you leave it; total qty and what is in procurement are worked out from the drivers and the inventory; **In stock** records the date, time and who) and the assembly checklist that follows from it.
 
-![Procurement master list: items with discipline, category, means, final size or spec, quantity, in-stock time and notes](assets/screenshots/procurement.png)
+![Procurement master list: the quantity drivers (5 arrays × 4 antennas + 2 spare = 22), and items with qty per antenna or per array, total qty, inventory, what is in procurement, material, discipline, category, means and in-stock time](assets/screenshots/procurement.png)
 
-![Assembly checklist: components and tooling per discipline, in stock or still to come](assets/screenshots/procurement-checklist.png)
+![Assembly checklist: components and tooling per discipline, in stock or still to come, with each item's inventory and shortfall](assets/screenshots/procurement-checklist.png)
 
 **A8 Drawing review.** The queue, and the workspace with the signed reference on the left and the submitted drawing on the right, each with its own page, zoom and rotation. The open comment blocks **Pass board review** until it is resolved.
 
@@ -317,7 +317,13 @@ Copy `config.example.json` to `config.json` next to `start.bat`, edit it, restar
 
 | Version | What it brought |
 |---|---|
-| **2.0.0** | Dedicated restricted Purchase role and shared cross-project procurement queue, supplier directory, PO status and follow-up ownership. |\n| **1.9.0** | Component manufacturing stages, partial receipt and inspection quantities, escalation status and vendor promised-date history. |\n| **1.8.0** | Procurement follow-up control across projects: accountable next actions, follow-up dates, colleague ownership and immutable vendor contact history; items drop from pending only when in stock. |\n| **1.7.0** | **Admin → Health** for the host PC. A **drawing register** across jobs, with a **revision** on every drawing. **Estimates against actual time** in Reports and the job panel. A printable **weekly summary**. **Release checklists** per job type, guarding Review and Done. A **procurement tracker** per project from the team's inventory workbook. Fixed: a reviewer recording a job's last signature was refused. |
+| **2.3.0** | Procurement: the inventory workbook's **quantity drivers** (arrays, antennas per array, spares), items counted per antenna, per array or in total, **total qty**, **inventory** and **in procurement** worked out as in the workbook, and a **material** column. |
+| **2.2.0** | Sheet calculator: parts **turned 90° where it fits more**, and each sheet's leftover kept as **one offcut** with a single cut, in both tabs. |
+| **2.1.0** | Sheet calculator: **mixed parts on one sheet**, for any cutting order or straight cuts, with a lettered layout, positions and a DXF. |
+| **2.0.0** | Dedicated restricted Purchase role and shared cross-project procurement queue, supplier directory, PO status and follow-up ownership. |
+| **1.9.0** | Component manufacturing stages, partial receipt and inspection quantities, escalation status and vendor promised-date history. |
+| **1.8.0** | Procurement follow-up control across projects: accountable next actions, follow-up dates, colleague ownership and immutable vendor contact history; items drop from pending only when in stock. |
+| **1.7.0** | **Admin → Health** for the host PC. A **drawing register** across jobs, with a **revision** on every drawing. **Estimates against actual time** in Reports and the job panel. A printable **weekly summary**. **Release checklists** per job type, guarding Review and Done. A **procurement tracker** per project from the team's inventory workbook. Fixed: a reviewer recording a job's last signature was refused. |
 | **1.6.0** | PDF tools on the Tools page: Stamp with a live preview, Negative, Combine by size and Word to PDF, from the team's four scripts. |
 | **1.5.0** | The project name stands out on cards and job rows. Admin-set role capabilities (create, claim and be assigned, edit any job) for engineers, managers and reviewers, leaving board review untouched. **Go to location** beside a job's file path. A **Tools** page with the team's *Sheet Requirement Calculator* workbook as a page, formula for formula, with its cutting layout drawn to scale; its materials and sheet sizes editable by the admin. |
 | **1.4.0** | Projects: every job belongs to a project, chosen or added from the New job form; a Projects page with each project's jobs; project filter, search, card and job-panel display; Project column in import and export. No preset list: projects are added as they are needed. |
