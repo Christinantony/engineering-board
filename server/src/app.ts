@@ -131,7 +131,7 @@ import { jobsNeedingSync, markSyncPending, revisionLog, settleSyncs, syncProject
 /** Default maximum PDF upload for drawing review (merged signed scans can be large). */
 export const DEFAULT_REVIEW_UPLOAD_MAX_MB = 200;
 
-export const APP_VERSION = '2.0.0';
+export const APP_VERSION = '2.2.0';
 
 export interface AppOptions {
   dbPath: string;

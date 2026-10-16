@@ -192,6 +192,30 @@ const shot = (p, file, opts = {}) => p.screenshot({ path: `${OUT}/${file}.png`, 
   await p.locator('.sheet-layout').first().scrollIntoViewIfNeeded();
   await settle(p, 600);
   await p.locator('[data-testid=sheet-group]').first().screenshot({ path: `${OUT}/tools-layout.png` });
+  // mixed parts on one sheet: Christin's example, straight cuts for the panel saw
+  await p.goto(BASE + '/tools?tool=sheets&mode=mixed');
+  await p.waitForSelector('select[aria-label="Sheet to cut from"]');
+  await p.selectOption('select[aria-label="Sheet to cut from"]', 'custom');
+  await p.fill('input[aria-label="Sheet length (mm)"]', '2400');
+  await p.fill('input[aria-label="Sheet width (mm)"]', '1200');
+  await p.fill('input[aria-label="Part 1 name"]', 'Panel 550 x 200');
+  await p.fill('input[aria-label="Part 1 length (mm)"]', '550');
+  await p.fill('input[aria-label="Part 1 width (mm)"]', '200');
+  await p.fill('input[aria-label="Part 1 number"]', '6');
+  await p.click('button:has-text("+ Add part")');
+  await p.fill('input[aria-label="Part 2 name"]', 'Panel 850 x 250');
+  await p.fill('input[aria-label="Part 2 length (mm)"]', '850');
+  await p.fill('input[aria-label="Part 2 width (mm)"]', '250');
+  await p.fill('input[aria-label="Part 2 number"]', '5');
+  await p.fill('input[aria-label="Spacing / kerf between parts (mm)"]', '10');
+  await p.fill('input[aria-label="Edge margin on sheet (mm)"]', '0');
+  await p.click('label:has-text("Straight cuts right across") input');
+  await p.waitForSelector('[data-testid=mix-total]:has-text("1")');
+  await settle(p, 900);
+  await shot(p, 'tools-mixed');
+  await p.locator('[data-testid=mix-sheet]').first().scrollIntoViewIfNeeded();
+  await settle(p, 400);
+  await p.locator('[data-testid=mix-sheet]').first().screenshot({ path: `${OUT}/tools-mixed-layout.png` });
   // PDF tools: the stamp with its live preview
   await p.goto(BASE + '/tools?tool=pdf');
   await p.waitForSelector('.pdf-tabs a.on:has-text("Stamp")');

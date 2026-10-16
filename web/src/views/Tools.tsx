@@ -12,6 +12,7 @@ import { useQuery } from '../lib/store.ts';
 import { toast } from '../lib/toasts.ts';
 import { ErrorBox, Spinner } from '../components/bits.tsx';
 import { PdfTools } from './tools/PdfTools.tsx';
+import { MixedSheets } from './tools/MixedSheets.tsx';
 
 interface Data {
   materials: SheetMaterial[];
@@ -23,7 +24,7 @@ const TOOLS = [
   {
     id: 'sheets',
     name: 'Sheet calculator',
-    blurb: 'How many standard sheets a component needs: parts per sheet in a straight grid with kerf and edge margin, sheets to buy, parts on the last sheet, utilisation, waste, and the cutting layout.',
+    blurb: 'How many standard sheets a component needs (one part per sheet, as in the workbook), or several different parts nested together on one sheet, with the cutting layout, part positions and a DXF.',
   },
   {
     id: 'pdf',
@@ -100,7 +101,43 @@ const fmt = (n: number, d = 0) => n.toLocaleString(undefined, { maximumFractionD
 const m2 = (n: number) => `${fmt(n, 3)} m²`;
 const pct = (n: number) => `${fmt(n * 100, 1)}%`;
 
+/** The two ways of counting sheets: the workbook's (one part size per sheet) and mixed nesting (decision #43). */
 export function SheetCalculator() {
+  const { params } = useLocation();
+  const mixed = params.get('mode') === 'mixed';
+  const data = useQuery<Data>('/api/tools/sheet');
+  const go = (m: 'one' | 'mixed') => {
+    const p = new URLSearchParams(params);
+    if (m === 'mixed') p.set('mode', 'mixed');
+    else p.delete('mode');
+    navigate(`/tools?${p}`);
+  };
+  return (
+    <>
+      <div className="seg-tabs sheet-modes" role="tablist" aria-label="How to count sheets">
+        <button role="tab" aria-selected={!mixed} className={mixed ? '' : 'on'} onClick={() => go('one')}>
+          One part per sheet (the workbook)
+        </button>
+        <button role="tab" aria-selected={mixed} className={mixed ? 'on' : ''} onClick={() => go('mixed')}>
+          Mixed parts on one sheet
+        </button>
+      </div>
+      {mixed ? (
+        data.error && !data.data ? (
+          <ErrorBox message={data.error.message} retry={data.refresh} />
+        ) : !data.data ? (
+          <Spinner />
+        ) : (
+          <MixedSheets materials={data.data.materials} sizes={data.data.sizes} defaults={data.data.settings} />
+        )
+      ) : (
+        <WorkbookCalculator />
+      )}
+    </>
+  );
+}
+
+function WorkbookCalculator() {
   const { me } = useApp();
   const data = useQuery<Data>('/api/tools/sheet');
   const [saved] = useState(loadSaved);
@@ -243,9 +280,11 @@ export function SheetCalculator() {
           <summary>How this is counted</summary>
           <p className="muted small">
             Exactly as the team's Sheet Requirement Calculator workbook: the edge margin is removed from all four sides of the sheet; parts are laid out in a
-            straight grid (rows × columns) with the kerf between adjacent parts, in each orientation, and the better one is used when rotation is allowed; sheets
-            required is the number of parts divided by parts per sheet, rounded up. This is a straight-grid estimate: mixed-orientation nesting may save a little
-            more. Where a material has more than one stock size, each is tried and the one needing the fewest sheets is chosen.
+            straight grid (rows × columns) with the kerf between adjacent parts, in each orientation; sheets required is the number of parts divided by parts
+            per sheet, rounded up. When rotation is allowed the board also tries blocks of parts turned each way beside each other (every block boundary a
+            straight cut right across, so a saw can cut it too) and uses that when it fits more than either grid. On each sheet the parts are gathered at
+            one end or one edge, whichever leaves the bigger offcut in one piece for later. Where a material has more than one stock size, each is tried and
+            the one needing the fewest sheets is chosen.
           </p>
         </details>
       </section>
@@ -287,10 +326,17 @@ function Result({ r }: { r: ComponentResult }) {
             <dt>Parts per sheet, b along length</dt>
             <dd>{o.per_sheet_2}</dd>
           </div>
+          {o.per_sheet_mixed > Math.max(o.per_sheet_1, o.per_sheet_2) && (
+            <div>
+              <dt>Parts per sheet, some turned 90°</dt>
+              <dd data-testid="per-sheet-mixed">{o.per_sheet_mixed}</dd>
+            </div>
+          )}
           <div>
             <dt>Parts per sheet (best)</dt>
             <dd>
-              <strong data-testid="per-sheet">{o.per_sheet}</strong> · {o.orientation === 'along' ? 'a along length' : 'b along length (rotated)'}
+              <strong data-testid="per-sheet">{o.per_sheet}</strong> ·{' '}
+              {o.orientation === 'along' ? 'a along length' : o.orientation === 'rotated' ? 'b along length (rotated)' : 'some each way round'}
             </dd>
           </div>
           <div>
@@ -352,23 +398,24 @@ function Result({ r }: { r: ComponentResult }) {
   );
 }
 
-/** The workbook's Layout sheet: one sheet at a time, numbered parts, grey unused slots, drawn to scale. */
+/**
+ * The cutting layout, one sheet at a time, drawn to scale: numbered parts,
+ * grey slots left unused on a part-used sheet, and the offcut that comes off
+ * in one piece (decision #44).
+ */
 function Layout({ o, quantity }: { o: SizeResult; quantity: number }) {
   const [sheet, setSheet] = useState(1);
   const n = Math.min(Math.max(1, sheet), o.sheets);
-  const L = o.layout!;
-  const onThis = n === o.sheets ? o.last_sheet_parts : o.per_sheet;
+  const isLast = n === o.sheets;
+  const pat = (isLast ? o.last_sheet : o.full_sheet)!;
+  const onThis = isLast ? o.last_sheet_parts : o.per_sheet;
   const first = (n - 1) * o.per_sheet;
   const W = 640;
   const scale = W / o.size.length;
   const H = o.size.width * scale;
   const margin = (o.size.length - o.usable_length) / 2;
-  const kerf = L.across > 1 ? (L.usable_length - L.across * L.part_length) / (L.across - 1) : 0;
-  const cells: { x: number; y: number; k: number }[] = [];
-  for (let row = 0; row < L.down; row++) for (let col = 0; col < L.across; col++) cells.push({ x: margin + col * (L.part_length + kerf), y: margin + row * (L.part_width + kerf), k: row * L.across + col + 1 });
-  const cellW = L.part_length * scale;
-  const cellH = L.part_width * scale;
-  const label = cellW >= 22 && cellH >= 12;
+  const turned = pat.parts.slice(0, onThis).filter((p) => p.rotated).length;
+  const off = pat.offcut;
   return (
     <div className="sheet-layout">
       <div className="inline-form">
@@ -377,22 +424,39 @@ function Layout({ o, quantity }: { o: SizeResult; quantity: number }) {
           <input className="field-input narrow" type="number" min={1} max={o.sheets} value={n} aria-label="Sheet number to view" onChange={(e: any) => setSheet(Number(e.target.value) || 1)} />{' '}
           of {o.sheets}
         </label>
-        <span className="muted small">
-          {onThis} parts on this sheet · {L.across} across × {L.down} down · part {fmt(L.part_length)} × {fmt(L.part_width)} mm along length × width · unused strip{' '}
-          {fmt(L.strip_length)} mm along length, {fmt(L.strip_width)} mm along width
+        <span className="muted small" data-testid="sheet-layout-note">
+          {onThis} parts on this sheet
+          {turned && turned < onThis ? `, ${turned} of them turned 90°` : turned ? ', all turned 90°' : ''}
+          {off
+            ? ` · offcut left in one piece: ${fmt(off.length)} × ${fmt(off.width)} mm, ${off.side === 'end' ? `cut across at ${fmt(off.x)} mm along the length` : `cut along at ${fmt(off.y)} mm across the width`}`
+            : ' · no offcut big enough to keep'}
         </span>
       </div>
-      <svg className="sheet-svg" viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label={`Cutting layout of sheet ${n}: ${onThis} parts, ${L.across} across by ${L.down} down`}>
+      <svg className="sheet-svg" viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label={`Cutting layout of sheet ${n}: ${onThis} parts`}>
         <rect x={0} y={0} width={W} height={H} className="sheet-svg-sheet" />
         <rect x={margin * scale} y={margin * scale} width={o.usable_length * scale} height={o.usable_width * scale} className="sheet-svg-usable" />
-        {cells.map((c) => {
-          const used = first + c.k <= quantity && c.k <= onThis;
+        {off && (
+          <g className="sheet-svg-offcut" data-testid="sheet-offcut">
+            <rect x={off.x * scale} y={off.y * scale} width={off.length * scale} height={off.width * scale} />
+            {off.length * scale > 60 && off.width * scale > 16 && (
+              <text x={(off.x + off.length / 2) * scale} y={(off.y + off.width / 2) * scale} textAnchor="middle" dominantBaseline="central">
+                Offcut {fmt(off.length)} × {fmt(off.width)}
+              </text>
+            )}
+          </g>
+        )}
+        {pat.parts.map((c, k) => {
+          const used = k < onThis && first + k < quantity;
+          const cw = c.length * scale;
+          const ch = c.width * scale;
+          // an unused slot inside the offcut is not drawn: that material is kept
+          if (!used && off && c.x >= off.x - 1e-6 && c.y >= off.y - 1e-6) return null;
           return (
-            <g key={c.k}>
-              <rect x={c.x * scale} y={c.y * scale} width={cellW} height={cellH} className={used ? 'sheet-svg-part' : 'sheet-svg-empty'} />
-              {label && used && (
-                <text x={c.x * scale + cellW / 2} y={c.y * scale + cellH / 2} className="sheet-svg-label" textAnchor="middle" dominantBaseline="central">
-                  {first + c.k}
+            <g key={k}>
+              <rect x={c.x * scale} y={c.y * scale} width={cw} height={ch} className={used ? `sheet-svg-part${c.rotated ? ' sheet-svg-turned' : ''}` : 'sheet-svg-empty'} />
+              {used && cw >= 22 && ch >= 12 && (
+                <text x={c.x * scale + cw / 2} y={c.y * scale + ch / 2} className="sheet-svg-label" textAnchor="middle" dominantBaseline="central">
+                  {first + k + 1}
                 </text>
               )}
             </g>
