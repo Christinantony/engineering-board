@@ -5,7 +5,18 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { ManufacturingControl } from './ManufacturingControl.tsx';
-import { PROCUREMENT_MEANS, PROCUREMENT_MEANS_LABEL, type ProcurementItem, type ProcurementLogEntry, type ProcurementMeans } from '@board/shared';
+import {
+  PROCUREMENT_BASES,
+  PROCUREMENT_BASIS_LABEL,
+  PROCUREMENT_MEANS,
+  PROCUREMENT_MEANS_LABEL,
+  basisForCategory,
+  type ProcurementBasis,
+  type ProcurementBuild,
+  type ProcurementItem,
+  type ProcurementLogEntry,
+  type ProcurementMeans,
+} from '@board/shared';
 import { useApp } from '../context.ts';
 import { del, patch, post, put } from '../lib/api.ts';
 import { ask } from '../lib/dialogs.ts';
@@ -17,10 +28,12 @@ import { ErrorBox, Spinner } from '../components/bits.tsx';
 
 interface Data {
   project: { id: number; name: string };
+  build: ProcurementBuild;
+  build_log: { id: number; user_id: number | null; at: string; arrays: number; per_array: number; spares: number }[];
   items: ProcurementItem[];
   log: ProcurementLogEntry[];
   totals: { items: number; in_stock: number; pending: number };
-  suggestions: { disciplines: string[]; categories: string[]; units: string[] };
+  suggestions: { disciplines: string[]; categories: string[]; units: string[]; materials: string[] };
   copy_from: { id: number; name: string; items: number }[];
 }
 
@@ -34,7 +47,25 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'manufacturing', label: 'Manufacturing' },
 ];
 
-const qty = (i: ProcurementItem) => `${Number.isInteger(i.quantity) ? i.quantity : i.quantity.toFixed(2).replace(/0+$/, '')} ${i.unit}`;
+const num = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(3).replace(/\.?0+$/, ''));
+/** The total needed, and how it was worked out when it depends on the build: "64 pcs (2 per antenna)". */
+const qty = (i: ProcurementItem) => `${num(i.required)} ${i.unit}${i.basis === 'total' ? '' : ` (${num(i.quantity)} ${PROCUREMENT_BASIS_LABEL[i.basis]})`}`;
+/** The basis the workbook gives a category: Single Antenna per antenna, Array per array, anything else in total. */
+const basisFor = (category: string): ProcurementBasis => basisForCategory(category) ?? 'total';
+/** A total that depends on a build nobody has given yet: the workbook shows it amber. */
+const unset = (i: ProcurementItem, b: ProcurementBuild) => (i.basis === 'antenna' && !b.antennas) || (i.basis === 'array' && !b.arrays);
+/** What the inventory cell shows: the count, or the note typed instead. */
+const invText = (i: ProcurementItem) => (i.inventory != null ? num(i.inventory) : i.inventory_note);
+/** The workbook's "In procurement": what is still to get, or CHECK when the inventory isn't a count. */
+function ToProcure({ i }: { i: ProcurementItem }) {
+  if (i.to_procure == null)
+    return (
+      <span className="proc-check" title="The inventory isn't a count: check by hand">
+        Check
+      </span>
+    );
+  return <span className={i.to_procure > 0 ? 'proc-short' : 'proc-enough'}>{num(i.to_procure)}</span>;
+}
 const refresh = (projectId: number) => invalidate((k) => k.startsWith(`/api/projects/${projectId}/procurement`));
 /** Tooling, as the workbook splits the assembly checklist: the Tools means, or a "Tool" category. */
 const isTooling = (i: ProcurementItem) => i.means === 'tools' || /^tool/i.test(i.category);
@@ -61,8 +92,8 @@ export function Procurement() {
           <div>
             <h1>Procurement</h1>
             <p className="view-lede">
-              One list per project: type each item once in the master list. The assembly checklist and the pending list follow from it, and the log records when
-              each item came into stock.
+              One list per project: say what it builds, then type each item once in the master list, counted per antenna, per array or in total. The assembly
+              checklist and the pending list follow from it, and the log records when each item came into stock.
             </p>
           </div>
           <div className="proc-head-buttons">
@@ -100,6 +131,7 @@ export function Procurement() {
             </span>
           )}
         </div>
+        {d && !followupMode && <BuildBar d={d} />}
         {(d || followupMode) && (
           <div className="seg-tabs proc-tabs" role="tablist" aria-label="Procurement sheets">
             {TABS.map((t) => (
@@ -129,6 +161,109 @@ export function Procurement() {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * What the project builds (decision #45): arrays, antennas in each, antennas
+ * outside an array. Items counted per antenna or per array follow from it.
+ */
+function BuildBar({ d }: { d: Data }) {
+  const { user } = useApp();
+  const b = d.build;
+  const [f, setF] = useState({ arrays: String(b.arrays), per_array: String(b.per_array), spares: String(b.spares) });
+  const [history, setHistory] = useState(false);
+  const [busy, setBusy] = useState(false);
+  // follow the board's numbers (someone else's change) unless they're being edited
+  const saved = `${b.arrays}|${b.per_array}|${b.spares}`;
+  const [base, setBase] = useState(saved);
+  if (base !== saved) {
+    setBase(saved);
+    setF({ arrays: String(b.arrays), per_array: String(b.per_array), spares: String(b.spares) });
+  }
+  const val = (v: string) => (v.trim() === '' ? 0 : Number(v));
+  const nums = { arrays: val(f.arrays), per_array: val(f.per_array), spares: val(f.spares) };
+  const valid = Object.values(nums).every((x) => Number.isInteger(x) && x >= 0);
+  const antennas = valid ? nums.arrays * nums.per_array + nums.spares : null;
+  const dirty = valid && (nums.arrays !== b.arrays || nums.per_array !== b.per_array || nums.spares !== b.spares);
+  const perUnit = d.items.filter((i) => i.basis !== 'total').length;
+  const save = async (e: any) => {
+    e.preventDefault();
+    if (!dirty) return;
+    setBusy(true);
+    try {
+      await put(`/api/projects/${d.project.id}/procurement/build`, { version: b.version, ...nums });
+      toast(`Build saved: ${antennas} antenna${antennas === 1 ? '' : 's'}. Totals updated.`, { kind: 'success' });
+    } catch (err) {
+      toastError(err);
+    } finally {
+      setBusy(false);
+      refresh(d.project.id);
+    }
+  };
+  const field = (k: keyof typeof f, label: string, hint?: string) => (
+    <label className="proc-build-field">
+      <span>{label}</span>
+      <input
+        className="field-input narrow"
+        type="number"
+        min={0}
+        step={1}
+        value={f[k]}
+        aria-label={label}
+        title={hint}
+        onChange={(e: any) => setF({ ...f, [k]: e.target.value })}
+      />
+    </label>
+  );
+  return (
+    <form className="proc-build" data-testid="proc-build" onSubmit={save}>
+      <strong className="proc-build-title">Quantity drivers</strong>
+      {field('arrays', 'Number of arrays', 'Number of arrays (0 if the project has no arrays)')}
+      <span className="proc-build-op">×</span>
+      {field('per_array', 'Antennas per array')}
+      <span className="proc-build-op">=</span>
+      <span className="proc-build-field proc-build-calc">
+        <span>Antennas for arrays</span>
+        <strong data-testid="proc-for-arrays">{valid ? nums.arrays * nums.per_array : '–'}</strong>
+      </span>
+      <span className="proc-build-op">+</span>
+      {field('spares', 'Extra antennas (spare)', 'Built as antennas but not part of any array')}
+      <span className="proc-build-op">=</span>
+      <span className="proc-build-field proc-build-calc proc-build-total">
+        <span>Total antennas to build</span>
+        <strong data-testid="proc-antennas">{antennas ?? '–'}</strong>
+      </span>
+      <button className="btn btn-primary btn-small no-print" disabled={!dirty || busy}>
+        Save
+      </button>
+      {dirty && (
+        <button type="button" className="link-btn no-print" onClick={() => setF({ arrays: String(b.arrays), per_array: String(b.per_array), spares: String(b.spares) })}>
+          Undo
+        </button>
+      )}
+      <span className="muted small proc-build-note">
+        {!b.version
+          ? perUnit
+            ? `Fill these in to work out the total of the ${perUnit} item${perUnit === 1 ? '' : 's'} counted per antenna or per array.`
+            : 'Total qty = qty / unit × total antennas to build (per antenna), × number of arrays (per array), or × 1 (in total).'
+          : `Changed ${when(b.updated_at!)} by ${user(b.updated_by)?.name ?? 'someone'}.`}{' '}
+        {d.build_log.length > 1 && (
+          <button type="button" className="link-btn no-print" aria-expanded={history} onClick={() => setHistory(!history)}>
+            {history ? 'Hide changes' : 'Earlier builds'}
+          </button>
+        )}
+      </span>
+      {history && (
+        <ul className="proc-build-log">
+          {d.build_log.map((l) => (
+            <li key={l.id}>
+              {dateTime(l.at)} · {user(l.user_id)?.name ?? ''}: {l.arrays} arrays × {l.per_array} + {l.spares} spare = {l.arrays * l.per_array + l.spares} antennas
+            </li>
+          ))}
+        </ul>
+      )}
+    </form>
   );
 }
 
@@ -174,7 +309,9 @@ function Cell({ i, field, label, list, type = 'text', wide }: { i: ProcurementIt
     if (next === value) return;
     if (field === 'name' && !next) return setV(value);
     try {
-      await patch(`/api/procurement/items/${i.id}`, { version: i.version, [field]: type === 'number' ? Number(next) : next });
+      // a new category brings the workbook's basis with it (Single Antenna per antenna, Array per array, Tool in total)
+      const basis = field === 'category' ? basisForCategory(next) : null;
+      await patch(`/api/procurement/items/${i.id}`, { version: i.version, [field]: type === 'number' ? Number(next) : next, ...(basis ? { basis } : {}) });
     } catch (e) {
       toastError(e);
       setV(value);
@@ -204,17 +341,68 @@ function Cell({ i, field, label, list, type = 'text', wide }: { i: ProcurementIt
   );
 }
 
+/** The workbook's inventory cell: a count, NIL for none, or a note when it isn't a plain count. */
+export function parseInventory(text: string): { inventory: number | null; inventory_note: string } {
+  const t = text.trim();
+  if (!t) return { inventory: null, inventory_note: '' };
+  if (/^nil$/i.test(t)) return { inventory: 0, inventory_note: '' };
+  if (/^\d+(\.\d+)?$/.test(t)) return { inventory: Number(t), inventory_note: '' };
+  return { inventory: null, inventory_note: t.slice(0, 80) };
+}
+
+function InventoryCell({ i }: { i: ProcurementItem }) {
+  const value = invText(i);
+  const [v, setV] = useState(value);
+  const [focused, setFocused] = useState(false);
+  useEffect(() => {
+    if (!focused) setV(value);
+  }, [value, focused]);
+  const save = async () => {
+    setFocused(false);
+    if (v.trim() === value) return;
+    try {
+      await patch(`/api/procurement/items/${i.id}`, { version: i.version, ...parseInventory(v) });
+    } catch (e) {
+      toastError(e);
+      setV(value);
+    }
+    refresh(i.project_id);
+  };
+  return (
+    <input
+      className="field-input proc-cell proc-inv"
+      value={v}
+      placeholder="–"
+      title="What is in hand: a number, NIL for none, or a note (then In procurement says Check)"
+      aria-label={`Inventory of ${i.name}`}
+      onFocus={() => setFocused(true)}
+      onChange={(e: any) => setV(e.target.value)}
+      onBlur={() => void save()}
+      onKeyDown={(e: any) => {
+        if (e.key === 'Enter') e.target.blur();
+        if (e.key === 'Escape') {
+          setV(value);
+          setTimeout(() => e.target.blur());
+        }
+      }}
+    />
+  );
+}
+
 function MasterList({ d }: { d: Data }) {
   const { user } = useApp();
-  const blank = { name: '', discipline: '', category: '', means: 'bought_out' as ProcurementMeans, spec: '', quantity: '1', unit: 'pcs' };
+  const blank = { name: '', discipline: '', category: '', means: 'bought_out' as ProcurementMeans, spec: '', quantity: '1', unit: 'pcs', basis: 'total' as ProcurementBasis, material: '', inventory: '' };
   const [n, setN] = useState(blank);
+  // the basis follows the category until someone picks one
+  const [basisPicked, setBasisPicked] = useState(false);
   const [from, setFrom] = useState('');
   const add = async (e: any) => {
     e.preventDefault();
     if (!n.name.trim()) return;
     try {
-      await post(`/api/projects/${d.project.id}/procurement/items`, { ...n, name: n.name.trim(), quantity: Number(n.quantity) || 1 });
-      setN({ ...blank, discipline: n.discipline, category: n.category, means: n.means, unit: n.unit });
+      const { inventory, ...rest } = n;
+      await post(`/api/projects/${d.project.id}/procurement/items`, { ...rest, name: n.name.trim(), quantity: Number(n.quantity) || 1, ...parseInventory(inventory) });
+      setN({ ...blank, discipline: n.discipline, category: n.category, means: n.means, unit: n.unit, basis: n.basis, material: n.material });
       refresh(d.project.id);
       setTimeout(() => (document.querySelector('input[aria-label="New item"]') as HTMLInputElement | null)?.focus());
     } catch (err) {
@@ -236,6 +424,20 @@ function MasterList({ d }: { d: Data }) {
     } catch (e) {
       toastError(e);
     }
+  };
+  // items whose category says per antenna or per array, but which are counted otherwise
+  const mismatched = d.items.filter((i) => {
+    const b = basisForCategory(i.category);
+    return b && b !== i.basis;
+  });
+  const byCategory = async () => {
+    try {
+      const r = await post<{ changed: number }>(`/api/projects/${d.project.id}/procurement/basis-from-category`);
+      toast(`${r.changed} item${r.changed === 1 ? '' : 's'} now counted by category.`, { kind: 'success' });
+    } catch (e) {
+      toastError(e);
+    }
+    refresh(d.project.id);
   };
   const copy = async () => {
     const source = d.copy_from.find((p) => String(p.id) === from);
@@ -261,6 +463,25 @@ function MasterList({ d }: { d: Data }) {
           <option key={x} value={x} />
         ))}
       </datalist>
+      <datalist id="proc-materials">
+        {d.suggestions.materials.map((x) => (
+          <option key={x} value={x} />
+        ))}
+      </datalist>
+      {mismatched.length > 0 && (
+        <div className="notice notice-warn proc-basis-notice no-print" data-testid="proc-basis-notice">
+          {mismatched.length} item{mismatched.length === 1 ? "'s" : "s'"} category says {mismatched.length === 1 ? 'it is' : 'they are'} counted differently (
+          {mismatched
+            .slice(0, 3)
+            .map((i) => `${i.name}: ${i.category}, now ${PROCUREMENT_BASIS_LABEL[i.basis]}`)
+            .join('; ')}
+          {mismatched.length > 3 ? ` and ${mismatched.length - 3} more` : ''}).{' '}
+          <button className="btn btn-small" onClick={() => void byCategory()}>
+            Count by category
+          </button>{' '}
+          <span className="muted small">Single Antenna per antenna, Array per array, Tool in total, as in the workbook.</span>
+        </div>
+      )}
       <datalist id="proc-units">
         {d.suggestions.units.map((x) => (
           <option key={x} value={x} />
@@ -272,11 +493,15 @@ function MasterList({ d }: { d: Data }) {
             <tr>
               <th className="num">No.</th>
               <th>Item</th>
+              <th>Final size / spec</th>
+              <th>Qty / unit</th>
+              <th className="num">Total qty</th>
+              <th>Inventory</th>
+              <th className="num">In procurement</th>
+              <th>Material</th>
               <th>Discipline</th>
               <th>Category</th>
               <th>Means</th>
-              <th>Final size / spec</th>
-              <th>Quantity</th>
               <th>In stock</th>
               <th>Notes (PO, supplier…)</th>
               <th />
@@ -288,6 +513,44 @@ function MasterList({ d }: { d: Data }) {
                 <td className="num muted">{k + 1}</td>
                 <td>
                   <Cell i={i} field="name" label="Item" wide />
+                </td>
+                <td>
+                  <Cell i={i} field="spec" label="Final size / spec" wide />
+                </td>
+                <td className="proc-qty">
+                  <Cell i={i} field="quantity" label="Quantity" type="number" />
+                  <Cell i={i} field="unit" label="Unit" list="proc-units" />
+                  <select
+                    className="field-input proc-cell proc-basis"
+                    value={i.basis}
+                    aria-label={`Quantity of ${i.name} is`}
+                    onChange={async (e: any) => {
+                      try {
+                        await patch(`/api/procurement/items/${i.id}`, { version: i.version, basis: e.target.value });
+                      } catch (err) {
+                        toastError(err);
+                      }
+                      refresh(i.project_id);
+                    }}
+                  >
+                    {PROCUREMENT_BASES.map((b) => (
+                      <option key={b} value={b}>
+                        {PROCUREMENT_BASIS_LABEL[b]}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td className={`num proc-need${unset(i, d.build) ? ' proc-due' : ''}`} data-testid="proc-need" title={i.basis === 'total' ? 'In total' : `${num(i.quantity)} ${PROCUREMENT_BASIS_LABEL[i.basis]} × ${i.basis === 'antenna' ? `${d.build.antennas} antennas to build` : `${d.build.arrays} arrays`}${unset(i, d.build) ? ': fill in the quantity drivers above' : ''}`}>
+                  <strong>{num(i.required)}</strong> {i.unit}
+                </td>
+                <td>
+                  <InventoryCell i={i} />
+                </td>
+                <td className="num" data-testid="proc-to-procure">
+                  <ToProcure i={i} />
+                </td>
+                <td>
+                  <Cell i={i} field="material" label="Material" list="proc-materials" wide />
                 </td>
                 <td>
                   <Cell i={i} field="discipline" label="Discipline" list="proc-disciplines" />
@@ -317,13 +580,6 @@ function MasterList({ d }: { d: Data }) {
                   </select>
                 </td>
                 <td>
-                  <Cell i={i} field="spec" label="Final size / spec" wide />
-                </td>
-                <td className="proc-qty">
-                  <Cell i={i} field="quantity" label="Quantity" type="number" />
-                  <Cell i={i} field="unit" label="Unit" list="proc-units" />
-                </td>
-                <td>
                   <label className="proc-stock">
                     <StockBox i={i} />
                     {i.in_stock_at ? (
@@ -349,11 +605,11 @@ function MasterList({ d }: { d: Data }) {
           <tfoot className="no-print">
             <tr>
               <td className="num muted">{d.items.length + 1}</td>
-              <td colSpan={9}>
+              <td colSpan={13}>
                 <form className="proc-add" onSubmit={add}>
                   <input className="field-input wide" value={n.name} maxLength={120} placeholder="Item" aria-label="New item" onChange={(e: any) => setN({ ...n, name: e.target.value })} />
                   <input className="field-input" value={n.discipline} maxLength={40} placeholder="Discipline" list="proc-disciplines" aria-label="New item's discipline" onChange={(e: any) => setN({ ...n, discipline: e.target.value })} />
-                  <input className="field-input" value={n.category} maxLength={40} placeholder="Category" list="proc-categories" aria-label="New item's category" onChange={(e: any) => setN({ ...n, category: e.target.value })} />
+                  <input className="field-input" value={n.category} maxLength={40} placeholder="Category" list="proc-categories" aria-label="New item's category" onChange={(e: any) => setN({ ...n, category: e.target.value, basis: basisPicked ? n.basis : basisFor(e.target.value) })} />
                   <select className="field-input" value={n.means} aria-label="New item's means" onChange={(e: any) => setN({ ...n, means: e.target.value })}>
                     {PROCUREMENT_MEANS.map((m) => (
                       <option key={m} value={m}>
@@ -364,6 +620,23 @@ function MasterList({ d }: { d: Data }) {
                   <input className="field-input wide" value={n.spec} maxLength={200} placeholder="Final size / spec" aria-label="New item's final size or spec" onChange={(e: any) => setN({ ...n, spec: e.target.value })} />
                   <input className="field-input narrow" type="number" min={0} step="any" value={n.quantity} aria-label="New item's quantity" onChange={(e: any) => setN({ ...n, quantity: e.target.value })} />
                   <input className="field-input narrow" value={n.unit} maxLength={12} list="proc-units" aria-label="New item's unit" onChange={(e: any) => setN({ ...n, unit: e.target.value })} />
+                  <select
+                    className="field-input"
+                    value={n.basis}
+                    aria-label="New item's quantity is"
+                    onChange={(e: any) => {
+                      setBasisPicked(true);
+                      setN({ ...n, basis: e.target.value });
+                    }}
+                  >
+                    {PROCUREMENT_BASES.map((b) => (
+                      <option key={b} value={b}>
+                        {PROCUREMENT_BASIS_LABEL[b]}
+                      </option>
+                    ))}
+                  </select>
+                  <input className="field-input" value={n.inventory} maxLength={80} placeholder="Inventory" aria-label="New item's inventory" onChange={(e: any) => setN({ ...n, inventory: e.target.value })} />
+                  <input className="field-input" value={n.material} maxLength={80} placeholder="Material" list="proc-materials" aria-label="New item's material" onChange={(e: any) => setN({ ...n, material: e.target.value })} />
                   <button className="btn btn-primary" disabled={!n.name.trim()}>
                     Add item
                   </button>
@@ -434,7 +707,10 @@ function AssemblyChecklist({ d }: { d: Data }) {
                         </span>
                         <span className="proc-name">{i.name}</span>
                         <span className="muted small">
-                          {[i.category, i.spec, qty(i), PROCUREMENT_MEANS_LABEL[i.means]].filter(Boolean).join(' · ')}
+                          {[i.category, i.spec, qty(i), i.material, PROCUREMENT_MEANS_LABEL[i.means]].filter(Boolean).join(' · ')}
+                        </span>
+                        <span className="proc-checkqty small">
+                          In inventory {invText(i) || '–'} · short <ToProcure i={i} />
                         </span>
                       </li>
                     ))}
@@ -468,7 +744,10 @@ function Pending({ d }: { d: Data }) {
                   <th>Item</th>
                   <th>Discipline</th>
                   <th>Final size / spec</th>
-                  <th>Quantity</th>
+                  <th>Material</th>
+                  <th>Total qty</th>
+                  <th>Inventory</th>
+                  <th className="num">In procurement</th>
                   <th>Notes (PO, supplier…)</th>
                   <th />
                 </tr>
@@ -479,7 +758,12 @@ function Pending({ d }: { d: Data }) {
                     <td>{i.name}</td>
                     <td>{i.discipline}</td>
                     <td>{i.spec}</td>
+                    <td>{i.material}</td>
                     <td>{qty(i)}</td>
+                    <td>{invText(i)}</td>
+                    <td className="num">
+                      <ToProcure i={i} />
+                    </td>
                     <td>
                       <Cell i={i} field="notes" label="Notes" wide />
                     </td>
