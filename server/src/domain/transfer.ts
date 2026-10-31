@@ -1,6 +1,7 @@
 // Getting data in and out: CSV/JSON export, CSV import (with a preview
 // step), bulk archiving, and tag housekeeping.
 
+import { BUILD_JOIN, REQUIRED_SQL } from './procurement.ts';
 import { createHash } from 'node:crypto';
 import { ESTIMATE_BUCKETS, PRIORITIES, STATUSES, type Priority, type Status, type Ticket, type User } from '@board/shared';
 import { all, get, run, tx } from '../db/connection.ts';
@@ -132,12 +133,22 @@ export function exportJson(ctx: Ctx, opts: { activity: boolean } = { activity: t
     procurement: {
       items: all<Record<string, unknown> & { project_id: number; in_stock_by: number | null }>(
         ctx.db,
-        `SELECT id, project_id, name, discipline, category, means, spec, quantity, unit, notes, in_stock_at, in_stock_by, created_at, removed_at
-         FROM procurement_items ORDER BY project_id, sort_order, id`,
+        `SELECT i.id, i.project_id, i.name, i.discipline, i.category, i.means, i.spec, i.quantity, i.basis, ${REQUIRED_SQL} AS required, i.unit, i.notes, i.material, i.inventory, i.inventory_note,
+         i.in_stock_at, i.in_stock_by, i.created_at, i.removed_at
+         FROM procurement_items i ${BUILD_JOIN} ORDER BY i.project_id, i.sort_order, i.id`,
       ).map((i) => ({ ...i, project: pName.get(i.project_id) ?? null, in_stock_by: i.in_stock_by ? byId.get(i.in_stock_by) ?? null : null })),
       log: all<{ project_id: number; item_id: number; user_id: number | null; at: string; kind: string; item_name: string; item_spec: string }>(
         ctx.db,
         'SELECT project_id, item_id, user_id, at, kind, item_name, item_spec FROM procurement_log ORDER BY id',
+      ).map(({ user_id, ...l }) => ({ ...l, project: pName.get(l.project_id) ?? null, by: user_id ? byId.get(user_id) ?? null : null })),
+      // what each project builds (decision #45), and every change to it
+      builds: all<{ project_id: number; arrays: number; per_array: number; spares: number; updated_at: string }>(
+        ctx.db,
+        'SELECT project_id, arrays, per_array, spares, updated_at FROM procurement_builds ORDER BY project_id',
+      ).map((b) => ({ ...b, project: pName.get(b.project_id) ?? null, antennas: b.arrays * b.per_array + b.spares })),
+      build_log: all<{ project_id: number; user_id: number | null; at: string; arrays: number; per_array: number; spares: number }>(
+        ctx.db,
+        'SELECT project_id, user_id, at, arrays, per_array, spares FROM procurement_build_log ORDER BY id',
       ).map(({ user_id, ...l }) => ({ ...l, project: pName.get(l.project_id) ?? null, by: user_id ? byId.get(user_id) ?? null : null })),
     },
     manufacturing: {

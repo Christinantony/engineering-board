@@ -48,8 +48,9 @@ import { createItem, updateItem } from './domain/checklists.ts';
 import { createProject, listProjects } from './domain/projects.ts';
 import { manufacturingQueue, manufacturingHistory, updateManufacturing, recordCommitment, setManufacturingLabels } from './domain/manufacturing.ts';
 import { purchaseQueue, vendorList, createVendor, updateVendor, updatePurchase, purchaseHistory } from './domain/purchase.ts';
-import { addItem, copyList, editItem, procurement, procurementCsv, removeItem, setStock, followupQueue, setFollowup, recordFollowupCall, itemFollowupHistory } from './domain/procurement.ts';
+import { addItem, basisFromCategory, copyList, editItem, procurement, procurementCsv, removeItem, setBuild, setStock, followupQueue, setFollowup, recordFollowupCall, itemFollowupHistory } from './domain/procurement.ts';
 import { getPermissions, requireCapability, setPermissions } from './domain/permissions.ts';
+import { DclQueue, LOGO_TYPES, cleanPdfName, dclOptions, findScript, logoType, probeDcl, pythonCandidates, runPython, type DclStatus, type PythonRunner } from './domain/drawingDcl.ts';
 import { WordQueue, cleanWordName, convertWithWord, probeWord, type WordConverter, type WordStatus } from './domain/wordToPdf.ts';
 import {
   createMaterial,
@@ -97,7 +98,7 @@ import {
   type BackupCtx,
 } from './domain/backup.ts';
 import { archiveOld, commitImport, deleteTag, exportCsv, exportJson, importTemplate, listTags, previewImport, renameTag } from './domain/transfer.ts';
-import { readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import type { ReviewWorkspace } from '@board/shared';
 import { inspectPdf, PdfError } from './domain/pdf.ts';
 import { collectUnusedUploads, ingest, storeDir } from './domain/reviewStore.ts';
@@ -131,7 +132,7 @@ import { jobsNeedingSync, markSyncPending, revisionLog, settleSyncs, syncProject
 /** Default maximum PDF upload for drawing review (merged signed scans can be large). */
 export const DEFAULT_REVIEW_UPLOAD_MAX_MB = 200;
 
-export const APP_VERSION = '2.2.0';
+export const APP_VERSION = '2.4.0';
 
 export interface AppOptions {
   dbPath: string;
@@ -158,6 +159,10 @@ export interface AppOptions {
   reviewMaintenance?: boolean;
   /** Word to PDF: the converter and whether it is available (tests inject a fake; the default is Word on the host). */
   wordToPdf?: { convert: WordConverter; status: WordStatus | Promise<WordStatus> };
+  /** Drawing tools (decision #46): the Python that runs the team's scripts (config.json "python"), where the scripts are, and a stand-in runner for tests. */
+  python?: string | string[];
+  toolScriptDirs?: string[];
+  pythonRunner?: PythonRunner;
 }
 
 export interface App {
@@ -272,6 +277,14 @@ export function createApp(opts: AppOptions): App {
   let wordStatus: WordStatus = 'not_windows';
   void Promise.resolve(word.status).then((s) => (wordStatus = s));
   const wordQueue = new WordQueue(word.convert, join(dirname(opts.dbPath), 'tmp'));
+  // Drawing tools (decision #46): the team's drawing_to_dcl.py, unchanged, with the host's Python
+  const dclScript = findScript(opts.toolScriptDirs ?? []);
+  const pythonRunner = opts.pythonRunner ?? runPython;
+  const dclQueue = new DclQueue(join(dirname(opts.dbPath), 'tmp'), pythonRunner);
+  const toolsDataDir = join(dirname(opts.dbPath), 'tools');
+  const dclLogo = () => Object.keys(LOGO_TYPES).map((e) => join(toolsDataDir, `dcl-logo.${e}`)).find((p) => existsSync(p)) ?? null;
+  let dclStatus: Promise<DclStatus> = probeDcl(pythonCandidates(opts.python), dclScript, pythonRunner, ctx.now);
+  const dclStatusReply = async () => ({ ...(await dclStatus), logo: !!dclLogo() });
   const router = new Router();
   const id = (req: Request) => v.int({ min: 1 })(req.params.id, 'id');
 
@@ -384,6 +397,38 @@ export function createApp(opts: AppOptions): App {
   authed('GET', '/api/job-types', () => ({ job_types: listJobTypes(ctx) }));
   board('GET', '/api/tools/sheet', () => sheetCalculatorData(ctx));
   board('GET', '/api/tools/pdf/status', () => ({ word_to_pdf: wordStatus }));
+  // drawing tools (decision #46): what the host's Python can do, checked at start and on request
+  board('GET', '/api/tools/drawing/status', () => dclStatusReply());
+  board('POST', '/api/tools/drawing/status', () => {
+    dclStatus = probeDcl(pythonCandidates(opts.python), dclScript, pythonRunner, ctx.now);
+    return dclStatusReply();
+  });
+  // the PDF is streamed before the handler runs (see the request branch below)
+  board('POST', '/api/tools/drawing-to-dcl', async (req) => {
+    const up = req.upload!;
+    try {
+      const o = dclOptions(req.query);
+      const s = await dclStatus;
+      if (s.state !== 'ready' || !s.argv || !dclScript) {
+        throw new HttpError(
+          501,
+          'dcl_unavailable',
+          s.state === 'no_script'
+            ? 'The drawing tools are missing from the app folder: install the update again.'
+            : s.state === 'no_python'
+              ? 'Python is not installed on the host PC, so the dimension checklist cannot be made here. See Tools → Drawing tools for what to install.'
+              : `The host PC's Python lacks ${s.missing.join(', ')}. See Tools → Drawing tools for what to install.`,
+        );
+      }
+      // openpyxl needs Pillow to put a logo into the Excel file; without it the script would stop, so the logo is left out
+      const logo = dclLogo();
+      const logoLeftOut = !!logo && o.format !== 'docx' && !s.pillow;
+      const r = await dclQueue.convert(s.argv, dclScript, up.path, up.dir, o, logoLeftOut ? null : logo);
+      return { ...r, python: s.command, logo_left_out: logoLeftOut };
+    } finally {
+      rmSync(up.dir, { recursive: true, force: true });
+    }
+  });
   // the upload is streamed before the handler runs (see the request branch below)
   board('POST', '/api/tools/word-to-pdf', async (req) => {
     const up = req.upload!;
@@ -462,6 +507,8 @@ export function createApp(opts: AppOptions): App {
     });
   });
   worker('POST', '/api/projects/:id/procurement/items', (req, user) => new Reply(201, { item: addItem(ctx, user, id(req), req.body ?? {}) }));
+  worker('PUT', '/api/projects/:id/procurement/build', (req, user) => ({ build: setBuild(ctx, user, id(req), req.body ?? {}) }));
+  worker('POST', '/api/projects/:id/procurement/basis-from-category', (req, user) => basisFromCategory(ctx, user, id(req)));
   worker('POST', '/api/projects/:id/procurement/copy', (req, user) => copyList(ctx, user, id(req), req.body ?? {}));
   worker('PATCH', '/api/procurement/items/:id', (req, user) => ({ item: editItem(ctx, user, id(req), req.body ?? {}) }));
   worker('POST', '/api/procurement/items/:id/stock', (req, user) => ({ item: setStock(ctx, user, id(req), req.body ?? {}) }));
@@ -691,6 +738,32 @@ export function createApp(opts: AppOptions): App {
   admin('PATCH', '/api/admin/sheet-sizes/:id', (req) => ({ size: updateSheetSize(ctx, id(req), req.body ?? {}) }));
   admin('DELETE', '/api/admin/sheet-sizes/:id', (req) => deleteSheetSize(ctx, id(req)));
   admin('PUT', '/api/admin/tools/sheet-settings', (req) => ({ settings: setSheetSettings(ctx, req.body ?? {}) }));
+  // the logo the dimension checklist puts in its footer (decision #46), kept with the board's data
+  admin('GET', '/api/admin/tools/dcl-logo', (req) => {
+    const p = dclLogo();
+    if (!p) throw new HttpError(404, 'not_found', 'No logo has been added.');
+    req.res.writeHead(200, { 'Content-Type': LOGO_TYPES[p.split('.').pop()!], 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+    req.res.end(readFileSync(p));
+    return HANDLED;
+  });
+  admin('PUT', '/api/admin/tools/dcl-logo', (req) => {
+    const up = req.upload!;
+    try {
+      const bytes = readFileSync(up.path);
+      const type = logoType(bytes);
+      if (!type) throw new HttpError(400, 'not_image', 'Choose a PNG or JPEG image for the logo.');
+      mkdirSync(toolsDataDir, { recursive: true });
+      for (const e of Object.keys(LOGO_TYPES)) rmSync(join(toolsDataDir, `dcl-logo.${e}`), { force: true });
+      writeFileSync(join(toolsDataDir, `dcl-logo.${type}`), bytes);
+      return { logo: true };
+    } finally {
+      rmSync(up.dir, { recursive: true, force: true });
+    }
+  });
+  admin('DELETE', '/api/admin/tools/dcl-logo', () => {
+    for (const e of Object.keys(LOGO_TYPES)) rmSync(join(toolsDataDir, `dcl-logo.${e}`), { force: true });
+    return { logo: false };
+  });
   admin('POST', '/api/admin/job-types', (req) => new Reply(201, { job_type: createJobType(ctx, req.body ?? {}) }));
   admin('PATCH', '/api/admin/job-types/:id', (req) => ({ job_type: updateJobType(ctx, id(req), req.body ?? {}) }));
   admin('POST', '/api/admin/job-types/:id/checklist', (req) => new Reply(201, { item: createItem(ctx, id(req), req.body ?? {}) }));
@@ -796,6 +869,21 @@ export function createApp(opts: AppOptions): App {
         checkUploadHeaders(req, reviewMaxBytes, 'a Word document (.doc or .docx)');
         if (raw.headers.expect?.toLowerCase() === '100-continue') res.writeContinue();
         await streamFileUpload(req, wordQueue.newDir(), name, reviewMaxBytes, 'a Word document (.doc or .docx)');
+      } else if (req.path === '/api/tools/drawing-to-dcl' && req.method === 'POST') {
+        const who = currentUser(req); // before reading any bytes
+        if (!who) throw new HttpError(401, 'unauthenticated', 'Please sign in first.');
+        if (!hasBoardAccess(getPermissions(ctx), who)) throw forbidden(REVIEWER_ONLY);
+        const name = cleanPdfName(req.query.get('name'));
+        dclOptions(req.query); // a bad option is refused before the upload
+        checkUploadHeaders(req, reviewMaxBytes, 'a drawing PDF');
+        if (raw.headers.expect?.toLowerCase() === '100-continue') res.writeContinue();
+        await streamFileUpload(req, dclQueue.newDir(), name, reviewMaxBytes, 'a drawing PDF');
+      } else if (req.path === '/api/admin/tools/dcl-logo' && req.method === 'PUT') {
+        requireAdmin(req); // before reading any bytes
+        checkUploadHeaders(req, 2 * 1048576, 'a logo image');
+        if (raw.headers.expect?.toLowerCase() === '100-continue') res.writeContinue();
+        mkdirSync(join(dirname(opts.dbPath), 'tmp'), { recursive: true });
+        await streamFileUpload(req, mkdtempSync(join(dirname(opts.dbPath), 'tmp', 'logo-')), 'logo', 2 * 1048576, 'a logo image');
       } else if (req.path === '/api/review/uploads' && req.method === 'POST') {
         const who = currentUser(req); // before reading any bytes
         if (!who) throw new HttpError(401, 'unauthenticated', 'Please sign in first.');

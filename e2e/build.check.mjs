@@ -225,6 +225,14 @@ describe('release zip', () => {
       assert.ok(file(n), `missing ${n}`);
   });
 
+  it('ships the drawing tools\' Python scripts byte for byte (decision #46)', () => {
+    for (const name of readdirSync('tools')) {
+      const shipped = file(`app/tools/${name}`);
+      assert.ok(shipped, `missing app/tools/${name}`);
+      assert.ok(Buffer.from(shipped.data).equals(readFileSync(join('tools', name))), `app/tools/${name} differs from tools/${name}`);
+    }
+  });
+
   it('ships no data, no settings and no node.exe, so unzipping an update can never overwrite them', () => {
     const bad = files.filter((f) => /\/data\/|\.db($|-)|\/config\.json$|node\.exe$|\.map$|RESET-ADMIN-PIN/i.test(f.name));
     assert.deepEqual(bad.map((f) => f.name), []);

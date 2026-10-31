@@ -51,6 +51,14 @@ Everyone sees a change straight away: the board refreshes itself.
 
 **PDF tools** need nothing from the admin, except **Word to PDF**: it uses Microsoft Word on the host PC, driven through PowerShell, one document at a time, the way the team's DOC to PDF script does. If Word isn't installed on the host (or the host isn't Windows), the tab says so and the other three tools still work, since they run in each person's browser. The upload limit is the drawing-review one (`reviewUploadMaxMB`). Nothing is kept: the document and its PDF are deleted from the host as soon as the PDF has been sent back.
 
+**Drawing tools** run the team's own Python scripts on the host PC, unchanged (they ship in the `app\tools` folder). The first, the **dimension checklist**, is `drawing_to_dcl.py`. The host needs Python and the script's packages, installed once by whoever looks after the board:
+
+1. Install **Python 3.14** from python.org on the host PC (the installer's defaults are fine; they include the `py` launcher).
+2. In a command prompt: `py -3.14 -m pip install pymupdf python-docx openpyxl pillow` (Pillow puts the logo into Excel files).
+3. For drawings without selectable text (scans, or sheets sent through "Microsoft Print to PDF"), also: `py -3.14 -m pip install rapidocr onnxruntime`.
+
+Then press **Check again** under **Admin → Tools → Drawing tools** (or restart the board): it shows which Python it found and anything still missing. The board looks for `py -3.14` first, then `py -3` and `python`; to choose one, set `python` in config.json (see [Settings](#settings)). **Logo in the checklist's footer**: add the company logo (PNG or JPEG, up to 2 MB) here. It is kept in the data folder, so updates leave it in place, and goes into every new checklist. Drawings are processed one at a time; each drawing and its checklist are deleted from the host as soon as the checklist has been sent back.
+
 ## Drawing review and project folders
 
 The board writes into a job's project folder (its **File location**) only under `BoardReview\<JOB>\` and to `REVISION_LOG.md`. It writes as the Windows user running the board, so that user needs write access to the project shares. If a share is offline or read-only, the review screen shows what failed, the board keeps its own copies, and it retries every few minutes (or press **Try again**).
@@ -140,6 +148,7 @@ Settings live in `config.json` in the board folder (next to `start.bat`). It doe
 | `timezone` | `"Asia/Kolkata"` | Decides "today" and when jobs become overdue. |
 | `hoursPerDay` | `8` | The reference line on the Workload page. |
 | `workingDays` | `[1,2,3,4,5,6]` | Monday to Saturday. `0` is Sunday. Used by the workload horizons. |
+| `python` | not set | The Python that runs the drawing tools. Not set: `py -3.14`, then `py -3`, then `python`. Otherwise the path of python.exe, `"C:/Python314/python.exe"`, or a command as a list, `["py", "-3.13"]`. |
 
 Write Windows paths with forward slashes (`"D:/Board/backups"`) or doubled backslashes (`"D:\\Board\\backups"`). A misspelt setting is reported in the board's window rather than silently ignored.
 

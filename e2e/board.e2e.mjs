@@ -1297,6 +1297,27 @@ test('procurement: from a project, type the master list, mark items in stock, an
   await addItem('Spiral antenna element', 'RF', 'Single Antenna', 'outsourced', 'Ø76 mm', 5);
   await addItem('Alignment jig', 'Mechanical', 'Tool', 'tools', 'Printed PLA', 1);
   await p.waitForSelector('[data-testid=proc-totals]:has-text("2 items · 0 in stock · 2 pending")');
+  // the workbook's quantity drivers: 5 arrays × 4 antennas + 2 spare = 22 antennas to build (decision #45)
+  await p.fill('input[aria-label="Number of arrays"]', '5');
+  await p.fill('input[aria-label="Antennas per array"]', '4');
+  await p.fill('input[aria-label="Extra antennas (spare)"]', '2');
+  await p.waitForSelector('[data-testid=proc-for-arrays]:has-text("20")');
+  await p.waitForSelector('[data-testid=proc-antennas]:has-text("22")');
+  await p.click('[data-testid=proc-build] button:has-text("Save")');
+  // the category set the basis: a Single Antenna item is per antenna (5 × 22), a Tool in total
+  await p.waitForSelector('tr[data-item="Spiral antenna element"] [data-testid=proc-need]:has-text("110")');
+  await p.waitForSelector('tr[data-item="Alignment jig"] [data-testid=proc-need]:has-text("1")');
+  // inventory: a count, NIL, or a note (then Check); and the material
+  assert.equal(await p.textContent('tr[data-item="Spiral antenna element"] [data-testid=proc-to-procure]'), 'Check');
+  await p.fill('input[aria-label="Inventory of Spiral antenna element"]', '6');
+  await p.press('input[aria-label="Inventory of Spiral antenna element"]', 'Enter');
+  await p.waitForSelector('tr[data-item="Spiral antenna element"] [data-testid=proc-to-procure]:has-text("104")');
+  await p.fill('input[aria-label="Inventory of Alignment jig"]', 'NIL');
+  await p.press('input[aria-label="Inventory of Alignment jig"]', 'Enter');
+  await p.waitForSelector('tr[data-item="Alignment jig"] [data-testid=proc-to-procure]:has-text("1")');
+  await p.fill('input[aria-label="Material of Spiral antenna element"]', 'ALUMINIUM 6061-T651');
+  await p.press('input[aria-label="Material of Spiral antenna element"]', 'Enter');
+  await p.waitForFunction(async (id) => (await (await fetch(`/api/projects/${id}/procurement`)).json()).items[0].material === 'ALUMINIUM 6061-T651', project.id);
   // edit a cell: it saves when you leave it
   await p.fill('input[aria-label="Notes of Spiral antenna element"]', 'PO 4512');
   await p.press('input[aria-label="Notes of Spiral antenna element"]', 'Enter');
@@ -1453,4 +1474,36 @@ test('mixed nesting: different parts on one 2400 × 1200 sheet, both cut modes, 
   // the workbook mode is still there, unchanged
   await p.click('.sheet-modes button:has-text("One part per sheet")');
   await p.waitForSelector('.sheet-table input[aria-label="Component 1 name"]');
+});
+
+test('drawing tools: the dimension checklist runs the team\'s script with the host\'s Python, or says what to install', async () => {
+  const p = await login('Paul');
+  await p.goto(`${BASE}/tools`);
+  await p.click('.tool-card:has-text("Drawing tools")');
+  await p.waitForSelector('.pdf-tabs a.on:has-text("Dimension checklist (DCL)")');
+  await p.waitForSelector('[data-testid=dcl-ready], [data-testid=dcl-unavailable]');
+  await p.fill('input[aria-label="Project"]', 'Spiral array');
+  await p.click('label:has-text("Both") input');
+  await p.setInputFiles('[data-testid=pick-dcl]', { name: 'VT-JD 123-01.pdf', mimeType: 'application/pdf', buffer: makePdf(1, { labels: ['Bracket for the e2e test'] }) });
+  await p.waitForSelector('.pdf-files li:has-text("VT-JD 123-01.pdf")');
+  if (await p.locator('[data-testid=dcl-unavailable]').count()) {
+    // a host without Python or the script's packages: the page says what to install, and the button waits
+    assert.match(await p.textContent('[data-testid=dcl-unavailable]'), /pip install/);
+    assert.ok(await p.locator('button:has-text("Make the checklist")').isDisabled());
+    return;
+  }
+  await p.click('button:has-text("Make the checklist")');
+  await p.waitForSelector('[data-testid=dcl-results] [data-drawing="VT-JD 123-01.pdf"] button:has-text("Download Word")');
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('[data-drawing="VT-JD 123-01.pdf"] button:has-text("Download Excel")')]);
+  assert.equal(dl.suggestedFilename(), 'VT-JD 123-01.xlsx');
+  const bytes = await readFileAsync(await dl.path());
+  assert.equal(bytes.subarray(0, 2).toString(), 'PK', 'an Office file');
+  await p.click('[data-drawing="VT-JD 123-01.pdf"] button:has-text("Show what the script read")');
+  assert.match(await p.textContent('[data-testid=dcl-report]'), /VT-JD 123-01\.pdf/);
+  // the options are remembered, except the part number and weight, which belong to one drawing
+  await p.fill('input[aria-label="Part number"]', 'JD 123-01');
+  await p.reload();
+  await p.waitForSelector('input[aria-label="Project"]');
+  assert.equal(await p.inputValue('input[aria-label="Project"]'), 'Spiral array');
+  assert.equal(await p.inputValue('input[aria-label="Part number"]'), '');
 });

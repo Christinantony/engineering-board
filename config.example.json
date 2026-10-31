@@ -29,5 +29,7 @@
   "hoursPerDay": 8,
 
   "_workingDays": "0 is Sunday, 1 Monday ... 6 Saturday.",
-  "workingDays": [1, 2, 3, 4, 5, 6]
+  "workingDays": [1, 2, 3, 4, 5, 6],
+
+  "_python": "Not set by default: the drawing tools (Tools, Drawing tools) use py -3.14, as the scripts expect, then any other Python found. To choose one, add \"python\": \"C:/Python314/python.exe\" (forward slashes), or a command as a list: \"python\": [\"py\", \"-3.13\"]."
 }

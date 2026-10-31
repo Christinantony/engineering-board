@@ -5,3 +5,5 @@
 *.sh   text eol=lf
 *.service text eol=lf
 Dockerfile text eol=lf
+# The drawing tools run the team's own Python scripts unchanged (decision #46): keep their bytes exactly.
+tools/*.py -text

@@ -4,13 +4,14 @@
 
 import { useEffect, useState } from 'react';
 import type { SheetMaterial, SheetSettings, SheetSize } from '@board/shared';
-import { api, del, patch, post } from '../../lib/api.ts';
+import { ApiError, api, del, patch, post } from '../../lib/api.ts';
 import { ask } from '../../lib/dialogs.ts';
 import { invalidate, useQuery } from '../../lib/store.ts';
 import { toast } from '../../lib/toasts.ts';
 import { Spinner } from '../../components/bits.tsx';
 import { onAdminError } from './Admin.tsx';
 import { RenameInput } from './Lists.tsx';
+import { DclStatusPanel, type DclStatus } from '../tools/DrawingTools.tsx';
 
 interface Data {
   materials: SheetMaterial[];
@@ -34,6 +35,7 @@ export function ToolsDataSection() {
       <Materials materials={materials} />
       <Sizes materials={materials} sizes={sizes} />
       <Settings settings={settings} />
+      <DclSetup />
     </section>
   );
 }
@@ -237,6 +239,68 @@ function Settings({ settings }: { settings: SheetSettings }) {
           Save defaults
         </button>
       </form>
+    </>
+  );
+}
+
+/** Drawing tools (decision #46): the host's Python, and the logo in the dimension checklist's footer. */
+function DclSetup() {
+  const status = useQuery<DclStatus>('/api/tools/drawing/status');
+  const [busy, setBusy] = useState(false);
+  const [stamp, setStamp] = useState(0);
+  const upload = async (file: File | undefined) => {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const r = await fetch('/api/admin/tools/dcl-logo', { method: 'PUT', headers: { 'Content-Type': 'application/octet-stream' }, body: file });
+      if (!r.ok) {
+        const body = await r.json().catch(() => null);
+        throw new ApiError(r.status, body?.error ?? 'http', body?.message ?? `The server answered ${r.status}.`, body);
+      }
+      toast('Logo saved: it goes in the footer of every new dimension checklist', { kind: 'success' });
+      setStamp(Date.now());
+      invalidate('/api/tools/drawing/status');
+    } catch (e) {
+      onAdminError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const remove = async () => {
+    if (!(await ask({ type: 'confirm', title: 'Remove the logo?', body: 'New dimension checklists will have no logo in their footer.', confirm: 'Remove', danger: true }))) return;
+    try {
+      await del('/api/admin/tools/dcl-logo');
+      invalidate('/api/tools/drawing/status');
+    } catch (e) {
+      onAdminError(e);
+    }
+  };
+  return (
+    <>
+      <h3>Drawing tools</h3>
+      <p className="muted small">
+        The dimension checklist runs the team's <code>drawing_to_dcl.py</code> with Python on this host PC. To use a particular Python, set <code>"python"</code> in config.json
+        (see config.example.json).
+      </p>
+      <DclStatusPanel status={status.data} refresh={status.refresh} />
+      <h4>Logo in the checklist's footer</h4>
+      <p className="muted small">A PNG or JPEG of at most 2 MB, such as the company logo. It is kept with the board's data, so updates leave it in place.</p>
+      <div className="inline-form" data-testid="dcl-logo">
+        {status.data?.logo ? (
+          <img className="dcl-logo-preview" src={`/api/admin/tools/dcl-logo?v=${stamp}`} alt="The checklist logo" />
+        ) : (
+          <span className="muted">No logo yet.</span>
+        )}
+        <label className={`btn${busy ? ' is-busy' : ''}`}>
+          {status.data?.logo ? 'Replace…' : 'Add a logo…'}
+          <input type="file" accept="image/png,image/jpeg" hidden aria-label="Logo image" onChange={(e: any) => void upload(e.target.files?.[0]).finally(() => (e.target.value = ''))} />
+        </label>
+        {status.data?.logo && (
+          <button className="btn btn-quiet" onClick={() => void remove()}>
+            Remove
+          </button>
+        )}
+      </div>
     </>
   );
 }
