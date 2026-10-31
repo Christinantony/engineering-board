@@ -373,8 +373,12 @@ const procurementFields = {
   means: v.enum(['outsourced', 'in_house', 'bought_out', 'tools'] as const),
   spec: v.string({ max: 200 }),
   quantity: v.number({ min: 0.001, max: 1_000_000 }),
+  basis: v.enum(['total', 'antenna', 'array'] as const),
   unit: v.string({ min: 1, max: 12 }),
   notes: v.string({ max: 500 }),
+  material: v.string({ max: 80 }),
+  inventory: v.nullable(v.number({ min: 0, max: 1_000_000_000 })),
+  inventory_note: v.string({ max: 80 }),
 };
 export const procurementItemSchema = v.object({
   name: procurementFields.name,
@@ -383,8 +387,12 @@ export const procurementItemSchema = v.object({
   means: v.withDefault(procurementFields.means, 'bought_out'),
   spec: v.withDefault(procurementFields.spec, ''),
   quantity: v.withDefault(procurementFields.quantity, 1),
+  basis: v.withDefault(procurementFields.basis, 'total'),
   unit: v.withDefault(procurementFields.unit, 'pcs'),
   notes: v.withDefault(procurementFields.notes, ''),
+  material: v.withDefault(procurementFields.material, ''),
+  inventory: v.withDefault(procurementFields.inventory, null),
+  inventory_note: v.withDefault(procurementFields.inventory_note, ''),
 });
 export const procurementEditSchema = v.object({
   version: v.int({ min: 1 }),
@@ -394,9 +402,19 @@ export const procurementEditSchema = v.object({
   means: v.optional(procurementFields.means),
   spec: v.optional(procurementFields.spec),
   quantity: v.optional(procurementFields.quantity),
+  basis: v.optional(procurementFields.basis),
   unit: v.optional(procurementFields.unit),
   notes: v.optional(procurementFields.notes),
+  material: v.optional(procurementFields.material),
+  inventory: v.optional(procurementFields.inventory),
+  inventory_note: v.optional(procurementFields.inventory_note),
   sort_order: v.optional(v.number({ min: -1e12, max: 1e12 })),
+});
+export const procurementBuildSchema = v.object({
+  version: v.int({ min: 0 }),
+  arrays: v.int({ min: 0, max: 100_000 }),
+  per_array: v.int({ min: 0, max: 10_000 }),
+  spares: v.int({ min: 0, max: 100_000 }),
 });
 export const procurementStockSchema = v.object({ in_stock: v.bool() });
 export const procurementCopySchema = v.object({ from_project_id: v.int({ min: 1 }) });

@@ -152,7 +152,7 @@ export function clearDemo(ctx: Ctx): number {
     run(ctx.db, `UPDATE project_files SET ticket_id = NULL WHERE ticket_id IN (${list})`);
     run(ctx.db, `DELETE FROM ticket_projects WHERE ticket_id IN (${list})`);
     // a demo project someone started a procurement list on stays, with its list (decision #39)
-    run(ctx.db, `DELETE FROM projects WHERE is_demo = 1 AND id NOT IN (SELECT project_id FROM ticket_projects) AND id NOT IN (SELECT project_id FROM procurement_items)`);
+    run(ctx.db, `DELETE FROM projects WHERE is_demo = 1 AND id NOT IN (SELECT project_id FROM ticket_projects) AND id NOT IN (SELECT project_id FROM procurement_items) AND id NOT IN (SELECT project_id FROM procurement_builds)`);
     run(ctx.db, `DELETE FROM activity WHERE ticket_id IN (${list})`);
     run(ctx.db, `DELETE FROM ticket_tags WHERE ticket_id IN (${list})`);
     run(ctx.db, `DELETE FROM ticket_checks WHERE ticket_id IN (${list})`);
