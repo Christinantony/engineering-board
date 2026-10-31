@@ -3,7 +3,7 @@
 //   npm run build && node scripts/screenshots.mjs
 // Writes assets/screenshots/*.png. Uses the same Playwright setup as e2e/.
 
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -243,6 +243,29 @@ const shot = (p, file, opts = {}) => p.screenshot({ path: `${OUT}/${file}.png`, 
   await p.waitForSelector('[data-testid=stamp-preview][data-state=ready]', { timeout: 20_000 });
   await settle(p, 1200);
   await shot(p, 'tools-pdf');
+  // drawing tools: the dimension checklist of a small drawing, when this machine has Python with the script's packages
+  {
+    const pdf = join(mkdtempSync(join(tmpdir(), 'eb-dcl-')), 'VT-JD 123-01.pdf');
+    let made = false;
+    try {
+      execFileSync('python3', ['e2e/fixtures/make_drawing.py', pdf], { stdio: 'ignore' });
+      made = true;
+    } catch {
+      console.log('  (no Python with pymupdf here: the drawing tools shot is skipped)');
+    }
+    if (made) {
+      await p.goto(BASE + '/tools?tool=drawing');
+      await p.waitForSelector('[data-testid=dcl-ready]');
+      await p.fill('input[aria-label="Project"]', 'Spiral array 3 inch');
+      await p.click('label:has-text("Both") input');
+      await p.setInputFiles('[data-testid=pick-dcl]', pdf);
+      await p.click('button:has-text("Make the checklist")');
+      await p.waitForSelector('[data-drawing="VT-JD 123-01.pdf"] button:has-text("Download Word")');
+      await p.click('[data-drawing="VT-JD 123-01.pdf"] button:has-text("Show what the script read")');
+      await settle(p, 600);
+      await shot(p, 'tools-drawing');
+    }
+  }
   // 1.7.0: estimates against actual time, the weekly summary, the procurement tracker
   await p.goto(BASE + '/reports?r=week');
   await p.waitForSelector('[data-testid=estimate-accuracy] .accuracy-table');

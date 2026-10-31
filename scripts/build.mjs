@@ -52,6 +52,12 @@ const webOpts = {
 const themeOpts = { ...webOpts, entryPoints: { theme: 'web/src/theme-init.ts' }, format: 'iife', splitting: false };
 delete themeOpts.chunkNames;
 
+// The drawing tools (decision #46) run the team's own Python scripts, copied byte for byte into app/tools.
+function writeTools() {
+  rmSync('dist/app/tools', { recursive: true, force: true });
+  cpSync('tools', 'dist/app/tools', { recursive: true });
+}
+
 function writeStatic() {
   mkdirSync('dist/app/web', { recursive: true });
   if (existsSync('web/public')) cpSync('web/public', 'dist/app/web', { recursive: true });
@@ -72,10 +78,16 @@ if (only !== '--server-only') writeStatic();
 if (watch) {
   const ctxs = [];
   if (only !== '--server-only') ctxs.push(await context(webOpts), await context(themeOpts));
-  if (only !== '--web-only') ctxs.push(await context(serverOpts));
+  if (only !== '--web-only') {
+    ctxs.push(await context(serverOpts));
+    writeTools();
+  }
   await Promise.all(ctxs.map((c) => c.watch()));
   console.log('watching… (reload the browser after changes)');
 } else {
   if (only !== '--server-only') await Promise.all([build(webOpts), build(themeOpts)]);
-  if (only !== '--web-only') await build(serverOpts);
+  if (only !== '--web-only') {
+    await build(serverOpts);
+    writeTools();
+  }
 }

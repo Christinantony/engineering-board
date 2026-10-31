@@ -13,6 +13,7 @@ import { toast } from '../lib/toasts.ts';
 import { ErrorBox, Spinner } from '../components/bits.tsx';
 import { PdfTools } from './tools/PdfTools.tsx';
 import { MixedSheets } from './tools/MixedSheets.tsx';
+import { DrawingTools } from './tools/DrawingTools.tsx';
 
 interface Data {
   materials: SheetMaterial[];
@@ -30,6 +31,11 @@ const TOOLS = [
     id: 'pdf',
     name: 'PDF tools',
     blurb: 'Stamp drawings with a diagonal mark, turn a vector PDF into its colour negative, combine PDFs by page size (A4, A3), and convert Word documents to PDF with the host PC\'s Word.',
+  },
+  {
+    id: 'drawing',
+    name: 'Drawing tools',
+    blurb: 'Make the dimension checklist (DCL) for a CAD drawing PDF: the title block, every dimension with its zone and tolerance, and the callouts to verify, as a Word or Excel file. Runs the team\'s drawing_to_dcl.py on the host PC.',
   },
 ];
 
@@ -54,6 +60,8 @@ export function Tools() {
         <SheetCalculator />
       ) : tool?.id === 'pdf' ? (
         <PdfTools />
+      ) : tool?.id === 'drawing' ? (
+        <DrawingTools />
       ) : (
         <div className="tools-grid">
           {TOOLS.map((t) => (

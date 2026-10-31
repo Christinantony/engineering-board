@@ -5506,3 +5506,80 @@ fieldset.panel-editable {
 .proc-basis-notice {
   margin: 8px 0;
 }
+
+/* Drawing tools (2.4, decision #46) */
+.dcl-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  align-items: flex-end;
+  margin: 12px 0;
+}
+.dcl-options > label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.dcl-options > label .field-input:not(.narrow) {
+  width: 220px;
+}
+.dcl-format {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  border: none;
+  margin: 0;
+  padding: 0;
+}
+.dcl-format legend {
+  float: left;
+  margin-right: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.dcl-more {
+  flex-basis: 100%;
+}
+.dcl-more label {
+  display: block;
+  margin: 6px 0;
+}
+.dcl-status {
+  margin: 10px 0;
+}
+.dcl-status ol {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+.dcl-result {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.dcl-result-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+.dcl-report {
+  max-height: 360px;
+  overflow: auto;
+  margin: 8px 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--surface-2, var(--surface));
+  border: 1px solid var(--line);
+  font-family: ui-monospace, Consolas, 'Cascadia Mono', monospace;
+  font-size: 12px;
+  white-space: pre;
+}
+.dcl-logo-preview {
+  max-height: 48px;
+  max-width: 220px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+  padding: 4px;
+}

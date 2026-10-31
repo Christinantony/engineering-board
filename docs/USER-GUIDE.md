@@ -176,7 +176,7 @@ After a drawing passes, the board removes the earlier attempts' PDFs (the histor
 
 ## Tools
 
-**Tools** (<kbd>O</kbd>) holds small calculators for the team. The first is the **sheet calculator**, the team's *Sheet Requirement Calculator* workbook as a board page, same inputs and same sums:
+**Tools** (<kbd>O</kbd>) holds small calculators and helpers for the team: the sheet calculator, the PDF tools and the drawing tools. The first is the **sheet calculator**, the team's *Sheet Requirement Calculator* workbook as a board page, same inputs and same sums:
 
 - One row per component: its **material**, **length a**, **width b** and **number n**. Add as many rows as you need; each is worked out on its own, and the total per material is shown at the top.
 - The three workbook settings apply to every row: **spacing / kerf** between adjacent parts, **edge margin** unusable on every side of the sheet, and **allow rotation by 90°**. They start at the defaults the admin keeps (3 mm, 5 mm, rotation on) and can be changed for a calculation; **Back to the defaults** restores them.
@@ -206,6 +206,17 @@ The team's four PDF scripts, on one page with a tab each. The first three work i
 - **Word to PDF**: converts `.doc` and `.docx` files to PDF with Microsoft Word on the host PC, as the DOC to PDF script does. The document is sent to the board, Word exports it (print quality, document properties and tags kept, no bookmarks) and the PDF comes back for download. It needs Word installed on the host PC, which runs Windows; the tab says so when it isn't.
 
 Encrypted PDFs are refused: save them again without security first.
+
+### Drawing tools
+
+The team's drawing scripts, run unchanged on the host PC. The first tab is the **dimension checklist (DCL)**: the team's `drawing_to_dcl.py`, which turns a CAD drawing PDF into the checklist in the VT-F-DCL-01 format.
+
+- Fill in the **project** (N/A if left empty), and for one drawing its **part number** (otherwise the drawing number without its *VT-* prefix) and **weight** (the row is left out if empty). Choose the number of **SL № columns** (8 to 20) and whether you want the checklist as **Word**, **Excel** or **both**. The project, columns and format are remembered in your browser.
+- **Choose drawing PDFs…** (one or several), then **Make the checklist**. Each drawing is sent to the board, the script reads it, and the checklist comes back: **Download Word**, **Download Excel**, or **Download all** as a .zip.
+- The script reads the title block (part name, drawing number, revision, material and the general tolerance table), the zone grid on the border, every dimension with its tolerance (Ø, R, SR, angles, chamfers, inline and stacked tolerances; a leading * marks a key characteristic; a dimension without a tolerance gets the general tolerance for its number of decimals), and turns hole and thread callouts into VERIFY rows. **Show what the script read** lists the rows and the text it did not use (reference dimensions in brackets, notes): check the checklist against the drawing before it is issued.
+- A vector PDF exported from CAD gives the best result. A scan, or a sheet sent through "Microsoft Print to PDF", has no selectable text: the script reads it with OCR and turns a sideways sheet upright first. Under **Drawings without selectable text** you can force OCR or say which way the sheet is turned, if the result is wrong.
+
+The page says when the host PC is not ready (no Python, or a package missing) and what to install; see [Admin → Tools](ADMIN-GUIDE.md#tools). The footer logo is added by the admin.
 
 ## Other pages
 
