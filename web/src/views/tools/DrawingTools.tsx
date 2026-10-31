@@ -136,7 +136,7 @@ function DclTool() {
     for (const f of files) {
       setWorking(f.name);
       try {
-        out.push(await makeChecklist(f, { ...o, project: o.project.trim() || 'N/A' }));
+        out.push(await makeChecklist(f, { ...o, project: o.project.trim() }));
       } catch (e) {
         out.push({ name: f.name, error: (e as Error).message || 'The checklist could not be made' });
       }
@@ -161,7 +161,7 @@ function DclTool() {
       <div className="dcl-options">
         <label>
           <span>Project</span>
-          <input className="field-input" value={o.project} maxLength={100} placeholder="N/A" aria-label="Project" onChange={(e: any) => set({ project: e.target.value })} />
+          <input className="field-input" value={o.project} maxLength={100} placeholder="From the drawing number" aria-label="Project" onChange={(e: any) => set({ project: e.target.value })} />
         </label>
         <label>
           <span>Part number</span>

@@ -10,7 +10,7 @@ Usage examples:
     py -3.14 drawing_to_dcl.py drawing.pdf                     # -> drawing.docx
     py -3.14 drawing_to_dcl.py drawing.pdf --format xlsx       # -> drawing.xlsx  (both: .docx and .xlsx)
     py -3.14 drawing_to_dcl.py drawing.pdf -o checklist.xlsx
-    py -3.14 drawing_to_dcl.py drawing.pdf --project "ISRO" --weight "1822 ± 10 g"
+    py -3.14 drawing_to_dcl.py drawing.pdf --project "ISRO" --weight "1822 ± 10 g"   # project: else from the drawing number
     py -3.14 drawing_to_dcl.py drawing.pdf --part-no "JL 18 T1AZ-01D"
     py -3.14 drawing_to_dcl.py folder_with_pdfs/               # batch convert
 
@@ -671,11 +671,18 @@ BOX = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
 GREY = PatternFill("solid", fgColor="D9D9D9")
 
 
+def project_from(drawing_no: str) -> str:
+    """The project code inside a drawing number: what is left once the 'VT-' prefix and the last
+    '-' part (the drawing's own number) are taken off, e.g. 'VT-JS 4A 70-012' -> 'JS 4A 70'."""
+    code = re.sub(r"^VT-", "", drawing_no.strip())
+    return code.rsplit("-", 1)[0].strip() if "-" in code else code
+
+
 def dcl_fields(info: dict, args) -> tuple[str, str, str, str, str]:
     """(part name, drawing no, rev, part no, project) for the header and footer."""
     drawing_no = info.get("drawing_no", "")
     return ((info.get("title") or "").upper(), drawing_no, info.get("rev") or "REV.00",
-            args.part_no or re.sub(r"^VT-", "", drawing_no), args.project)
+            args.part_no or re.sub(r"^VT-", "", drawing_no), args.project or project_from(drawing_no) or "N/A")
 
 
 def write_xlsx(out: Path, info: dict, items: list[Item], args) -> None:
@@ -762,8 +769,8 @@ def write_xlsx(out: Path, info: dict, items: list[Item], args) -> None:
         tail.append(f"Weight (g): {args.weight}")
     bold_ = InlineFont(rFont="Arial", sz=9, b=True)
     plain = InlineFont(rFont="Arial", sz=9)
-    tail += [CellRichText(TextBlock(bold_, "Prepared by"), TextBlock(plain, " Min. Level Reqd.: Officer")),
-             CellRichText(TextBlock(bold_, "Verified by"), TextBlock(plain, " Min. Level Reqd.: Tech. Exec"))]
+    tail += [CellRichText(TextBlock(bold_, "Prepared by"), TextBlock(plain, " Min. Level Reqd.: Tech. Asst.")),
+             CellRichText(TextBlock(bold_, "Verified by"), TextBlock(plain, " Min. Level Reqd.: Tech. Officer"))]
     for t in tail:
         row += 1
         put(row, 1, 4, t)
@@ -982,8 +989,8 @@ def write_docx(out: Path, info: dict, items: list[Item], args) -> None:
 
     # body: one row per check, same columns as the header
     tail = ([f"Weight (g): {args.weight}"] if args.weight else []) + [
-        [("Prepared by", True), (" Min. Level Reqd.: Officer", False)],
-        [("Verified by", True), (" Min. Level Reqd.: Tech. Exec", False)]]
+        [("Prepared by", True), (" Min. Level Reqd.: Tech. Asst.", False)],
+        [("Verified by", True), (" Min. Level Reqd.: Tech. Officer", False)]]
     t = table(doc, 3 + len(items) + len(tail), grid)
     height(t, 5.5)
     put(t, 0, 1, 4, f"Material: {info.get('material') or ''}".strip())
@@ -1045,7 +1052,8 @@ def main() -> None:
     ap.add_argument("-o", "--output", type=Path, help="output .docx/.xlsx (or folder, for batch mode)")
     ap.add_argument("--format", choices=("docx", "xlsx", "both"), default="docx",
                     help="Word (default), Excel or both; an -o file name ending in .docx/.xlsx decides by itself")
-    ap.add_argument("--project", default="N/A", help="project name for the header (default N/A)")
+    ap.add_argument("--project", help="project name for the header (default: from the drawing number, "
+                                      "e.g. VT-JS 4A 70-012 -> JS 4A 70; N/A if there is none)")
     ap.add_argument("--part-no", help="part number (default: drawing number without the 'VT-' prefix)")
     ap.add_argument("--weight", help='weight row, e.g. "1822 ± 10 g" (row left out if not given)')
     ap.add_argument("--samples", type=int, default=10, help="number of SL № columns (8-20, default 10)")

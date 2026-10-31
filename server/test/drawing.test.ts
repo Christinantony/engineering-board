@@ -11,11 +11,14 @@ import { join, resolve } from 'node:path';
 import { createApp, type App } from '../src/app.ts';
 import { cleanPdfName, dclArgs, dclOptions, logoType, probeDcl, pythonCandidates, runPython, type PythonRunner } from '../src/domain/drawingDcl.ts';
 import { HttpError } from '../src/lib/core.ts';
+// @ts-expect-error a plain .mjs helper without types
+import { readZip } from '../../scripts/lib/zip.mjs';
 import { Client, signIn } from './helpers.ts';
 
 const TOOLS = resolve('tools');
 // Christin's drawing_to_dcl_01.py as she sent it on 31 October 2026
-const ORIGINAL_SHA256 = 'ede73e32a2e16fa82f48df09912659bb81e162ab535011ad9383478056d8ae00';
+// with her changes of 31 October 2026: the project from the drawing number, and the Prepared by / Verified by levels
+const ORIGINAL_SHA256 = 'f47063e429d8e753f14d4ed8fa24f37354ba645e71daf4c1ef6e2330c1dba6cc';
 
 const cookie = (c: Client) => [...c.cookies].map(([k, v]) => `${k}=${v}`).join('; ');
 const upload = (base: string, c: Client, query: string, body: Uint8Array | string, type = 'application/pdf') =>
@@ -44,9 +47,9 @@ describe('drawing tools: the dimension checklist script', () => {
       '--ocr',
       '--rotate=90',
     ]);
-    // the defaults are the script's: Word, project N/A, 10 SL № columns, no OCR, rotation detected
+    // the defaults are the script's: Word, the project from the drawing number, 10 SL № columns, no OCR, rotation detected
     const d = dclOptions(new URLSearchParams());
-    assert.deepEqual(dclArgs('s.py', 'a.pdf', d, null), ['s.py', 'a.pdf', '--format=docx', '--project=N/A', '--samples=10']);
+    assert.deepEqual(dclArgs('s.py', 'a.pdf', d, null), ['s.py', 'a.pdf', '--format=docx', '--samples=10']);
     assert.throws(() => dclOptions(new URLSearchParams({ samples: '7' })), /8 to 20/);
     assert.throws(() => dclOptions(new URLSearchParams({ samples: '21' })), /8 to 20/);
     assert.throws(() => dclOptions(new URLSearchParams({ format: 'pdf' })), /Word, Excel or both/);
@@ -222,7 +225,7 @@ describe('drawing tools with the real script', { skip: realPython ? false : 'Pyt
         await signIn(c, 2);
         const st = (await c.get('/api/tools/drawing/status')).body;
         assert.equal(st.state, 'ready', JSON.stringify(st));
-        const res = await upload(base, c, 'name=VT-JD 123-01.pdf&format=both&project=Spiral', readFileSync(pdf));
+        const res = await upload(base, c, 'name=VT-JD 123-01.pdf&format=both', readFileSync(pdf));
         const body = await res.json();
         assert.equal(res.status, 200, JSON.stringify(body));
         assert.deepEqual(
@@ -238,6 +241,19 @@ describe('drawing tools with the real script', { skip: realPython ? false : 'Pyt
         assert.match(body.report, /\*40\s+±0\.5/);
         assert.match(body.report, /VERIFY 4X M6x1\.0 THRU/);
         assert.match(body.report, /not used \[C7\]: \(10\)\s+\(reference dimension\)/);
+        // inside the Word and Excel files: the project from the drawing number (VT-JD 123-01 -> JD 123), and the sign-off levels
+        for (const f of body.files) {
+          const xml = (readZip(Buffer.from(f.data, 'base64')) as { name: string; data: Buffer }[])
+            .filter((e) => e.name.endsWith('.xml'))
+            .map((e) => e.data.toString('utf8'))
+            .join('\n');
+          assert.match(xml, /DIMENSION CHECK LIST FOR MOUNTING BRACKET FOR JD 123</, f.name);
+          assert.match(xml, />JD 123</, `${f.name}: the project in the header`);
+          assert.doesNotMatch(xml, />N\/A</, f.name);
+          assert.match(xml, /Min\. Level Reqd\.: Tech\. Asst\./, f.name);
+          assert.match(xml, /Min\. Level Reqd\.: Tech\. Officer/, f.name);
+          assert.doesNotMatch(xml, /Tech\. Exec|Reqd\.: Officer/, f.name);
+        }
       } finally {
         await app.close();
       }

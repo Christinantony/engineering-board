@@ -112,6 +112,7 @@ export async function probeDcl(candidates: string[][], scriptPath: string | null
 
 export interface DclOptions {
   format: 'docx' | 'xlsx' | 'both';
+  /** empty: the script takes it from the drawing number */
   project: string;
   part_no: string;
   weight: string;
@@ -136,7 +137,8 @@ export function dclOptions(q: URLSearchParams): DclOptions {
   if (!['', '0', '90', '180', '270'].includes(rotate)) throw new HttpError(400, 'bad_request', 'Turn the sheet by 0, 90, 180 or 270 degrees, or leave it to the script.');
   return {
     format,
-    project: text(q.get('project'), 'Project', 100) || 'N/A',
+    // empty: the script takes the project from the drawing number
+    project: text(q.get('project'), 'Project', 100),
     part_no: text(q.get('part_no'), 'Part number', 100),
     weight: text(q.get('weight'), 'Weight', 100),
     samples,
@@ -151,7 +153,9 @@ export function dclOptions(q: URLSearchParams): DclOptions {
  * shell. The logo is the admin's (Admin → Tools), or the script's own default.
  */
 export function dclArgs(script: string, pdf: string, o: DclOptions, logo: string | null): string[] {
-  const a = [script, pdf, `--format=${o.format}`, `--project=${o.project}`, `--samples=${o.samples}`];
+  const a = [script, pdf, `--format=${o.format}`];
+  if (o.project) a.push(`--project=${o.project}`);
+  a.push(`--samples=${o.samples}`);
   if (o.part_no) a.push(`--part-no=${o.part_no}`);
   if (o.weight) a.push(`--weight=${o.weight}`);
   if (logo) a.push(`--logo=${logo}`);
