@@ -5412,3 +5412,97 @@ fieldset.panel-editable {
     break-inside: avoid;
   }
 }
+
+/* What the project builds (decision #45) */
+.proc-build {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin: 12px 0 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.proc-build-title {
+  margin-right: 4px;
+}
+.proc-build-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.proc-build-field span {
+  color: var(--muted);
+  font-size: 13px;
+}
+.proc-build-field input {
+  width: 76px;
+}
+.proc-build-op {
+  color: var(--muted);
+  font-weight: 600;
+}
+.proc-build-total strong {
+  font-size: 18px;
+}
+.proc-build-note {
+  flex-basis: 100%;
+}
+.proc-build-log {
+  flex-basis: 100%;
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.proc-qty .proc-basis {
+  width: 112px;
+}
+.proc-need {
+  white-space: nowrap;
+}
+@media print {
+  .proc-build {
+    border: none;
+    padding: 0;
+  }
+  .proc-build input {
+    border: none;
+    width: auto;
+  }
+}
+
+/* Procurement quantities (2.3, decision #45) */
+.proc-build-calc strong {
+  display: inline-block;
+  min-width: 3ch;
+  padding: 4px 0;
+  font-size: 1.05em;
+}
+.proc-build-total strong {
+  color: var(--project-ink);
+}
+.proc-inv {
+  width: 9ch;
+}
+.proc-check {
+  color: var(--p-high);
+  font-weight: 600;
+}
+.proc-short {
+  color: var(--p-high);
+  font-weight: 600;
+}
+.proc-enough {
+  color: var(--muted);
+}
+.proc-checkqty {
+  margin-left: auto;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.proc-basis-notice {
+  margin: 8px 0;
+}

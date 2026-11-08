@@ -2,6 +2,7 @@
 import {all,get,run,tx} from '../db/connection.ts';
 import {badRequest,conflict,nowIso,type Ctx} from '../lib/core.ts';
 import type {User} from '@board/shared';
+import {BUILD_JOIN,REQUIRED_SQL} from './procurement.ts';
 
 const STAGES = ['planning','queued','fabrication','finishing','inspection','received'] as const;
 const MEANS = ['outsourced','in_house','bought_out','tools'] as const;
@@ -11,7 +12,7 @@ type Stage = typeof STAGES[number];
 type Escalation = typeof ESCALATIONS[number];
 interface Tracking {item_id:number;stage:Stage;in_process:number;received:number;accepted:number;rejected:number;escalation:Escalation;version:number;updated_at:string;updated_by:number|null;}
 function existing(ctx:Ctx,itemId:number){
- const row=get<{id:number;project_id:number;quantity:number;name:string;means:string;removed_at:string|null}>(ctx.db,'SELECT id,project_id,quantity,name,means,removed_at FROM procurement_items WHERE id=?',itemId);
+ const row=get<{id:number;project_id:number;quantity:number;name:string;means:string;removed_at:string|null}>(ctx.db,`SELECT i.id,i.project_id,${REQUIRED_SQL} quantity,i.name,i.means,i.removed_at FROM procurement_items i ${BUILD_JOIN} WHERE i.id=?`,itemId);
  if(!row||row.removed_at)throw badRequest('Component not found in the active procurement list.');
  return row;
 }
@@ -27,11 +28,11 @@ function tracking(ctx:Ctx,id:number):Tracking|null {
  return get<Tracking>(ctx.db,'SELECT * FROM manufacturing_tracking WHERE item_id=?',id)??null;
 }
 export function manufacturingQueue(ctx:Ctx) {
- const items=all<any>(ctx.db,`SELECT i.id,i.project_id,p.name project_name,i.name,i.spec,i.means,i.quantity,i.unit,i.in_stock_at,
+ const items=all<any>(ctx.db,`SELECT i.id,i.project_id,p.name project_name,i.name,i.spec,i.means,${REQUIRED_SQL} quantity,i.quantity per_unit,i.basis,i.unit,i.in_stock_at,
  t.stage,t.in_process,t.received,t.accepted,t.rejected,t.escalation,t.version,t.updated_at,
  (SELECT promised_date FROM manufacturing_events WHERE item_id=i.id AND kind='commitment' ORDER BY id ASC LIMIT 1) original_promise,
  (SELECT promised_date FROM manufacturing_events WHERE item_id=i.id AND kind='commitment' ORDER BY id DESC LIMIT 1) latest_promise
- FROM procurement_items i JOIN projects p ON p.id=i.project_id
+ FROM procurement_items i JOIN projects p ON p.id=i.project_id ${BUILD_JOIN}
  LEFT JOIN manufacturing_tracking t ON t.item_id=i.id
  WHERE i.removed_at IS NULL ORDER BY p.name,i.sort_order,i.id`);
  const labels=all<{means:string;stage:string;label:string}>(ctx.db,'SELECT means,stage,label FROM manufacturing_stage_labels ORDER BY means,rowid');

@@ -693,4 +693,51 @@ WHEN (SELECT p.is_demo FROM procurement_items i JOIN projects p ON p.id=i.projec
 BEGIN SELECT RAISE(ABORT,'purchase history is append-only'); END;
 `,
   },
+  {
+    id: 17,
+    name: 'procurement build quantities',
+    sql: /* sql */ `
+-- What a project builds (decision #45), as the inventory workbook's quantity
+-- drivers: number of arrays, antennas per array and extra antennas (spares,
+-- built as antennas but in no array). An item's quantity is then per antenna,
+-- per array or the project's total, and its total quantity follows.
+CREATE TABLE procurement_builds (
+  project_id INTEGER PRIMARY KEY REFERENCES projects(id),
+  arrays     INTEGER NOT NULL DEFAULT 0 CHECK (arrays BETWEEN 0 AND 100000),
+  per_array  INTEGER NOT NULL DEFAULT 0 CHECK (per_array BETWEEN 0 AND 10000),
+  spares     INTEGER NOT NULL DEFAULT 0 CHECK (spares BETWEEN 0 AND 100000),
+  updated_by INTEGER REFERENCES users(id),
+  updated_at TEXT NOT NULL,
+  version    INTEGER NOT NULL DEFAULT 1
+);
+-- Every change to the build, append-only like the procurement log.
+CREATE TABLE procurement_build_log (
+  id         INTEGER PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES projects(id),
+  user_id    INTEGER REFERENCES users(id),
+  at         TEXT NOT NULL,
+  arrays     INTEGER NOT NULL,
+  per_array  INTEGER NOT NULL,
+  spares     INTEGER NOT NULL
+);
+CREATE INDEX idx_procurement_build_log_project ON procurement_build_log(project_id, id);
+CREATE TRIGGER procurement_build_log_no_update BEFORE UPDATE ON procurement_build_log
+BEGIN
+  SELECT RAISE(ABORT, 'the build history is append-only');
+END;
+CREATE TRIGGER procurement_build_log_no_delete BEFORE DELETE ON procurement_build_log
+WHEN (SELECT is_demo FROM projects WHERE id = OLD.project_id) IS NOT 1
+BEGIN
+  SELECT RAISE(ABORT, 'the build history is append-only');
+END;
+-- Items already on a list keep their quantity as the total needed.
+ALTER TABLE procurement_items ADD COLUMN basis TEXT NOT NULL DEFAULT 'total' CHECK (basis IN ('total','antenna','array'));
+-- The workbook's Material column, and its Inventory: a count (NIL is 0), or a
+-- note such as "18 x 24 sheet - 1" when it isn't a plain count, which leaves
+-- the quantity still to procure to be checked by hand.
+ALTER TABLE procurement_items ADD COLUMN material TEXT NOT NULL DEFAULT '' CHECK (length(material) <= 80);
+ALTER TABLE procurement_items ADD COLUMN inventory REAL CHECK (inventory IS NULL OR inventory >= 0);
+ALTER TABLE procurement_items ADD COLUMN inventory_note TEXT NOT NULL DEFAULT '' CHECK (length(inventory_note) <= 80);
+`,
+  },
 ];

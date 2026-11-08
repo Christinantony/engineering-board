@@ -1,6 +1,7 @@
 
 import type {User} from '@board/shared';
 import {all,get,run,tx} from '../db/connection.ts';
+import {BUILD_JOIN,REQUIRED_SQL} from './procurement.ts';
 import {badRequest,conflict,notFound,nowIso,type Ctx} from '../lib/core.ts';
 const statuses=['requested','quoted','ordered','part_received','closed'];
 const txt=(v:unknown,k:string,n:number)=>{if(typeof v!=='string'||v.length>n)throw badRequest(k+' must be at most '+n+' characters');return v.trim();};
@@ -20,11 +21,11 @@ export function updateVendor(ctx:Ctx,u:User,id:number,raw:unknown){void u;if(!ra
  txt(d.name??old.name,'Name',100),txt(d.contact??old.contact,'Contact',100),txt(d.phone??old.phone,'Phone',60),txt(d.email??old.email,'Email',150),txt(d.process_notes??old.process_notes,'Notes',500),active,nowIso(ctx),id);
  notify(ctx,0);return get(ctx.db,'SELECT * FROM purchase_vendors WHERE id=?',id);}
 export function purchaseQueue(ctx:Ctx){
- const query='SELECT i.id,i.project_id,p.name project_name,i.name,i.spec,i.means,i.quantity,i.unit,i.in_stock_at,'+
+ const query='SELECT i.id,i.project_id,p.name project_name,i.name,i.spec,i.means,'+REQUIRED_SQL+' quantity,i.quantity per_unit,i.basis,i.unit,i.in_stock_at,'+
  'o.vendor_id,o.po_ref,o.order_status,o.purchase_owner_id,COALESCE(o.version,0) version,'+
  'f.owner_id followup_owner_id,COALESCE(f.version,0) followup_version,f.next_action,f.next_due,m.stage,m.received,m.accepted,m.escalation,'+
  "(SELECT promised_date FROM manufacturing_events WHERE item_id=i.id AND kind='commitment' ORDER BY id DESC LIMIT 1) latest_promise "+
- 'FROM procurement_items i JOIN projects p ON p.id=i.project_id LEFT JOIN purchase_orders o ON o.item_id=i.id '+
+ 'FROM procurement_items i JOIN projects p ON p.id=i.project_id '+BUILD_JOIN+' LEFT JOIN purchase_orders o ON o.item_id=i.id '+
  'LEFT JOIN procurement_followups f ON f.item_id=i.id LEFT JOIN manufacturing_tracking m ON m.item_id=i.id '+
  'WHERE i.removed_at IS NULL ORDER BY CASE WHEN i.in_stock_at IS NULL THEN 0 ELSE 1 END, f.next_due, p.name, i.id';
  return {items:all<any>(ctx.db,query),vendors:vendorList(ctx)};

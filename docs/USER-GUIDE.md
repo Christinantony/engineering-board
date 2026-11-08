@@ -83,15 +83,24 @@ Projects can't be renamed or deleted, so check the name before adding it.
 
 ### Procurement
 
-**Procurement** on a project (Projects → the project → **Procurement**) keeps its inventory and procurement list, replacing the spreadsheet. It has five tabs:
+**Procurement** on a project (Projects → the project → **Procurement**) keeps its inventory and procurement list, replacing the spreadsheet (the *3 inch Inventory Check* workbook). It has five tabs.
 
-- **Master list**: the only place items are typed. One row per item: name, **discipline** (RF, Mechanical…), **category** (Single Antenna, Array, Tool…), **means** (Outsourced, In-house, Bought-out or Tools), **final size / spec**, quantity and unit, and notes such as the PO or supplier. Every cell saves when you leave it. Tick **In stock** when an item arrives (or is made); the date, time and your name are recorded. **×** removes an item.
-- **Assembly checklist**: the master list grouped by discipline, split into **components** and **tooling** (means Tools, or a Tool category), with what is in stock (✓) and what is still to come (○). It says when everything is in and assembly can start.
-- **Pending procurement**: everything not yet in stock, grouped by means, with its notes and **Mark in stock**. Items leave the list as soon as they are in.
+**Quantity drivers**, above the tabs, are the workbook's: **Number of arrays** × **Antennas per array** = antennas for arrays, plus **Extra antennas (spare)**, built as antennas but in no array, = **Total antennas to build**. Fill in those three and press **Save**; every change is kept (**Earlier builds**). Each item's **Total qty** then follows from its **Qty / unit** and what it is counted **per**:
+
+- **per antenna**: qty / unit × total antennas to build (the workbook's *Single Antenna* category);
+- **per array**: qty / unit × number of arrays (*Array*);
+- **in total**: the qty itself (*Tool*, or anything with a fixed total, such as an O-ring length you worked out by hand).
+
+Typing a category of Single Antenna, Array or Tool sets this for you; you can change it. If items' categories and what they are counted per disagree (a list typed before 2.3 counts everything in total), a notice offers **Count by category**, which sets them all as the workbook would. A total that needs drivers nobody has filled in shows amber.
+
+
+- **Master list**: the only place items are typed. One row per item, in the workbook's order: name, **final size / spec**, **qty / unit** with its unit and what it is counted per, **total qty** (worked out), **inventory**, **in procurement** (worked out), **material**, **discipline** (RF, Mechanical…), **category** (Single Antenna, Array, Tool…), **means** (Outsourced, In-house, Bought-out or Tools), and notes such as the PO or supplier. **Inventory** takes what you would type in the workbook: a number, **NIL** for none, or a note such as `18"X24" - 1` when it isn't a plain count. **In procurement** is then the total qty less the inventory (never below 0), or **Check** when the inventory isn't a number or hasn't been filled in. Every cell saves when you leave it. Tick **In stock** when an item arrives (or is made); the date, time and your name are recorded. **×** removes an item.
+- **Assembly checklist**: the master list grouped by discipline, split into **components** and **tooling** (means Tools, or a Tool category), with what is in stock (✓) and what is still to come (○), and for each item its total qty, inventory and shortfall. It says when everything is in and assembly can start.
+- **Pending procurement**: everything not yet in stock, grouped by means, with its material, total qty, inventory, what is in procurement, its notes and **Mark in stock**. Items leave the list as soon as they are in.
 - **Follow-up control**: a cross-project queue of components not yet in stock, with next action, responsible colleague and follow-up date. Choose an item to update the next action or record a vendor call. Every contact stores outcome and notes in permanent history; a vendor saying **ready** does not mark stock received. Items due today, overdue or unscheduled appear in the summary. You can open this from **All follow-ups** without selecting a project.
 - **Procurement log**: the date and time each item was marked in stock, by whom; also items taken back to pending, and (if you tick the box) added and removed.
 
-**Starting a new project from an old one:** at the bottom of the master list, **Copy its items** from another project's list. Copied items start as pending, without notes; items already on the list are skipped. **Export to Excel (CSV)** saves the master list; **Print** prints the tab you are on.
+**Starting a new project from an old one:** at the bottom of the master list, **Copy its items** from another project's list. Copied items start as pending, without notes or inventory but with their material and what they are counted per; a project with no quantity drivers yet takes the other project's. Items already on the list are skipped. **Export to Excel (CSV)** saves the master list; **Print** prints the tab you are on.
 
 ## Drawing review
 
