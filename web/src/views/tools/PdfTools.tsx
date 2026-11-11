@@ -45,11 +45,11 @@ export function PdfTools() {
 
 // ---- shared bits ----
 
-interface Picked {
+export interface Picked {
   name: string;
   bytes: Uint8Array;
 }
-interface Result {
+export interface Result {
   name: string;
   bytes?: Uint8Array;
   note?: string;
@@ -62,7 +62,15 @@ async function readFiles(list: FileList | null): Promise<Picked[]> {
   return out;
 }
 
-function download(name: string, bytes: Uint8Array, type = 'application/pdf') {
+const TYPES: Record<string, string> = {
+  pdf: 'application/pdf',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+};
+/** The file's media type from its extension, so a downloaded Word or Excel file opens in Word or Excel. */
+export const typeOf = (name: string) => TYPES[name.split('.').pop()!.toLowerCase()] ?? 'application/octet-stream';
+
+export function download(name: string, bytes: Uint8Array, type = 'application/pdf') {
   const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type }));
   const a = document.createElement('a');
   a.href = url;
@@ -73,10 +81,10 @@ function download(name: string, bytes: Uint8Array, type = 'application/pdf') {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
-const kb = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
-const stem = (name: string) => name.replace(/\.[^.]+$/, '');
+export const kb = (n: number) => (n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
+export const stem = (name: string) => name.replace(/\.[^.]+$/, '');
 
-function FilePicker({ accept, multiple = true, onPick, label, testId }: { accept: string; multiple?: boolean; onPick: (files: Picked[]) => void; label: string; testId: string }) {
+export function FilePicker({ accept, multiple = true, onPick, label, testId }: { accept: string; multiple?: boolean; onPick: (files: Picked[]) => void; label: string; testId: string }) {
   const [busy, setBusy] = useState(false);
   return (
     <label className={`btn btn-primary file-pick${busy ? ' is-busy' : ''}`}>
@@ -101,7 +109,7 @@ function FilePicker({ accept, multiple = true, onPick, label, testId }: { accept
   );
 }
 
-function PickedList({ files, onRemove }: { files: Picked[]; onRemove: (i: number) => void }) {
+export function PickedList({ files, onRemove }: { files: Picked[]; onRemove: (i: number) => void }) {
   if (!files.length) return null;
   return (
     <ul className="pdf-files">
@@ -118,7 +126,7 @@ function PickedList({ files, onRemove }: { files: Picked[]; onRemove: (i: number
   );
 }
 
-function Results({ results, zipName }: { results: Result[]; zipName: string }) {
+export function Results({ results, zipName }: { results: Result[]; zipName: string }) {
   const done = results.filter((r) => r.bytes);
   if (!results.length) return null;
   return (
@@ -129,7 +137,7 @@ function Results({ results, zipName }: { results: Result[]; zipName: string }) {
             <span className="pdf-file-name">{r.name}</span>
             <span className="muted small">{r.error ? <span className="form-error">{r.error}</span> : r.note}</span>
             {r.bytes && (
-              <button type="button" className="btn btn-quiet btn-sm" onClick={() => download(r.name, r.bytes!)}>
+              <button type="button" className="btn btn-quiet btn-sm" onClick={() => download(r.name, r.bytes!, typeOf(r.name))}>
                 Download
               </button>
             )}
@@ -146,7 +154,7 @@ function Results({ results, zipName }: { results: Result[]; zipName: string }) {
 }
 
 /** Run a per-file job, showing which file is being worked on. */
-function useBatch() {
+export function useBatch() {
   const [results, setResults] = useState<Result[]>([]);
   const [working, setWorking] = useState<string | null>(null);
   const run = async (files: Picked[], job: (f: Picked) => Promise<Result>) => {

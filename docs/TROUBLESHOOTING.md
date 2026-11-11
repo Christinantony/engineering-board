@@ -45,6 +45,9 @@ Work through these in order. "Host" is the PC running the board.
 | "This PDF is encrypted or password-protected" | Save or export it again without security settings (in the scanner software or the PDF printer), then attach it again. |
 | "Project folder copies need attention" on a review | The project share was offline, read-only, or already had a file of that name the board didn't write. The board keeps its own copies and retries every few minutes; **Try again** retries now. Rename or move a conflicting file the board names, if it isn't needed there. |
 | A drawing shows "removed after board review" | That was an earlier attempt of a drawing that has since passed; its PDF was tidied away on purpose. Its notes, comments and decision are kept. |
+| Drawing tools: "Python is not installed on the host PC" or "lacks pymupdf…" | The host PC needs Python and the dimension checklist script's packages, once: see [Admin → Tools](ADMIN-GUIDE.md#tools). Then press **Check again**. |
+| Drawing tools: "This drawing has no selectable text and must be read with OCR" | The PDF is a scan or was printed to PDF, so its letters are lines. Install OCR on the host PC (`py -3.14 -m pip install rapidocr onnxruntime`), or export the drawing from CAD as a PDF again. |
+| Drawing tools: a dimension is missing or wrong in the checklist | **Show what the script read** lists every row and the text it did not use. Correct the checklist file by hand before it is issued; if a drawing is sideways, try **Turn OCR pages** under *Drawings without selectable text*. |
 | The review PDF viewer stays blank | Reload with <kbd>Ctrl</kbd>+<kbd>F5</kbd>. A very old browser may not run the PDF viewer: use a current Edge or Chrome. |
 
 ## Forgotten admin PIN

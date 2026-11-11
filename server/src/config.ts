@@ -18,6 +18,8 @@ export interface Config {
   reviewUploadMaxMB: number;
   hoursPerDay: number;
   workingDays: number[];
+  /** The Python that runs the drawing tools (decision #46): one program path, or a command as a list, e.g. ["py", "-3.14"]. Unset: the script's own py -3.14, then other Pythons. */
+  python?: string | string[];
 }
 
 export interface LoadedConfig extends Config {
@@ -27,7 +29,7 @@ export interface LoadedConfig extends Config {
   warnings: string[];
 }
 
-const KNOWN = ['port', 'host', 'dataDir', 'timezone', 'backupDir', 'backupKeepDays', 'restoreUploadMaxMB', 'reviewUploadMaxMB', 'hoursPerDay', 'workingDays'] as const;
+const KNOWN = ['port', 'host', 'dataDir', 'timezone', 'backupDir', 'backupKeepDays', 'restoreUploadMaxMB', 'reviewUploadMaxMB', 'hoursPerDay', 'workingDays', 'python'] as const;
 
 function readConfigFile(file: string): Record<string, unknown> {
   // Notepad saves "UTF-8" with a byte-order mark; JSON.parse does not accept one.
@@ -88,6 +90,13 @@ export function loadConfig(appRoot: string, env: NodeJS.ProcessEnv = process.env
     const ok = Array.isArray(f.workingDays) && f.workingDays.length > 0 && f.workingDays.every((d: unknown) => Number.isInteger(d) && (d as number) >= 0 && (d as number) <= 6);
     if (ok) cfg.workingDays = [...new Set<number>(f.workingDays)].sort((a, b) => a - b);
     else problems.push(`"workingDays" is ${JSON.stringify(f.workingDays)}; it must be a list of day numbers like [1, 2, 3, 4, 5] (0 is Sunday, 6 is Saturday).`);
+  }
+  if (f.python !== undefined && f.python !== '') {
+    const ok =
+      (typeof f.python === 'string' && f.python.trim() !== '') ||
+      (Array.isArray(f.python) && f.python.length > 0 && f.python.every((x: unknown) => typeof x === 'string' && x.trim() !== ''));
+    if (ok) cfg.python = typeof f.python === 'string' ? f.python.trim() : f.python.map((x: string) => x.trim());
+    else problems.push(`"python" is ${JSON.stringify(f.python)}; it must be the path of python.exe in quotes, e.g. "C:/Python314/python.exe", or a command as a list, e.g. ["py", "-3.14"].`);
   }
   if (cfg.timezone) {
     try {

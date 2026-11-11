@@ -35,6 +35,9 @@ async function main() {
     reviewUploadMaxMB: cfg.reviewUploadMaxMB,
     autoBackup: true,
     reviewMaintenance: true,
+    // drawing tools (decision #46): the scripts ship in app\tools; in development they are in tools\
+    python: cfg.python,
+    toolScriptDirs: [join(appRoot, 'app', 'tools'), join(appRoot, 'dist', 'app', 'tools'), join(appRoot, 'tools')],
   });
 
   for (const f of [...resetFiles, ...resetPasswordFiles]) rmSync(f, { force: true });

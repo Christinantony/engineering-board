@@ -1475,3 +1475,35 @@ test('mixed nesting: different parts on one 2400 × 1200 sheet, both cut modes, 
   await p.click('.sheet-modes button:has-text("One part per sheet")');
   await p.waitForSelector('.sheet-table input[aria-label="Component 1 name"]');
 });
+
+test('drawing tools: the dimension checklist runs the team\'s script with the host\'s Python, or says what to install', async () => {
+  const p = await login('Paul');
+  await p.goto(`${BASE}/tools`);
+  await p.click('.tool-card:has-text("Drawing tools")');
+  await p.waitForSelector('.pdf-tabs a.on:has-text("Dimension checklist (DCL)")');
+  await p.waitForSelector('[data-testid=dcl-ready], [data-testid=dcl-unavailable]');
+  await p.fill('input[aria-label="Project"]', 'Spiral array');
+  await p.click('label:has-text("Both") input');
+  await p.setInputFiles('[data-testid=pick-dcl]', { name: 'VT-JD 123-01.pdf', mimeType: 'application/pdf', buffer: makePdf(1, { labels: ['Bracket for the e2e test'] }) });
+  await p.waitForSelector('.pdf-files li:has-text("VT-JD 123-01.pdf")');
+  if (await p.locator('[data-testid=dcl-unavailable]').count()) {
+    // a host without Python or the script's packages: the page says what to install, and the button waits
+    assert.match(await p.textContent('[data-testid=dcl-unavailable]'), /pip install/);
+    assert.ok(await p.locator('button:has-text("Make the checklist")').isDisabled());
+    return;
+  }
+  await p.click('button:has-text("Make the checklist")');
+  await p.waitForSelector('[data-testid=dcl-results] [data-drawing="VT-JD 123-01.pdf"] button:has-text("Download Word")');
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('[data-drawing="VT-JD 123-01.pdf"] button:has-text("Download Excel")')]);
+  assert.equal(dl.suggestedFilename(), 'VT-JD 123-01.xlsx');
+  const bytes = await readFileAsync(await dl.path());
+  assert.equal(bytes.subarray(0, 2).toString(), 'PK', 'an Office file');
+  await p.click('[data-drawing="VT-JD 123-01.pdf"] button:has-text("Show what the script read")');
+  assert.match(await p.textContent('[data-testid=dcl-report]'), /VT-JD 123-01\.pdf/);
+  // the options are remembered, except the part number and weight, which belong to one drawing
+  await p.fill('input[aria-label="Part number"]', 'JD 123-01');
+  await p.reload();
+  await p.waitForSelector('input[aria-label="Project"]');
+  assert.equal(await p.inputValue('input[aria-label="Project"]'), 'Spiral array');
+  assert.equal(await p.inputValue('input[aria-label="Part number"]'), '');
+});
