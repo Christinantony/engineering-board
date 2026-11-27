@@ -68,6 +68,7 @@ Private mProblems As String
 Private mLiveSig As String
 Private mAnswered As Collection
 Private mLive As Collection
+Private mStep As String
 
 ' where things are in this workbook (found afresh each round)
 Private wsM As Worksheet
@@ -212,8 +213,8 @@ Done:
     If HasSettings() And Not mPaused Then ScheduleTick delay
     Exit Sub
 Failed:
-    Application.StatusBar = TITLE & ": stopped by an error (" & Err.Description & "). It will try again."
-    If interactive Then MsgBox "The sync stopped: " & Err.Description, vbExclamation, TITLE
+    Application.StatusBar = TITLE & ": stopped while " & mStep & " (" & Err.Description & "). It will try again."
+    If interactive Then MsgBox "The sync stopped while " & mStep & "." & vbLf & vbLf & "Error " & Err.Number & ": " & Err.Description, vbExclamation, TITLE
     delay = 300
     Resume Done
 End Sub
@@ -240,27 +241,33 @@ Private Function SyncOnce(ByVal interactive As Boolean, ByVal mode As String) As
     Dim body As String, reply As String, httpStatus As Long
     Dim lines() As String, head() As String, answer As VbMsgBoxResult
 
+    mStep = "finding the Master List's columns"
     If Not Layout() Then
         Note "the Master List sheet, or its PART NAME, QTY / UNIT, TOTAL QTY, CATEGORY or MEANS column, was not found."
         If interactive Then MsgBox "The Master List sheet, or one of its PART NAME, QTY / UNIT, TOTAL QTY, CATEGORY or MEANS columns, was not found.", vbExclamation, TITLE
         Exit Function
     End If
+    mStep = "adding the hidden BOARD ID columns"
     EnsureColumns
+    mStep = "checking each row's hidden id"
     RepairMoved
 
+    mStep = "reading the Master List"
     body = BuildBody(mode)
+    mStep = "sending to the board"
     reply = HttpPost(Setting(S_ADDRESS) & "/api/sync", Setting(S_KEY), body, httpStatus)
     If httpStatus = 0 Then
         Note "the board cannot be reached. The workbook will sync when it can."
         If interactive Then MsgBox "The board cannot be reached at " & Setting(S_ADDRESS) & "." & vbLf & vbLf & "Check that the board is running and the address is right. The workbook will sync when it can.", vbExclamation, TITLE
         Exit Function
     End If
+    mStep = "reading the board's answer"
     lines = Split(Replace(reply, vbCr, ""), vbLf)
     If UBound(lines) < 0 Then
         Note "the board gave an empty answer (HTTP " & httpStatus & ")."
         Exit Function
     End If
-    head = SplitLine(lines(0))
+    SplitLine lines(0), head
     If Fld(head, 0) <> PROTO Then
         Note "that address answered, but not as the board does (HTTP " & httpStatus & "). Check the board address."
         If interactive Then MsgBox "That address answered, but not as the board does (HTTP " & httpStatus & ")." & vbLf & "Check the board address, and that the board is version 2.5.0 or later.", vbExclamation, TITLE
@@ -625,6 +632,23 @@ Private Function Esc(ByVal s As String) As String
     Esc = out
 End Function
 
+' four hex digits as a number, worked out digit by digit
+Private Function HexValue(ByVal h As String) As Long
+    Dim i As Long, c As Long, n As Long
+    For i = 1 To Len(h)
+        c = Asc(UCase$(Mid$(h, i, 1)))
+        If c >= 48 And c <= 57 Then
+            n = n * 16 + (c - 48)
+        ElseIf c >= 65 And c <= 70 Then
+            n = n * 16 + (c - 55)
+        Else
+            n = n * 16
+        End If
+    Next
+    If n < 1 Or n > 65535 Then n = 63
+    HexValue = n
+End Function
+
 Private Function Unesc(ByVal s As String) As String
     Dim i As Long, n As Long, ch As String, nx As String, out As String
     If InStr(1, s, "\", vbBinaryCompare) = 0 Then
@@ -646,7 +670,7 @@ Private Function Unesc(ByVal s As String) As String
             ElseIf nx = "r" Then
                 i = i + 2
             ElseIf nx = "u" And i + 5 <= n Then
-                out = out & ChrW$(CLng("&H" & Mid$(s, i + 2, 4) & "&"))
+                out = out & ChrW$(HexValue(Mid$(s, i + 2, 4)))
                 i = i + 6
             Else
                 out = out & nx
@@ -660,18 +684,18 @@ Private Function Unesc(ByVal s As String) As String
     Unesc = out
 End Function
 
-' (returns a String array, as a Variant)
-Private Function SplitLine(ByVal s As String) As Variant
-    Dim a() As String, i As Long
-    a = Split(s, vbTab)
-    If UBound(a) < 0 Then
+' one line of the board's answer, split into its fields
+Private Sub SplitLine(ByVal s As String, ByRef a() As String)
+    Dim i As Long
+    If Len(s) = 0 Then
         ReDim a(0 To 0)
+        Exit Sub
     End If
+    a = Split(s, vbTab)
     For i = 0 To UBound(a)
         a(i) = Unesc(a(i))
     Next
-    SplitLine = a
-End Function
+End Sub
 
 Private Function Fld(ByRef a() As String, ByVal i As Long) As String
     If i >= 0 And i <= UBound(a) Then Fld = a(i)
@@ -936,10 +960,11 @@ Private Sub ApplyReply(ByRef lines() As String, ByRef head() As String)
     Set gone = New Collection
     Set mLive = New Collection
     mDidWrite = False
+    mStep = "reading the board's answer"
 
     For i = 1 To UBound(lines)
         If Len(lines(i)) > 0 Then
-            f = SplitLine(lines(i))
+            SplitLine lines(i), f
             Select Case f(0)
                 Case "C"
                     MapSet conflicts, Fld(f, 1) & "|" & Fld(f, 2), Fld(f, 3)
@@ -954,16 +979,20 @@ Private Sub ApplyReply(ByRef lines() As String, ByRef head() As String)
 
     For i = 1 To UBound(lines)
         If Len(lines(i)) > 0 Then
-            f = SplitLine(lines(i))
+            SplitLine lines(i), f
             If f(0) = "B" Then
+                mStep = "writing the quantity drivers"
                 ApplyBuild f, conflicts, labels
             ElseIf f(0) = "I" Then
+                mLive.Add lines(i)
+                mStep = "writing the row of " & Fld(f, 4 + F_NAME)
                 ApplyItem f, conflicts, labels, known, problems
             End If
         End If
     Next
 
     ' rows whose part was removed on the board
+    mStep = "handling parts removed on the board"
     For Each item In gone
         g = Split(CStr(item), vbTab)
         r = CLng(Val(g(0)))
@@ -996,10 +1025,12 @@ Private Sub ApplyReply(ByRef lines() As String, ByRef head() As String)
         End If
     Next
 
+    mStep = "updating the Board Sync sheet"
     SetSetting S_TOKEN, Fld(head, 2)
     SetSetting S_PROJECT, Fld(head, 3)
     WriteKnown known
     WriteProblems problems
+    mStep = "writing the Live Status sheet"
     WriteLive
     If mDidWrite Then SetSetting S_LAST, Fld(head, 4)
     Set mAnswered = Nothing
@@ -1087,7 +1118,6 @@ Private Sub ApplyItem(ByRef f() As String, ByVal conflicts As Collection, ByVal 
 
     idText = Fld(f, 2)
     ref = Fld(f, 3)
-    mLive.Add f
 
     r = 0
     If Len(ref) > 0 Then
@@ -1370,7 +1400,7 @@ Private Sub WriteLive()
     Next
     i = 1
     For Each item In mLive
-        f = item
+        SplitLine CStr(item), f
         i = i + 1
         arr(i, 1) = Fld(f, 4 + F_NAME)
         arr(i, 2) = Fld(f, 4 + F_SPEC)
