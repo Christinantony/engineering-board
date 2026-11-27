@@ -379,6 +379,7 @@ const procurementFields = {
   material: v.string({ max: 80 }),
   inventory: v.nullable(v.number({ min: 0, max: 1_000_000_000 })),
   inventory_note: v.string({ max: 80 }),
+  coating: v.enum(['', 'na', 'pending', 'done'] as const),
 };
 export const procurementItemSchema = v.object({
   name: procurementFields.name,
@@ -393,6 +394,7 @@ export const procurementItemSchema = v.object({
   material: v.withDefault(procurementFields.material, ''),
   inventory: v.withDefault(procurementFields.inventory, null),
   inventory_note: v.withDefault(procurementFields.inventory_note, ''),
+  coating: v.withDefault(procurementFields.coating, ''),
 });
 export const procurementEditSchema = v.object({
   version: v.int({ min: 1 }),
@@ -408,6 +410,7 @@ export const procurementEditSchema = v.object({
   material: v.optional(procurementFields.material),
   inventory: v.optional(procurementFields.inventory),
   inventory_note: v.optional(procurementFields.inventory_note),
+  coating: v.optional(procurementFields.coating),
   sort_order: v.optional(v.number({ min: -1e12, max: 1e12 })),
 });
 export const procurementBuildSchema = v.object({

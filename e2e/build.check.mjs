@@ -103,7 +103,8 @@ describe('packaged build', () => {
     for (const r of refs) assert.ok(existsSync(join(DIST, 'web', r)), `missing ${r}`);
     const sizes = readdirSync(join(DIST, 'web', 'assets')).map((f) => [f, statSync(join(DIST, 'web', 'assets', f)).size]);
     const js = sizes.filter(([f]) => f.endsWith('.js')).reduce((n, [, s]) => n + s, 0);
-    assert.ok(js < 1024 * 1024, `web JS is ${(js / 1024).toFixed(0)} KB`);
+    // all scripts together, the PDF tools' own chunk (about 430 KB, fetched only when they open) included
+    assert.ok(js < 1100 * 1024, `web JS is ${(js / 1024).toFixed(0)} KB`);
   });
 
   it('starts with plain node, prints where to find it, and serves the board', async () => {
@@ -225,8 +226,12 @@ describe('release zip', () => {
       assert.ok(file(n), `missing ${n}`);
   });
 
-  it('ships the drawing tools\' Python scripts byte for byte (decision #46)', () => {
-    for (const name of readdirSync('tools')) {
+  it('ships the drawing tools\' Python scripts (decision #46) and the workbook macro (decision #47) byte for byte', () => {
+    const names = readdirSync('tools', { recursive: true, withFileTypes: true })
+      .filter((e) => e.isFile())
+      .map((e) => join(e.parentPath, e.name).replace(/\\/g, '/').replace(/^tools\//, ''));
+    assert.ok(names.includes('drawing_to_dcl.py') && names.includes('excel/BoardSync.bas') && names.includes('excel/ThisWorkbook.txt'), names.join(', '));
+    for (const name of names) {
       const shipped = file(`app/tools/${name}`);
       assert.ok(shipped, `missing app/tools/${name}`);
       assert.ok(Buffer.from(shipped.data).equals(readFileSync(join('tools', name))), `app/tools/${name} differs from tools/${name}`);

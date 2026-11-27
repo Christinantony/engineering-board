@@ -83,7 +83,7 @@ Projects can't be renamed or deleted, so check the name before adding it.
 
 ### Procurement
 
-**Procurement** on a project (Projects → the project → **Procurement**) keeps its inventory and procurement list, replacing the spreadsheet (the *3 inch Inventory Check* workbook). It has five tabs.
+**Procurement** on a project (Projects → the project → **Procurement**) keeps its inventory and procurement list, replacing the spreadsheet (the *3 inch Inventory Check* workbook). It has five tabs, and a **Workbook link** tab if you would rather keep working in the Excel workbook (see below).
 
 **Quantity drivers**, above the tabs, are the workbook's: **Number of arrays** × **Antennas per array** = antennas for arrays, plus **Extra antennas (spare)**, built as antennas but in no array, = **Total antennas to build**. Fill in those three and press **Save**; every change is kept (**Earlier builds**). Each item's **Total qty** then follows from its **Qty / unit** and what it is counted **per**:
 
@@ -94,13 +94,48 @@ Projects can't be renamed or deleted, so check the name before adding it.
 Typing a category of Single Antenna, Array or Tool sets this for you; you can change it. If items' categories and what they are counted per disagree (a list typed before 2.3 counts everything in total), a notice offers **Count by category**, which sets them all as the workbook would. A total that needs drivers nobody has filled in shows amber.
 
 
-- **Master list**: the only place items are typed. One row per item, in the workbook's order: name, **final size / spec**, **qty / unit** with its unit and what it is counted per, **total qty** (worked out), **inventory**, **in procurement** (worked out), **material**, **discipline** (RF, Mechanical…), **category** (Single Antenna, Array, Tool…), **means** (Outsourced, In-house, Bought-out or Tools), and notes such as the PO or supplier. **Inventory** takes what you would type in the workbook: a number, **NIL** for none, or a note such as `18"X24" - 1` when it isn't a plain count. **In procurement** is then the total qty less the inventory (never below 0), or **Check** when the inventory isn't a number or hasn't been filled in. Every cell saves when you leave it. Tick **In stock** when an item arrives (or is made); the date, time and your name are recorded. **×** removes an item.
+- **Master list**: the only place items are typed. One row per item, in the workbook's order: name, **final size / spec**, **qty / unit** with its unit and what it is counted per, **total qty** (worked out), **inventory**, **in procurement** (worked out), **material**, **coating** (N/A, Pending or Done), **discipline** (RF, Mechanical…), **category** (Single Antenna, Array, Tool…), **means** (Outsourced, In-house, Bought-out or Tools), and notes such as the PO or supplier. **Inventory** takes what you would type in the workbook: a number, **NIL** for none, or a note such as `18"X24" - 1` when it isn't a plain count. **In procurement** is then the total qty less the inventory (never below 0), or **Check** when the inventory isn't a number or hasn't been filled in. Every cell saves when you leave it. Tick **In stock** when an item arrives (or is made); the date, time and your name are recorded. **×** removes an item.
 - **Assembly checklist**: the master list grouped by discipline, split into **components** and **tooling** (means Tools, or a Tool category), with what is in stock (✓) and what is still to come (○), and for each item its total qty, inventory and shortfall. It says when everything is in and assembly can start.
 - **Pending procurement**: everything not yet in stock, grouped by means, with its material, total qty, inventory, what is in procurement, its notes and **Mark in stock**. Items leave the list as soon as they are in.
 - **Follow-up control**: a cross-project queue of components not yet in stock, with next action, responsible colleague and follow-up date. Choose an item to update the next action or record a vendor call. Every contact stores outcome and notes in permanent history; a vendor saying **ready** does not mark stock received. Items due today, overdue or unscheduled appear in the summary. You can open this from **All follow-ups** without selecting a project.
 - **Procurement log**: the date and time each item was marked in stock, by whom; also items taken back to pending, and (if you tick the box) added and removed.
 
 **Starting a new project from an old one:** at the bottom of the master list, **Copy its items** from another project's list. Copied items start as pending, without notes or inventory but with their material and what they are counted per; a project with no quantity drivers yet takes the other project's. Items already on the list are skipped. **Export to Excel (CSV)** saves the master list; **Print** prints the tab you are on.
+
+### Workbook link (Excel)
+
+The inventory workbook (*7 inch Inventory Check.xlsm* and the like) and a project's Procurement list can be **one list**. You go on working in Excel, colleagues work on the board, and each sees the other's changes:
+
+- a change **typed in the workbook** is saved on the board about two seconds later;
+- a change **made on the board** is written into the workbook within half a minute while it is open, and when it is next opened;
+- if **the same cell** was changed in both places, the workbook shows both values and asks which to keep. Nothing is overwritten until you choose.
+
+What is kept in step: part name, final size, qty / unit, total qty, inventory, material, remarks, coating (N/A, Pending, Done), category, discipline, means, the **In Stock** status with its date and time, and the three quantity drivers. Total qty and In procurement stay the workbook's own formulas; the board works out the same numbers. If you give a part a total of its own (type a number over the formula, or write your own formula there), the board counts that part "in total" with that number.
+
+**Setting it up (once per workbook):**
+
+1. On the board: **Projects → the project → Procurement → Workbook link**. Download **BoardSync.bas** and **ThisWorkbook.txt**.
+2. In the workbook: press **Alt+F11**, then **File → Import File…** and choose `BoardSync.bas`. Double-click **ThisWorkbook** in the list on the left and paste in everything from `ThisWorkbook.txt`. Close the editor and save (as a macro-enabled workbook, .xlsm).
+3. On the board, same tab: **Make a key for my workbook**. Copy the address and the key; the key is shown only once.
+4. In the workbook: press **Alt+F8**, run **BoardSync_Setup**, and paste the address and the key when asked.
+
+The first time, if the board's list already has parts, the workbook asks: **Yes** discards the board's parts and uses the workbook's Master List; **No** keeps them, matching by part name and bringing the rest into the workbook. Discarded parts are removed, not deleted: they stay in the procurement log.
+
+**Day to day** there is nothing to press. The bottom-left corner of Excel says *Board sync: … in step at 14:05:30*. Two sheets are added to the workbook:
+
+- **Live Status**: what the board knows about each part (stage, quantities in process, received, accepted and rejected, the vendor's promised date, order status and PO, the next follow-up). Your own sheets and formulas can read from it.
+- **Board Sync**: the address and key, and **Rows needing attention**: a row that is not ready to be a part yet (no Means, no Qty / unit), or a change the board would not accept, with the reason. Put the row right and it goes through at the next sync.
+
+**Deleting.** Delete a row in the workbook and it asks whether to remove the part from the board too (**No** puts the row back). Remove a part on the board and the workbook asks whether to clear its row (**No** adds it to the board again). Nothing is ever removed without that question.
+
+**Good to know**
+
+- Keep whole rows together: insert, delete, cut and sort **entire rows**. Each row carries two hidden cells (BOARD ID and BOARD BASE, far to the right) that tie it to its part. If cells are moved without them, the macro puts the ids back by part name where it can.
+- A closed workbook receives nothing; it catches up when you open it. Excel does not run the macro while you are typing in a cell.
+- When the board sends something new, Excel's **Undo** history is cleared (Excel does this for any macro that writes a cell). A sync with nothing new writes nothing.
+- The key lives in the workbook. Anyone with the file can sync as you, so if a copy goes astray, **Switch off** its key on the Workbook link tab and make a new one. Each person makes their own key for their own copy; copies stay in step through the board.
+- Starting another project from a copy of the workbook: link it with a key for the **new** project. The workbook notices it was linked elsewhere and asks to start afresh.
+- To stop: run **BoardSync_Unlink** in the workbook. Both lists stay as they are.
 
 ## Drawing review
 

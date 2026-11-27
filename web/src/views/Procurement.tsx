@@ -5,9 +5,12 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { ManufacturingControl } from './ManufacturingControl.tsx';
+import { WorkbookLink } from './WorkbookLink.tsx';
 import {
   PROCUREMENT_BASES,
   PROCUREMENT_BASIS_LABEL,
+  PROCUREMENT_COATINGS,
+  PROCUREMENT_COATING_LABEL,
   PROCUREMENT_MEANS,
   PROCUREMENT_MEANS_LABEL,
   basisForCategory,
@@ -37,7 +40,7 @@ interface Data {
   copy_from: { id: number; name: string; items: number }[];
 }
 
-type Tab = 'master' | 'checklist' | 'pending' | 'log' | 'followups' | 'manufacturing';
+type Tab = 'master' | 'checklist' | 'pending' | 'log' | 'followups' | 'manufacturing' | 'workbook';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'master', label: 'Master list' },
   { id: 'checklist', label: 'Assembly checklist' },
@@ -45,6 +48,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'log', label: 'Procurement log' },
   { id: 'followups', label: 'Follow-up control' },
   { id: 'manufacturing', label: 'Manufacturing' },
+  { id: 'workbook', label: 'Workbook link' },
 ];
 
 const num = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(3).replace(/\.?0+$/, ''));
@@ -134,7 +138,7 @@ export function Procurement() {
         {d && !followupMode && <BuildBar d={d} />}
         {(d || followupMode) && (
           <div className="seg-tabs proc-tabs" role="tablist" aria-label="Procurement sheets">
-            {TABS.map((t) => (
+            {TABS.filter((t) => t.id !== 'workbook' || d).map((t) => (
               <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'on' : ''} onClick={() => set('tab', t.id === 'master' ? null : t.id)}>
                 {t.label}
                 {t.id === 'pending' && d?.totals.pending ? ` (${d.totals.pending})` : ''}
@@ -149,7 +153,8 @@ export function Procurement() {
       {projectId && !q.data && !q.error && !followupMode && <Spinner />}
       {tab === 'followups' && <FollowupControl />}
       {tab === 'manufacturing' && <ManufacturingControl />}
-      {d && !followupMode && (
+      {d && tab === 'workbook' && <WorkbookLink project={d.project} />}
+      {d && !followupMode && tab !== 'workbook' && (
         <div className="proc-sheet" data-testid={`proc-${tab}`}>
           <h2 className="print-only">
             {d.project.name} · {TABS.find((t) => t.id === tab)!.label}
@@ -499,6 +504,7 @@ function MasterList({ d }: { d: Data }) {
               <th>Inventory</th>
               <th className="num">In procurement</th>
               <th>Material</th>
+              <th>Coating</th>
               <th>Discipline</th>
               <th>Category</th>
               <th>Means</th>
@@ -553,6 +559,27 @@ function MasterList({ d }: { d: Data }) {
                   <Cell i={i} field="material" label="Material" list="proc-materials" wide />
                 </td>
                 <td>
+                  <select
+                    className="field-input proc-cell proc-coating"
+                    value={i.coating}
+                    aria-label={`Coating of ${i.name}`}
+                    onChange={async (e: any) => {
+                      try {
+                        await patch(`/api/procurement/items/${i.id}`, { version: i.version, coating: e.target.value });
+                      } catch (err) {
+                        toastError(err);
+                      }
+                      refresh(i.project_id);
+                    }}
+                  >
+                    {PROCUREMENT_COATINGS.map((c) => (
+                      <option key={c} value={c}>
+                        {PROCUREMENT_COATING_LABEL[c] || '—'}
+                      </option>
+                    ))}
+                  </select>
+                </td>
+                <td>
                   <Cell i={i} field="discipline" label="Discipline" list="proc-disciplines" />
                 </td>
                 <td>
@@ -605,7 +632,7 @@ function MasterList({ d }: { d: Data }) {
           <tfoot className="no-print">
             <tr>
               <td className="num muted">{d.items.length + 1}</td>
-              <td colSpan={13}>
+              <td colSpan={14}>
                 <form className="proc-add" onSubmit={add}>
                   <input className="field-input wide" value={n.name} maxLength={120} placeholder="Item" aria-label="New item" onChange={(e: any) => setN({ ...n, name: e.target.value })} />
                   <input className="field-input" value={n.discipline} maxLength={40} placeholder="Discipline" list="proc-disciplines" aria-label="New item's discipline" onChange={(e: any) => setN({ ...n, discipline: e.target.value })} />

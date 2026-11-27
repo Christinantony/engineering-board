@@ -418,6 +418,14 @@ export const PROCUREMENT_MEANS_LABEL: Record<ProcurementMeans, string> = {
 };
 
 /** What an item's quantity counts (decision #45): the project's total, or so many per antenna or per array. */
+/**
+ * The workbook's Coating column (decision #47): not applicable, still to be
+ * coated, or coated. '' is "not said yet".
+ */
+export const PROCUREMENT_COATINGS = ['', 'na', 'pending', 'done'] as const;
+export type ProcurementCoating = (typeof PROCUREMENT_COATINGS)[number];
+export const PROCUREMENT_COATING_LABEL: Record<ProcurementCoating, string> = { '': '', na: 'N/A', pending: 'Pending', done: 'Done' };
+
 export const PROCUREMENT_BASES = ['total', 'antenna', 'array'] as const;
 export type ProcurementBasis = (typeof PROCUREMENT_BASES)[number];
 export const PROCUREMENT_BASIS_LABEL: Record<ProcurementBasis, string> = {
@@ -496,6 +504,8 @@ export interface ProcurementItem {
   to_procure: number | null;
   unit: string;
   notes: string;
+  /** the workbook's Coating column: '', 'na', 'pending' or 'done' (decision #47) */
+  coating: ProcurementCoating;
   sort_order: number;
   in_stock_at: string | null;
   in_stock_by: number | null;

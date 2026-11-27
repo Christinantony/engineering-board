@@ -67,6 +67,17 @@ On the host PC, in the board folder (next to `start.bat`), create an empty file 
 - **The host PC died:** set the board up on another PC ([Install](INSTALL.md)), then restore the newest backup you have from its network or OneDrive copy via **Admin → Backups and restore → Restore from a file…**. This is why `backupDir` should point off the PC.
 - **Check the database by hand:** any SQLite tool (for example *DB Browser for SQLite*) opens `board.db` or a backup read-only. Close the board before changing anything that way.
 
+## The workbook link (Excel)
+
+- **Nothing happens in the workbook:** macros must be enabled (the yellow bar, **Enable Content**), and the file must be an .xlsm. Press **Alt+F8** and run **BoardSync_Now**: it says what is wrong.
+- **"The board cannot be reached":** the board is off, the PC is off the network, or the address is wrong. Open the address in a browser on the same PC. The workbook keeps working and syncs when it can; while the board is away it asks less often, up to every five minutes.
+- **"That workbook key is not known" or "has been switched off":** make a new key (**Procurement → Workbook link**) and run **BoardSync_Setup** again. Restoring an older backup of the board also forgets keys made since.
+- **"That address answered, but not as the board does":** the address is not the board's, or the board is older than 2.5.0.
+- **A row is not appearing on the board:** look at **Rows needing attention** on the workbook's **Board Sync** sheet. It needs a part name, a Means and a Qty / unit.
+- **"Cannot run the macro … BoardSync_Tick"** after renaming the file outside Excel: close and reopen the workbook.
+- **Parts got mixed up after sorting or cutting cells:** undo it, and move entire rows instead. The macro repairs ids by part name where names are unique; duplicate names it cannot tell apart.
+- **It asks to remove many parts from the board:** rows were cleared or the list was reset. Answer **No** and the rows come back from the board.
+
 ## Still stuck
 
 Note the exact message in the board's window and what you were doing, and check **Admin → About this board** for the version. `http://<host>:8080/api/health` tells you whether the server is answering at all.

@@ -215,6 +215,8 @@ describe('reviewer access', () => {
     const failures: string[] = [];
     for (const r of h.app.routes as { method: string; path: string }[]) {
       if (REVIEWER_ROUTES.has(`${r.method} ${r.path}`)) continue;
+      // the workbook's macro: no session at all, a sync key instead, and a reviewer cannot be given one (decision #47, workbook-sync.test.ts)
+      if (`${r.method} ${r.path}` === 'POST /api/sync') continue;
       const path = r.path.replace(/:id\b/g, String(job.id)).replace(/:name\b/g, 'nope.db').replace(/:sha\b/g, 'a'.repeat(64));
       const res = await ebin.req(r.method, path, r.method === 'GET' || r.method === 'DELETE' ? undefined : {});
       if (res.status !== 403) failures.push(`${r.method} ${r.path} → ${res.status}`);

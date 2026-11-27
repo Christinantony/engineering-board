@@ -5583,3 +5583,57 @@ fieldset.panel-editable {
   background: #fff;
   padding: 4px;
 }
+
+/* ---- Workbook link (decision #47) ---- */
+.wb-link {
+  max-width: 880px;
+}
+.wb-link h2 {
+  margin: 0 0 6px;
+}
+.wb-section h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+  border-bottom: 2px solid var(--line-strong);
+  padding-bottom: 4px;
+}
+.wb-section > p {
+  margin: 0 0 10px;
+}
+.wb-steps {
+  margin: 0;
+  padding-left: 22px;
+}
+.wb-steps li {
+  padding: 3px 0;
+}
+.wb-fresh {
+  border: 1px solid var(--focus);
+  border-radius: var(--radius);
+  background: var(--card);
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.wb-fresh p {
+  margin: 0;
+}
+.wb-fresh label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+.wb-copy {
+  display: flex;
+  gap: 8px;
+}
+.wb-copy .field-input {
+  flex: 1;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.proc-coating {
+  min-width: 92px;
+}

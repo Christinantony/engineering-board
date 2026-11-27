@@ -1340,6 +1340,46 @@ test('procurement: from a project, type the master list, mark items in stock, an
   assert.equal(await p.getAttribute('a:has-text("Export to Excel (CSV)")', 'href'), `/api/projects/${project.id}/procurement.csv`);
 });
 
+test('workbook link: make a key shown once, the macro posts a row with it, and the page shows the part, the coating and what the workbook changed', async () => {
+  const s = await api('POST', '/api/session', { user_id: 1, password: PASSWORD });
+  const project = (await (await api('POST', '/api/projects', { name: 'Workbook link browser test' }, s.cookie)).r.json()).project;
+  const p = await login('Paul');
+  await p.goto(`${BASE}/projects/procurement?project=${project.id}&tab=workbook`);
+  await p.waitForSelector('[data-testid=workbook-link]');
+  assert.equal(await p.getAttribute('a:has-text("BoardSync.bas")', 'href'), '/api/workbook-link/macro/BoardSync.bas');
+  const macro = await fetch(`${BASE}/api/workbook-link/macro/BoardSync.bas`, { headers: { cookie: s.cookie } });
+  assert.equal(macro.status, 200, 'the built app carries the macro');
+  assert.ok((await macro.text()).startsWith('Attribute VB_Name = "BoardSync"'));
+  await p.waitForSelector('[data-testid=wb-keys] td:has-text("No workbook is linked")');
+  await p.click('button:has-text("Make a key for my workbook")');
+  await p.waitForSelector('[data-testid=wb-fresh-key]');
+  const key = await p.inputValue('input[aria-label="New workbook key"]');
+  assert.match(key, /^eb_[\w-]{20,}$/);
+  assert.equal(await p.inputValue('input[aria-label="Board address"]'), BASE);
+  await p.waitForSelector(`[data-testid=wb-keys] code:has-text("${key.slice(-4)}")`);
+  // the workbook's macro, by hand: one new row
+  const cells = ['CAVITY', '\\u00f8 189 X 69.4', '1', '14', '0', 'AL. ALLOY 6061', '', 'PENDING', 'Single Antenna', 'Mechanical', 'OUTSOURCED', '0'];
+  const body = ['EB1\tsync\tauto\t', 'B\t\t\t\t4\t3\t2', ['R', '', '4', ...Array(12).fill(''), ...cells].join('\t')].join('\n') + '\n';
+  const r = await fetch(`${BASE}/api/sync`, { method: 'POST', headers: { 'content-type': 'text/plain', 'x-board-key': key }, body });
+  assert.equal(r.status, 200);
+  assert.match(await r.text(), /^EB1\tok\t/);
+  // live: the log on this tab, then the part on the master list with its coating
+  await p.waitForSelector('[data-testid=wb-log] td:has-text("1 part added, what the project builds")');
+  await p.click('.proc-tabs button:has-text("Master list")');
+  await p.waitForSelector('[data-testid=master-list] tr[data-item="CAVITY"]');
+  assert.equal(await p.inputValue('tr[data-item="CAVITY"] input[aria-label="Final size / spec of CAVITY"]'), 'ø 189 X 69.4');
+  assert.equal(await p.inputValue('tr[data-item="CAVITY"] select[aria-label="Coating of CAVITY"]'), 'pending');
+  await p.selectOption('tr[data-item="CAVITY"] select[aria-label="Coating of CAVITY"]', 'done');
+  await p.waitForFunction(async (id) => (await (await fetch(`/api/projects/${id}/procurement`)).json()).items[0].coating === 'done', project.id);
+  // switched off: the workbook is refused
+  await p.click('.proc-tabs button:has-text("Workbook link")');
+  await p.click('[data-testid=wb-keys] button:has-text("Switch off")');
+  await p.click('.dialog button:has-text("Switch off")');
+  await p.waitForSelector('[data-testid=wb-keys] td:has-text("Switched off")');
+  const again = await fetch(`${BASE}/api/sync`, { method: 'POST', headers: { 'content-type': 'text/plain', 'x-board-key': key }, body });
+  assert.equal(again.status, 401);
+});
+
 test('follow-up control: a pending item is visible without project selection, with an assigned action and contact history', async () => {
   const s = await api('POST', '/api/session', { user_id: 1, password: PASSWORD });
   const project = (await (await api('POST', '/api/projects', { name: 'Follow-up browser test' }, s.cookie)).r.json()).project;

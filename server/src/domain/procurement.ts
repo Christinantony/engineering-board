@@ -9,6 +9,7 @@
 
 import {
   PROCUREMENT_BASIS_LABEL,
+  PROCUREMENT_COATING_LABEL,
   basisForCategory,
   type ProcurementBasis,
   PROCUREMENT_MEANS_LABEL,
@@ -26,7 +27,7 @@ import { all, get, run, tx } from '../db/connection.ts';
 import { badRequest, conflict, notFound, nowIso, type Ctx } from '../lib/core.ts';
 import { getProject } from './projects.ts';
 
-const COLS = `id, project_id, name, discipline, category, means, spec, quantity, basis, unit, notes, material, inventory, inventory_note, sort_order, in_stock_at, in_stock_by, created_by, created_at, updated_at, version`;
+const COLS = `id, project_id, name, discipline, category, means, spec, quantity, basis, unit, notes, material, inventory, inventory_note, coating, sort_order, in_stock_at, in_stock_by, created_by, created_at, updated_at, version`;
 
 /**
  * The total an item's project needs (decision #45): its quantity times the
@@ -171,8 +172,8 @@ export function addItem(ctx: Ctx, actor: User, projectId: number, input: unknown
     const id = Number(
       run(
         ctx.db,
-        `INSERT INTO procurement_items (project_id, name, discipline, category, means, spec, quantity, basis, unit, notes, material, inventory, inventory_note, sort_order, created_by, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO procurement_items (project_id, name, discipline, category, means, spec, quantity, basis, unit, notes, material, inventory, inventory_note, coating, sort_order, created_by, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         projectId,
         d.name,
         d.discipline,
@@ -186,6 +187,7 @@ export function addItem(ctx: Ctx, actor: User, projectId: number, input: unknown
         d.material,
         d.inventory,
         d.inventory_note,
+        d.coating,
         max + 10,
         actor.id,
         now,
@@ -219,12 +221,13 @@ export function editItem(ctx: Ctx, actor: User, id: number, input: unknown): Pro
       material: d.material ?? cur.material,
       inventory: d.inventory !== undefined ? d.inventory : cur.inventory,
       inventory_note: d.inventory_note ?? cur.inventory_note,
+      coating: d.coating ?? cur.coating,
       sort_order: d.sort_order ?? cur.sort_order,
     };
     run(
       ctx.db,
       `UPDATE procurement_items SET name = ?, discipline = ?, category = ?, means = ?, spec = ?, quantity = ?, basis = ?, unit = ?, notes = ?, material = ?, inventory = ?,
-       inventory_note = ?, sort_order = ?, updated_at = ?, version = version + 1 WHERE id = ?`,
+       inventory_note = ?, coating = ?, sort_order = ?, updated_at = ?, version = version + 1 WHERE id = ?`,
       next.name,
       next.discipline,
       next.category,
@@ -237,6 +240,7 @@ export function editItem(ctx: Ctx, actor: User, id: number, input: unknown): Pro
       next.material,
       next.inventory,
       next.inventory_note,
+      next.coating,
       next.sort_order,
       nowIso(ctx),
       id,
@@ -336,7 +340,7 @@ export function procurementCsv(ctx: Ctx, projectId: number, userName: (id: numbe
     if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
     return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const head = ['No.', 'Item', 'Final size / spec', 'Qty / unit', 'Per', 'Total qty', 'Unit', 'Inventory', 'In procurement', 'Material', 'Discipline', 'Category', 'Means', 'Status', 'In stock since', 'Marked by', 'Notes'];
+  const head = ['No.', 'Item', 'Final size / spec', 'Qty / unit', 'Per', 'Total qty', 'Unit', 'Inventory', 'In procurement', 'Material', 'Coating', 'Discipline', 'Category', 'Means', 'Status', 'In stock since', 'Marked by', 'Notes'];
   const rows = items.map((i, n) => [
     n + 1,
     i.name,
@@ -348,6 +352,7 @@ export function procurementCsv(ctx: Ctx, projectId: number, userName: (id: numbe
     i.inventory ?? i.inventory_note,
     i.to_procure ?? 'CHECK',
     i.material,
+    PROCUREMENT_COATING_LABEL[i.coating],
     i.discipline,
     i.category,
     PROCUREMENT_MEANS_LABEL[i.means],

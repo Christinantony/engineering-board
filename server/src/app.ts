@@ -5,7 +5,7 @@ import { openDb, migrate, pendingMigrations, run, all, tx } from './db/connectio
 import { createReadStream } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { seedBase, seedDemo, clearDemo, hasDemoData } from './db/seed.ts';
-import { EventHub, HttpError, forbidden, type Ctx } from './lib/core.ts';
+import { EventHub, HttpError, forbidden, notFound, type Ctx } from './lib/core.ts';
 import { localDate } from './lib/time.ts';
 import {
   HANDLED,
@@ -48,6 +48,7 @@ import { createItem, updateItem } from './domain/checklists.ts';
 import { createProject, listProjects } from './domain/projects.ts';
 import { manufacturingQueue, manufacturingHistory, updateManufacturing, recordCommitment, setManufacturingLabels } from './domain/manufacturing.ts';
 import { purchaseQueue, vendorList, createVendor, updateVendor, updatePurchase, purchaseHistory } from './domain/purchase.ts';
+import { authenticateSyncKey, createSyncKey, esc as syncEsc, revokeSyncKey, syncWorkbook, workbookLink, SYNC_PROTOCOL } from './domain/workbookSync.ts';
 import { addItem, basisFromCategory, copyList, editItem, procurement, procurementCsv, removeItem, setBuild, setStock, followupQueue, setFollowup, recordFollowupCall, itemFollowupHistory } from './domain/procurement.ts';
 import { getPermissions, requireCapability, setPermissions } from './domain/permissions.ts';
 import { DclQueue, LOGO_TYPES, cleanPdfName, dclOptions, findScript, logoType, probeDcl, pythonCandidates, runPython, type DclStatus, type PythonRunner } from './domain/drawingDcl.ts';
@@ -132,7 +133,7 @@ import { jobsNeedingSync, markSyncPending, revisionLog, settleSyncs, syncProject
 /** Default maximum PDF upload for drawing review (merged signed scans can be large). */
 export const DEFAULT_REVIEW_UPLOAD_MAX_MB = 200;
 
-export const APP_VERSION = '2.4.0';
+export const APP_VERSION = '2.5.0';
 
 export interface AppOptions {
   dbPath: string;
@@ -164,6 +165,9 @@ export interface AppOptions {
   toolScriptDirs?: string[];
   pythonRunner?: PythonRunner;
 }
+
+/** The workbook link's macro files (decision #47), in tools/excel. */
+const MACRO_FILES = ['BoardSync.bas', 'ThisWorkbook.txt'];
 
 export interface App {
   ctx: BackupCtx;
@@ -513,6 +517,32 @@ export function createApp(opts: AppOptions): App {
   worker('PATCH', '/api/procurement/items/:id', (req, user) => ({ item: editItem(ctx, user, id(req), req.body ?? {}) }));
   worker('POST', '/api/procurement/items/:id/stock', (req, user) => ({ item: setStock(ctx, user, id(req), req.body ?? {}) }));
   worker('DELETE', '/api/procurement/items/:id', (req, user) => removeItem(ctx, user, id(req)));
+  // ---- the workbook link (decision #47) ----
+  // The inventory workbook's macro: no browser session, a per-person sync key instead (the exception to #28).
+  // Plain-text lines both ways, and errors in the same form, because the macro cannot read JSON.
+  const SYNC_TEXT = { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' };
+  pub('POST', '/api/sync', (req) => {
+    try {
+      const auth = authenticateSyncKey(ctx, String(req.headers['x-board-key'] ?? ''));
+      return new Reply(200, syncWorkbook(ctx, auth, req.rawBody), SYNC_TEXT);
+    } catch (e) {
+      if (!(e instanceof HttpError)) throw e;
+      return new Reply(e.status, `${SYNC_PROTOCOL}\terror\t${syncEsc(e.message)}\n`, SYNC_TEXT);
+    }
+  });
+  board('GET', '/api/projects/:id/workbook-link', (req) => workbookLink(ctx, id(req)));
+  worker('POST', '/api/projects/:id/workbook-link/keys', (req, user) => {
+    const made = createSyncKey(ctx, user, id(req));
+    return new Reply(201, { key: made.key, row: made.row });
+  });
+  worker('DELETE', '/api/workbook-link/keys/:id', (req, user) => revokeSyncKey(ctx, user, id(req), readAdmin(ctx, req.cookies[ADMIN_COOKIE], user.id)));
+  // the macro itself, to paste into the workbook once
+  board('GET', '/api/workbook-link/macro/:file', (req) => {
+    const file = MACRO_FILES.find((f) => f === req.params.file);
+    const path = file && (opts.toolScriptDirs ?? []).map((d) => join(d, 'excel', file)).find((x) => existsSync(x));
+    if (!path) throw notFound('Macro file');
+    return new Reply(200, readFileSync(path, 'utf8'), { 'Content-Type': 'text/plain; charset=utf-8', 'Content-Disposition': `attachment; filename="${file}"` });
+  });
 
   worker('POST', '/api/tickets', (req, user) => {
     const key = req.headers['idempotency-key'];
