@@ -740,4 +740,50 @@ ALTER TABLE procurement_items ADD COLUMN inventory REAL CHECK (inventory IS NULL
 ALTER TABLE procurement_items ADD COLUMN inventory_note TEXT NOT NULL DEFAULT '' CHECK (length(inventory_note) <= 80);
 `,
   },
+  {
+    id: 18,
+    name: 'workbook link',
+    sql: /* sql */ `
+-- The workbook link (decision #47): the inventory workbook's macro and the
+-- board keep one list between them. The workbook's Coating column:
+ALTER TABLE procurement_items ADD COLUMN coating TEXT NOT NULL DEFAULT '' CHECK (coating IN ('','na','pending','done'));
+-- A sync key lets one person's workbook reach one project's list without a
+-- browser sign-in (the exception to #28). Only its SHA-256 is kept.
+CREATE TABLE sync_keys (
+  id           INTEGER PRIMARY KEY,
+  project_id   INTEGER NOT NULL REFERENCES projects(id),
+  user_id      INTEGER NOT NULL REFERENCES users(id),
+  key_hash     TEXT NOT NULL UNIQUE,
+  hint         TEXT NOT NULL,
+  created_at   TEXT NOT NULL,
+  revoked_at   TEXT,
+  last_used_at TEXT
+);
+CREATE INDEX idx_sync_keys_project ON sync_keys(project_id, id);
+-- What each sync changed, append-only like the procurement log.
+CREATE TABLE sync_log (
+  id         INTEGER PRIMARY KEY,
+  project_id INTEGER NOT NULL REFERENCES projects(id),
+  key_id     INTEGER NOT NULL REFERENCES sync_keys(id),
+  user_id    INTEGER NOT NULL REFERENCES users(id),
+  at         TEXT NOT NULL,
+  added      INTEGER NOT NULL DEFAULT 0,
+  changed    INTEGER NOT NULL DEFAULT 0,
+  removed    INTEGER NOT NULL DEFAULT 0,
+  stock      INTEGER NOT NULL DEFAULT 0,
+  build      INTEGER NOT NULL DEFAULT 0,
+  conflicts  INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX idx_sync_log_project ON sync_log(project_id, id);
+CREATE TRIGGER sync_log_no_update BEFORE UPDATE ON sync_log
+BEGIN
+  SELECT RAISE(ABORT, 'the sync history is append-only');
+END;
+CREATE TRIGGER sync_log_no_delete BEFORE DELETE ON sync_log
+WHEN (SELECT is_demo FROM projects WHERE id = OLD.project_id) IS NOT 1
+BEGIN
+  SELECT RAISE(ABORT, 'the sync history is append-only');
+END;
+`,
+  },
 ];

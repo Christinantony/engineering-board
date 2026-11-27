@@ -114,8 +114,8 @@ describe('procurement tracker', () => {
     const bytes = Buffer.from(await res.arrayBuffer());
     assert.deepEqual([...bytes.subarray(0, 3)], [0xef, 0xbb, 0xbf], 'a BOM so Excel reads UTF-8');
     const lines = bytes.subarray(3).toString('utf8').trim().split('\r\n');
-    assert.equal(lines[0], 'No.,Item,Final size / spec,Qty / unit,Per,Total qty,Unit,Inventory,In procurement,Material,Discipline,Category,Means,Status,In stock since,Marked by,Notes');
-    assert.match(lines[2], /^2,SMA cable,"300 mm, RG-402",5,in total,5,pcs,,CHECK,,RF,Array,Bought-out,In stock,2026-10-01T04:30:00.000Z,Allen,$/);
+    assert.equal(lines[0], 'No.,Item,Final size / spec,Qty / unit,Per,Total qty,Unit,Inventory,In procurement,Material,Coating,Discipline,Category,Means,Status,In stock since,Marked by,Notes');
+    assert.match(lines[2], /^2,SMA cable,"300 mm, RG-402",5,in total,5,pcs,,CHECK,,,RF,Array,Bought-out,In stock,2026-10-01T04:30:00.000Z,Allen,$/);
     assert.equal(lines.length, 7);
     assert.match(lines[6], /^Build: 0 arrays × 0 antennas per array \+ 0 extra antennas \(spare\) = 0 antennas to build$/);
   });

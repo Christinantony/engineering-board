@@ -133,7 +133,7 @@ export function exportJson(ctx: Ctx, opts: { activity: boolean } = { activity: t
     procurement: {
       items: all<Record<string, unknown> & { project_id: number; in_stock_by: number | null }>(
         ctx.db,
-        `SELECT i.id, i.project_id, i.name, i.discipline, i.category, i.means, i.spec, i.quantity, i.basis, ${REQUIRED_SQL} AS required, i.unit, i.notes, i.material, i.inventory, i.inventory_note,
+        `SELECT i.id, i.project_id, i.name, i.discipline, i.category, i.means, i.spec, i.quantity, i.basis, ${REQUIRED_SQL} AS required, i.unit, i.notes, i.material, i.inventory, i.inventory_note, i.coating,
          i.in_stock_at, i.in_stock_by, i.created_at, i.removed_at
          FROM procurement_items i ${BUILD_JOIN} ORDER BY i.project_id, i.sort_order, i.id`,
       ).map((i) => ({ ...i, project: pName.get(i.project_id) ?? null, in_stock_by: i.in_stock_by ? byId.get(i.in_stock_by) ?? null : null })),

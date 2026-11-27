@@ -168,6 +168,7 @@ export const UNDO: Record<number, string> = {
   14: 'DROP TABLE procurement_calls; DROP TABLE procurement_followups;',
   15: 'DROP TABLE manufacturing_stage_labels; DROP TABLE manufacturing_events; DROP TABLE manufacturing_tracking;',
   17: 'DROP TABLE procurement_build_log; DROP TABLE procurement_builds; ALTER TABLE procurement_items DROP COLUMN basis; ALTER TABLE procurement_items DROP COLUMN material; ALTER TABLE procurement_items DROP COLUMN inventory; ALTER TABLE procurement_items DROP COLUMN inventory_note;',
+  18: 'DROP TABLE sync_log; DROP TABLE sync_keys; ALTER TABLE procurement_items DROP COLUMN coating;',
   16: `DROP TABLE purchase_events; DROP TABLE purchase_orders; DROP TABLE purchase_vendors;
       PRAGMA foreign_keys = OFF;
       CREATE TEMP TABLE saved_purchase_passwords AS SELECT id,password_hash FROM users;

@@ -321,6 +321,7 @@ Copy `config.example.json` to `config.json` next to `start.bat`, edit it, restar
 
 | Version | What it brought |
 |---|---|
+| **2.5.0** | **Workbook link**: the inventory workbook (Excel) and a project's procurement list kept as one list by the workbook's macro, changed in either place, with a prompt when the same cell was changed in both; per-person sync keys; a **Coating** column; Live Status and Board Sync sheets in the workbook. |
 | **2.4.0** | **Drawing tools** on the Tools page: the **dimension checklist (DCL)** from a CAD drawing PDF, as Word or Excel, made by the team's `drawing_to_dcl.py` run unchanged with the host PC's Python; admin logo for its footer. |
 | **2.3.0** | Procurement: the inventory workbook's **quantity drivers** (arrays, antennas per array, spares), items counted per antenna, per array or in total, **total qty**, **inventory** and **in procurement** worked out as in the workbook, and a **material** column. |
 | **2.2.0** | Sheet calculator: parts **turned 90° where it fits more**, and each sheet's leftover kept as **one offcut** with a single cut, in both tabs. |

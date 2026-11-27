@@ -1,0 +1,25 @@
+' Engineering Board workbook link: paste all of this into ThisWorkbook
+' (Alt+F11, then double-click ThisWorkbook in the list on the left).
+' If ThisWorkbook already has one of these procedures, add the BoardSync
+' line to the one that is there instead of pasting a second copy.
+
+Private Sub Workbook_Open()
+    BoardSync.BoardSync_Start
+End Sub
+
+Private Sub Workbook_BeforeClose(Cancel As Boolean)
+    BoardSync.BoardSync_Stop
+End Sub
+
+Private Sub Workbook_SheetChange(ByVal Sh As Object, ByVal Target As Range)
+    BoardSync.BoardSync_Changed Sh
+End Sub
+
+Private Sub Workbook_BeforeSave(ByVal SaveAsUI As Boolean, Cancel As Boolean)
+    ' a pending timer names the workbook, and Save As renames it
+    If SaveAsUI Then BoardSync.BoardSync_Stop
+End Sub
+
+Private Sub Workbook_AfterSave(ByVal Success As Boolean)
+    BoardSync.BoardSync_Start
+End Sub

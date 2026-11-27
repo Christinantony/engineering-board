@@ -7,3 +7,5 @@
 Dockerfile text eol=lf
 # The drawing tools run the team's own Python scripts unchanged (decision #46): keep their bytes exactly.
 tools/*.py -text
+# The workbook macro is imported into Excel on Windows (decision #47): keep its CRLF bytes exactly.
+tools/excel/* -text
